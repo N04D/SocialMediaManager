@@ -1245,69 +1245,85 @@ def render_scheduler_page(all_records: list[dict[str, Any]], queue: list[dict[st
 
 def render_config_page(config: AppConfig) -> str:
     return f"""
-      <div class=\"page-grid\">
-        <div class=\"stack\">
-          <section class=\"card\">
-            <h2>Config</h2>
-            <p class=\"meta\">System and workflow configuration is managed here.</p>
-            <div class=\"config-summary\">
-              <div class=\"config-item\"><span class=\"config-label\">Config file</span><code>{html.escape(str(CONFIG_PATH))}</code></div>
-              <div class=\"config-item\"><span class=\"config-label\">Local content directory</span><code>{html.escape(str(config.content_dir))}</code></div>
-              <div class=\"config-item\"><span class=\"config-label\">RSS feed</span><code>{html.escape(config.rss_url)}</code></div>
-              <div class=\"config-item\"><span class=\"config-label\">Substack archive</span><code>{html.escape(config.substack_archive_url)}</code></div>
-              <div class=\"config-item\"><span class=\"config-label\">Substack imports</span><code>{html.escape(str(config.substack_import_dir))}</code></div>
-              <div class=\"config-item\"><span class=\"config-label\">LinkedIn feed</span><code>{html.escape(config.linkedin_feed_url)}</code></div>
-              <div class=\"config-item\"><span class=\"config-label\">Article editor</span><code>{html.escape(config.linkedin_article_new_url)}</code></div>
-              <div class=\"config-item\"><span class=\"config-label\">Publish as</span><code>{html.escape(config.linkedin_publish_as_page_name)}</code></div>
-              <div class=\"config-item\"><span class=\"config-label\">Content mode</span><code>{html.escape(config.linkedin_content_mode)}</code></div>
-              <div class=\"config-item\"><span class=\"config-label\">Schedule buffer</span><code>{html.escape(str(config.linkedin_article_schedule_buffer_minutes))} minutes</code></div>
-              <div class=\"config-item\"><span class=\"config-label\">Stats sync interval</span><code>{html.escape(str(config.stats_sync_interval_minutes))} minutes</code></div>
-              <div class=\"config-item\"><span class=\"config-label\">Cover upload</span><code>{'enabled' if config.linkedin_article_use_cover_image else 'disabled'}</code></div>
-            </div>
-          </section>
-          <section class=\"card\">
-            <h2>Platform Configuration</h2>
-            <p class=\"meta\">Safe frontend fields only. Secrets should stay in environment variables or server-side config files.</p>
-            <form method=\"post\" action=\"/system-config\">
-              <input type=\"hidden\" name=\"return_to\" value=\"{html.escape(ROUTE_CONFIG)}\" />
-              <label for=\"content_dir\">Local content directory</label>
-              <input id=\"content_dir\" name=\"content_dir\" value=\"{html.escape(str(config.content_dir))}\" />
-              <label for=\"substack_import_dir\">Substack export/import directory</label>
-              <input id=\"substack_import_dir\" name=\"substack_import_dir\" value=\"{html.escape(str(config.substack_import_dir))}\" />
-              <label for=\"stats_sync_interval_minutes\">Stats sync interval (minutes)</label>
-              <input id=\"stats_sync_interval_minutes\" name=\"stats_sync_interval_minutes\" type=\"number\" min=\"15\" value=\"{html.escape(str(config.stats_sync_interval_minutes))}\" />
-              <div class=\"editor-two-up\">
-                <div>
-                  <label><input type=\"checkbox\" name=\"linkedin_api_enabled\" value=\"true\" {'checked' if config.linkedin_api_enabled else ''} /> LinkedIn API enabled</label>
-                  <label for=\"linkedin_api_org_urn\">LinkedIn org/page URN</label>
-                  <input id=\"linkedin_api_org_urn\" name=\"linkedin_api_org_urn\" value=\"{html.escape(config.linkedin_api_org_urn)}\" placeholder=\"urn:li:organization:123\" />
-                </div>
-                <div>
-                  <label><input type=\"checkbox\" name=\"instagram_api_enabled\" value=\"true\" {'checked' if config.instagram_api_enabled else ''} /> Instagram/Meta API enabled</label>
-                  <label for=\"instagram_business_account_id\">Instagram business account ID</label>
-                  <input id=\"instagram_business_account_id\" name=\"instagram_business_account_id\" value=\"{html.escape(config.instagram_business_account_id)}\" placeholder=\"1784...\" />
-                </div>
+      <div class=\"config-tabs\">
+        <input class=\"config-tab-input\" type=\"radio\" name=\"config_tab\" id=\"config-tab-overview\" checked />
+        <input class=\"config-tab-input\" type=\"radio\" name=\"config_tab\" id=\"config-tab-system\" />
+        <input class=\"config-tab-input\" type=\"radio\" name=\"config_tab\" id=\"config-tab-browser\" />
+        <input class=\"config-tab-input\" type=\"radio\" name=\"config_tab\" id=\"config-tab-article\" />
+        <input class=\"config-tab-input\" type=\"radio\" name=\"config_tab\" id=\"config-tab-channels\" />
+        <div class=\"config-tab-list\" role=\"tablist\" aria-label=\"Config sections\">
+          <label class=\"config-tab-label\" for=\"config-tab-overview\" role=\"tab\">Overview</label>
+          <label class=\"config-tab-label\" for=\"config-tab-system\" role=\"tab\">System</label>
+          <label class=\"config-tab-label\" for=\"config-tab-browser\" role=\"tab\">Browser</label>
+          <label class=\"config-tab-label\" for=\"config-tab-article\" role=\"tab\">Article</label>
+          <label class=\"config-tab-label\" for=\"config-tab-channels\" role=\"tab\">Channels</label>
+        </div>
+        <div class=\"config-tab-panels\">
+          <div class=\"config-tab-panel config-panel-overview\" role=\"tabpanel\">
+            <section class=\"card compact-card\">
+              <h2>Config</h2>
+              <div class=\"config-summary compact-config-summary\">
+                <div class=\"config-item\"><span class=\"config-label\">Config file</span><code>{html.escape(str(CONFIG_PATH))}</code></div>
+                <div class=\"config-item\"><span class=\"config-label\">Content directory</span><code>{html.escape(str(config.content_dir))}</code></div>
+                <div class=\"config-item\"><span class=\"config-label\">RSS feed</span><code>{html.escape(config.rss_url)}</code></div>
+                <div class=\"config-item\"><span class=\"config-label\">Publish as</span><code>{html.escape(config.linkedin_publish_as_page_name)}</code></div>
+                <div class=\"config-item\"><span class=\"config-label\">Content mode</span><code>{html.escape(config.linkedin_content_mode)}</code></div>
+                <div class=\"config-item\"><span class=\"config-label\">Schedule buffer</span><code>{html.escape(str(config.linkedin_article_schedule_buffer_minutes))} minutes</code></div>
+                <div class=\"config-item\"><span class=\"config-label\">Stats interval</span><code>{html.escape(str(config.stats_sync_interval_minutes))} minutes</code></div>
+                <div class=\"config-item\"><span class=\"config-label\">Cover upload</span><code>{'enabled' if config.linkedin_article_use_cover_image else 'disabled'}</code></div>
               </div>
-              <div class=\"editor-two-up\">
-                <div>
-                  <label><input type=\"checkbox\" name=\"substack_import_enabled\" value=\"true\" {'checked' if config.substack_import_enabled else ''} /> Substack import enabled</label>
-                  <p class=\"meta\">Manual ZIP/CSV import is the default stats path for Substack.</p>
+            </section>
+          </div>
+          <div class=\"config-tab-panel config-panel-system\" role=\"tabpanel\">
+            <section class=\"card\">
+              <h2>Platform Configuration</h2>
+              <form method=\"post\" action=\"/system-config\">
+                <input type=\"hidden\" name=\"return_to\" value=\"{html.escape(ROUTE_CONFIG)}\" />
+                <div class=\"editor-two-up\">
+                  <div>
+                    <label for=\"content_dir\">Local content directory</label>
+                    <input id=\"content_dir\" name=\"content_dir\" value=\"{html.escape(str(config.content_dir))}\" />
+                  </div>
+                  <div>
+                    <label for=\"substack_import_dir\">Substack export/import directory</label>
+                    <input id=\"substack_import_dir\" name=\"substack_import_dir\" value=\"{html.escape(str(config.substack_import_dir))}\" />
+                  </div>
                 </div>
-                <div>
-                  <label><input type=\"checkbox\" name=\"x_api_enabled\" value=\"true\" {'checked' if config.x_api_enabled else ''} /> X API enabled</label>
-                  <label for=\"x_account_id\">X account ID</label>
-                  <input id=\"x_account_id\" name=\"x_account_id\" value=\"{html.escape(config.x_account_id)}\" placeholder=\"account id\" />
+                <label for=\"stats_sync_interval_minutes\">Stats sync interval (minutes)</label>
+                <input id=\"stats_sync_interval_minutes\" name=\"stats_sync_interval_minutes\" type=\"number\" min=\"15\" value=\"{html.escape(str(config.stats_sync_interval_minutes))}\" />
+                <div class=\"editor-two-up\">
+                  <div>
+                    <label><input type=\"checkbox\" name=\"linkedin_api_enabled\" value=\"true\" {'checked' if config.linkedin_api_enabled else ''} /> LinkedIn API enabled</label>
+                    <label for=\"linkedin_api_org_urn\">LinkedIn org/page URN</label>
+                    <input id=\"linkedin_api_org_urn\" name=\"linkedin_api_org_urn\" value=\"{html.escape(config.linkedin_api_org_urn)}\" placeholder=\"urn:li:organization:123\" />
+                  </div>
+                  <div>
+                    <label><input type=\"checkbox\" name=\"instagram_api_enabled\" value=\"true\" {'checked' if config.instagram_api_enabled else ''} /> Instagram/Meta API enabled</label>
+                    <label for=\"instagram_business_account_id\">Instagram business account ID</label>
+                    <input id=\"instagram_business_account_id\" name=\"instagram_business_account_id\" value=\"{html.escape(config.instagram_business_account_id)}\" placeholder=\"1784...\" />
+                  </div>
                 </div>
-              </div>
-              <div class=\"actions\"><button type=\"submit\">Save system config</button></div>
-            </form>
-          </section>
-          {render_browser_session(config, ROUTE_CONFIG)}
-          {render_article_timing(config, ROUTE_CONFIG)}
-          {render_channel_cards(return_to=ROUTE_CONFIG)}
+                <div class=\"editor-two-up\">
+                  <div>
+                    <label><input type=\"checkbox\" name=\"substack_import_enabled\" value=\"true\" {'checked' if config.substack_import_enabled else ''} /> Substack import enabled</label>
+                  </div>
+                  <div>
+                    <label><input type=\"checkbox\" name=\"x_api_enabled\" value=\"true\" {'checked' if config.x_api_enabled else ''} /> X API enabled</label>
+                    <label for=\"x_account_id\">X account ID</label>
+                    <input id=\"x_account_id\" name=\"x_account_id\" value=\"{html.escape(config.x_account_id)}\" placeholder=\"account id\" />
+                  </div>
+                </div>
+                <div class=\"actions\"><button type=\"submit\">Save system config</button></div>
+              </form>
+            </section>
+          </div>
+          <div class=\"config-tab-panel config-panel-browser\" role=\"tabpanel\">{render_browser_session(config, ROUTE_CONFIG)}</div>
+          <div class=\"config-tab-panel config-panel-article\" role=\"tabpanel\">{render_article_timing(config, ROUTE_CONFIG)}</div>
+          <div class=\"config-tab-panel config-panel-channels\" role=\"tabpanel\">{render_channel_cards(return_to=ROUTE_CONFIG)}</div>
         </div>
       </div>
     """
+
 
 def render_instagram_page() -> str:
     return f"""
@@ -1578,7 +1594,34 @@ def render_page(
     .summary-pill.static {{ cursor: default; }}
     .summary-pill strong {{ font-size: 20px; }}
     .summary-pill span {{ color: var(--muted); font-size: 13px; }}
+    .config-tabs {{ display: grid; gap: 14px; }}
+    .config-tab-input {{ position: absolute; opacity: 0; pointer-events: none; }}
+    .config-tab-list {{
+      display: flex; gap: 6px; flex-wrap: wrap; padding: 6px; border-radius: var(--radius);
+      background: rgba(10, 10, 12, 0.52); border: 1px solid rgba(113, 113, 122, 0.16);
+    }}
+    .config-tab-label {{
+      display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 12px;
+      border-radius: var(--radius); color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 800;
+      border: 1px solid transparent; user-select: none;
+    }}
+    .config-tab-label:hover {{ color: var(--text); background: rgba(244, 244, 245, 0.06); }}
+    .config-tab-panels {{ min-width: 0; }}
+    .config-tab-panel {{ display: none; }}
+    #config-tab-overview:checked ~ .config-tab-list label[for="config-tab-overview"],
+    #config-tab-system:checked ~ .config-tab-list label[for="config-tab-system"],
+    #config-tab-browser:checked ~ .config-tab-list label[for="config-tab-browser"],
+    #config-tab-article:checked ~ .config-tab-list label[for="config-tab-article"],
+    #config-tab-channels:checked ~ .config-tab-list label[for="config-tab-channels"] {{
+      color: var(--text); background: rgba(63, 63, 70, 0.76); border-color: rgba(161, 161, 170, 0.30);
+    }}
+    #config-tab-overview:checked ~ .config-tab-panels .config-panel-overview,
+    #config-tab-system:checked ~ .config-tab-panels .config-panel-system,
+    #config-tab-browser:checked ~ .config-tab-panels .config-panel-browser,
+    #config-tab-article:checked ~ .config-tab-panels .config-panel-article,
+    #config-tab-channels:checked ~ .config-tab-panels .config-panel-channels {{ display: block; }}
     .config-summary {{ display: grid; gap: 10px; }}
+    .compact-config-summary {{ grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }}
     .config-item {{
       display: grid; gap: 6px; padding: 12px 14px; border-radius: var(--radius);
       background: rgba(244, 244, 245, 0.055); border: 1px solid rgba(113, 113, 122, 0.16);
