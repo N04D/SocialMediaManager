@@ -398,66 +398,72 @@ def render_sidebar_icon(name: str, fallback: str) -> str:
     icons = {
         "editor": """
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 4h10l4 4v12H5z"></path>
-              <path d="M15 4v4h4"></path>
-              <path d="M8 12h8M8 16h8"></path>
+              <path d="M5 4.5h9.5L19 9v10.5H5z"></path>
+              <path d="M14.5 4.5V9H19"></path>
+              <path d="M8 13h8"></path>
+              <path d="M8 16.5h6"></path>
+            </svg>
+        """,
+        "drafts": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 5h9l3 3v11H6z"></path>
+              <path d="M15 5v3h3"></path>
+              <path d="M9 12h6"></path>
+              <path d="M9 15.5h4"></path>
+              <path d="M4 8h2"></path>
+              <path d="M4 12h2"></path>
+              <path d="M4 16h2"></path>
             </svg>
         """,
         "linkedin": """
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="4" y="9" width="4" height="11" rx="1.5"></rect>
-              <circle cx="6" cy="5.5" r="2"></circle>
-              <path d="M12 9h3v1.8c.8-1.1 2-2 4-2 3 0 5 1.9 5 5.7V20h-4v-4.8c0-1.8-.7-2.9-2.3-2.9-1.5 0-2.3 1-2.7 1.9V20h-4z"></path>
-            </svg>
-        """,
-        "workarounds": """
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6 6h12v4H6z"></path>
-              <path d="M9 10h6v8H9z"></path>
-              <path d="M4 18h16v2H4z"></path>
-            </svg>
-        """,
-        "sergio": """
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 3l7 4v5c0 4.2-2.6 7.9-7 9-4.4-1.1-7-4.8-7-9V7z"></path>
-              <path d="M9.5 12.2l1.8 1.8 3.4-3.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-        """,
-        "scheduler": """
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3" y="5" width="18" height="16" rx="2"></rect>
-              <path d="M3 10h18"></path>
-              <path d="M8 3v4M16 3v4"></path>
-              <circle cx="12" cy="15" r="3"></circle>
-            </svg>
-        """,
-        "stats": """
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 19V9"></path>
-              <path d="M12 19V5"></path>
-              <path d="M19 19v-7"></path>
-              <path d="M3 19h18"></path>
+              <path d="M5 10h3v9H5z"></path>
+              <path d="M5 5.5a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0"></path>
+              <path d="M12 10h3v1.4c.6-.9 1.6-1.7 3.1-1.7 2.3 0 3.9 1.6 3.9 4.6V19h-3v-4.2c0-1.4-.6-2.2-1.8-2.2-1.1 0-1.8.7-2.2 1.6V19h-3z"></path>
             </svg>
         """,
         "instagram": """
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="4" y="4" width="16" height="16" rx="4"></rect>
-              <circle cx="12" cy="12" r="3.5"></circle>
-              <circle cx="17.2" cy="6.8" r="1.2"></circle>
+              <rect x="4.5" y="4.5" width="15" height="15" rx="4"></rect>
+              <circle cx="12" cy="12" r="3.2"></circle>
+              <path d="M16.8 7.2h.01"></path>
+            </svg>
+        """,
+        "scheduler": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4" y="5.5" width="16" height="14" rx="2"></rect>
+              <path d="M4 10h16"></path>
+              <path d="M8 3.5v4"></path>
+              <path d="M16 3.5v4"></path>
+              <path d="M10 14h4"></path>
+              <path d="M12 12v4"></path>
+            </svg>
+        """,
+        "stats": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 19h16"></path>
+              <path d="M7 16V9"></path>
+              <path d="M12 16V5"></path>
+              <path d="M17 16v-6"></path>
             </svg>
         """,
         "config": """
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="3.2"></circle>
-              <path d="M12 2.8l1.5 2.4 2.8.4.5 2.8 2.4 1.5-1 2.7 1 2.7-2.4 1.5-.5 2.8-2.8.4L12 21.2l-1.5-2.4-2.8-.4-.5-2.8-2.4-1.5 1-2.7-1-2.7 2.4-1.5.5-2.8 2.8-.4z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12 3.5v2"></path>
+              <path d="M12 18.5v2"></path>
+              <path d="M4.6 7.8l1.7 1"></path>
+              <path d="M17.7 15.2l1.7 1"></path>
+              <path d="M4.6 16.2l1.7-1"></path>
+              <path d="M17.7 8.8l1.7-1"></path>
             </svg>
         """,
         "channels": """
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 6h7v5H4z"></path>
-              <path d="M13 6h7v5h-7z"></path>
-              <path d="M4 13h7v5H4z"></path>
-              <path d="M13 13h7v5h-7z"></path>
+              <rect x="4" y="5" width="6" height="6" rx="1.5"></rect>
+              <rect x="14" y="5" width="6" height="6" rx="1.5"></rect>
+              <rect x="4" y="15" width="6" height="4" rx="1.3"></rect>
+              <rect x="14" y="15" width="6" height="4" rx="1.3"></rect>
             </svg>
         """,
     }
@@ -1520,7 +1526,10 @@ def render_page(
       display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;
       color: currentColor;
     }}
-    .sidebar-icon svg {{ width: 18px; height: 18px; fill: currentColor; stroke: currentColor; stroke-width: 1.7; }}
+    .sidebar-icon svg {{
+      width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8;
+      stroke-linecap: round; stroke-linejoin: round;
+    }}
     .sidebar-fallback {{ font-size: 11px; letter-spacing: 0.08em; }}
     .sidebar-label {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; font-weight: 600; }}
     .main-shell {{ flex: 1; min-width: 0; transition: margin 0.2s ease, width 0.2s ease; }}
