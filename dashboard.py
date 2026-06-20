@@ -612,6 +612,20 @@ def make_empty_content_item() -> ContentItem:
         published_at="",
     )
 
+def select_content_item_for_route(
+    content_dir: Path,
+    content_items: list[ContentItem],
+    content_identifier: str | None,
+    route: str,
+) -> ContentItem:
+    selected = get_content_item(content_dir, content_identifier) if content_identifier else None
+    if selected is not None:
+        return selected
+    if route == ROUTE_EDITOR and not content_identifier and content_items:
+        return content_items[0]
+    return make_empty_content_item()
+
+
 def render_editor_list(items: list[ContentItem], active_identifier: str | None) -> str:
     rows: list[str] = []
     for item in items[:16]:
@@ -2374,9 +2388,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
             ensure_studio_dirs(self.config.content_dir)
             content_items = list_content_items(self.config.content_dir)
             content_identifier = parse_qs(parsed.query).get("content", [None])[0]
-            selected_content_item = get_content_item(self.config.content_dir, content_identifier) if content_identifier else None
-            if selected_content_item is None:
-                selected_content_item = make_empty_content_item()
+            selected_content_item = select_content_item_for_route(
+                self.config.content_dir,
+                content_items,
+                content_identifier,
+                route,
+            )
             snapshot = build_snapshot(self.config) if route == ROUTE_LINKEDIN else None
             all_queue = load_schedule()
             preview = load_preview()
