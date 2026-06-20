@@ -1409,19 +1409,19 @@ def render_page(
   <title>SocialMediaManager</title>
   <style>
     :root {{
-      --bg: #13110f;
-      --bg-soft: #1b1713;
-      --panel: #211d18;
-      --panel-raised: #29231d;
-      --line: #4a4035;
-      --text: #f4efe7;
-      --muted: #b5aa9c;
-      --muted-strong: #d8cec0;
-      --accent: #6f543c;
-      --accent-strong: #b99065;
-      --accent-2: #66c79a;
-      --danger: #f87171;
-      --info: #7dd3fc;
+      --bg: #09090b;
+      --bg-soft: #111113;
+      --panel: #18181b;
+      --panel-raised: #202124;
+      --line: #3f3f46;
+      --text: #f4f4f5;
+      --muted: #a1a1aa;
+      --muted-strong: #d4d4d8;
+      --accent: #3f3f46;
+      --accent-strong: #a1a1aa;
+      --accent-2: #52525b;
+      --danger: #a1a1aa;
+      --info: #a1a1aa;
       --radius: 8px;
       --sidebar-width: 268px;
       --sidebar-collapsed-width: 76px;
@@ -1430,7 +1430,7 @@ def render_page(
     body {{
       margin: 0;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: linear-gradient(180deg, #211b15 0%, var(--bg) 42%, #0f0d0b 100%);
+      background: linear-gradient(180deg, #111113 0%, var(--bg) 42%, #050505 100%);
       color: var(--text);
       line-height: 1.5;
     }}
@@ -1438,15 +1438,15 @@ def render_page(
     :focus-visible {{ outline: 2px solid var(--accent-strong); outline-offset: 3px; }}
     .skip-link {{
       position: fixed; left: 16px; top: 12px; z-index: 100; transform: translateY(-160%);
-      background: var(--accent); color: #f4efe7; padding: 10px 12px; border-radius: var(--radius);
+      background: var(--accent); color: #f4f4f5; padding: 10px 12px; border-radius: var(--radius);
       font-weight: 800; text-decoration: none; transition: transform 0.2s ease;
     }}
     .skip-link:focus {{ transform: translateY(0); }}
     .app-shell {{ display: flex; min-height: 100vh; }}
     .sidebar {{
       width: var(--sidebar-width);
-      background: linear-gradient(180deg, rgba(24, 20, 16, 0.98), rgba(17, 14, 12, 0.94));
-      border-right: 1px solid rgba(111, 84, 60, 0.22);
+      background: linear-gradient(180deg, rgba(12, 12, 14, 0.98), rgba(7, 7, 8, 0.94));
+      border-right: 1px solid rgba(113, 113, 122, 0.20);
       padding: 14px 12px;
       position: sticky;
       top: 0;
@@ -1456,20 +1456,20 @@ def render_page(
     }}
     .sidebar-top {{ display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 16px; }}
     .sidebar-toggle {{
-      border: 1px solid rgba(181, 170, 156, 0.20); border-radius: var(--radius);
-      background: rgba(41, 35, 29, 0.78); color: var(--text);
+      border: 1px solid rgba(113, 113, 122, 0.22); border-radius: var(--radius);
+      background: rgba(31, 31, 35, 0.78); color: var(--text);
       width: 38px; height: 38px; cursor: pointer; font-size: 13px;
       transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
     }}
     .sidebar-toggle:hover {{
-      background: rgba(64, 54, 44, 0.92);
-      border-color: rgba(185, 144, 101, 0.24);
+      background: rgba(39, 39, 42, 0.92);
+      border-color: rgba(161, 161, 170, 0.24);
       transform: translateY(-1px);
     }}
     .sidebar-new-draft {{
       display: flex; align-items: center; gap: 10px; min-height: 42px; margin: 0 0 12px; padding: 8px 10px;
-      border-radius: var(--radius); background: rgba(111, 84, 60, 0.72); color: #f4efe7; text-decoration: none; font-weight: 900;
-      border: 1px solid rgba(185, 144, 101, 0.28);
+      border-radius: var(--radius); background: rgba(39, 39, 42, 0.86); color: #f4f4f5; text-decoration: none; font-weight: 900;
+      border: 1px solid rgba(161, 161, 170, 0.26);
     }}
     .sidebar-new-icon {{ display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 26px; flex-shrink: 0; }}
     .sidebar-new-icon svg {{ width: 18px; height: 18px; fill: currentColor; }}
@@ -1480,14 +1480,14 @@ def render_page(
       border: 1px solid transparent; border-radius: var(--radius); text-decoration: none;
       color: var(--muted); transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
     }}
-    .sidebar-link:hover {{ background: rgba(244, 239, 231, 0.06); border-color: rgba(111, 84, 60, 0.22); color: var(--text); }}
+    .sidebar-link:hover {{ background: rgba(244, 244, 245, 0.06); border-color: rgba(113, 113, 122, 0.20); color: var(--text); }}
     .sidebar-link.active {{
-      background: rgba(111, 84, 60, 0.34);
-      color: var(--text); border-color: rgba(185, 144, 101, 0.28);
+      background: rgba(63, 63, 70, 0.70);
+      color: var(--text); border-color: rgba(161, 161, 170, 0.26);
       box-shadow: inset 3px 0 0 var(--accent);
     }}
     .sidebar-icon {{
-      width: 32px; height: 32px; border-radius: var(--radius); background: rgba(244, 239, 231, 0.07);
+      width: 32px; height: 32px; border-radius: var(--radius); background: rgba(244, 244, 245, 0.07);
       display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;
       color: currentColor;
     }}
@@ -1496,7 +1496,7 @@ def render_page(
     .sidebar-label {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; font-weight: 600; }}
     .main-shell {{ flex: 1; min-width: 0; transition: margin 0.2s ease, width 0.2s ease; }}
     .wrap {{ max-width: 1360px; margin: 0 auto; padding: 28px 24px 40px; }}
-    .page-header {{ display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; margin-bottom: 24px; padding-bottom: 18px; border-bottom: 1px solid rgba(181, 170, 156, 0.14); }}
+    .page-header {{ display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; margin-bottom: 24px; padding-bottom: 18px; border-bottom: 1px solid rgba(113, 113, 122, 0.18); }}
     .page-kicker {{ margin: 0 0 7px; color: var(--accent-strong); font-size: 12px; font-weight: 800; text-transform: uppercase; }}
     .page-title {{ margin: 0; font-size: 30px; line-height: 1.1; }}
     .page-subtitle {{ margin: 8px 0 0; color: var(--muted); max-width: 68ch; }}
@@ -1505,14 +1505,14 @@ def render_page(
     .stack {{ display: grid; gap: 20px; align-content: start; }}
     .card {{
       position: relative;
-      background: rgba(33, 29, 24, 0.92);
-      border: 1px solid rgba(181, 170, 156, 0.16);
+      background: rgba(24, 24, 27, 0.94);
+      border: 1px solid rgba(113, 113, 122, 0.18);
       border-radius: var(--radius);
       padding: 20px;
       box-shadow: 0 18px 48px rgba(6, 5, 4, 0.34);
       min-width: 0;
     }}
-    .card::before {{ content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; border-radius: var(--radius) 0 0 var(--radius); background: rgba(181, 170, 156, 0.18); }}
+    .card::before {{ content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; border-radius: var(--radius) 0 0 var(--radius); background: rgba(113, 113, 122, 0.18); }}
     .compact-card {{ padding: 18px 20px; }}
     .card-heading {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }}
     h1, h2, h3 {{ margin: 0 0 12px; }}
@@ -1522,24 +1522,24 @@ def render_page(
     .inline-link {{ color: var(--accent); text-decoration: none; }}
     label {{ display: block; margin: 14px 0 6px; color: var(--muted); font-size: 14px; }}
     input, select, textarea {{
-      width: 100%; border-radius: var(--radius); border: 1px solid var(--line); background: #17130f; color: var(--text); padding: 12px; font: inherit;
+      width: 100%; border-radius: var(--radius); border: 1px solid var(--line); background: #101012; color: var(--text); padding: 12px; font: inherit;
     }}
     textarea {{ min-height: 180px; resize: vertical; }}
     .actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }}
     .inline-form {{ margin: 0; }}
     button, .button {{
-      border: 0; border-radius: var(--radius); background: var(--accent); color: #f4efe7; padding: 11px 16px; font-weight: 800; cursor: pointer; text-decoration: none;
+      border: 0; border-radius: var(--radius); background: var(--accent); color: #f4f4f5; padding: 11px 16px; font-weight: 800; cursor: pointer; text-decoration: none;
       min-height: 40px; display: inline-flex; align-items: center; justify-content: center;
     }}
     button:hover, .button:hover {{ filter: brightness(1.06); }}
-    .secondary {{ background: rgba(102, 199, 154, 0.18); color: #d9f9e9; border: 1px solid rgba(102, 199, 154, 0.32); }}
-    .nav-chip {{ background: rgba(244, 239, 231, 0.07); color: var(--text); border: 1px solid rgba(181, 170, 156, 0.16); }}
-    .nav-chip.active {{ background: rgba(111, 84, 60, 0.38); outline: 1px solid rgba(185, 144, 101, 0.34); }}
-    .filter-bar {{ align-items: center; padding: 10px; background: rgba(15, 13, 11, 0.42); border: 1px solid rgba(181, 170, 156, 0.12); border-radius: var(--radius); }}
+    .secondary {{ background: rgba(63, 63, 70, 0.58); color: #f4f4f5; border: 1px solid rgba(161, 161, 170, 0.24); }}
+    .nav-chip {{ background: rgba(244, 244, 245, 0.07); color: var(--text); border: 1px solid rgba(113, 113, 122, 0.18); }}
+    .nav-chip.active {{ background: rgba(63, 63, 70, 0.76); outline: 1px solid rgba(161, 161, 170, 0.30); }}
+    .filter-bar {{ align-items: center; padding: 10px; background: rgba(10, 10, 12, 0.52); border: 1px solid rgba(113, 113, 122, 0.16); border-radius: var(--radius); }}
     .summary-metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; margin: 16px 0 6px; }}
     .summary-pill {{
       display: grid; gap: 4px; text-decoration: none; padding: 12px; border-radius: var(--radius);
-      background: rgba(244, 239, 231, 0.06); border: 1px solid rgba(181, 170, 156, 0.13);
+      background: rgba(244, 244, 245, 0.06); border: 1px solid rgba(113, 113, 122, 0.16);
     }}
     .summary-pill.static {{ cursor: default; }}
     .summary-pill strong {{ font-size: 20px; }}
@@ -1547,7 +1547,7 @@ def render_page(
     .config-summary {{ display: grid; gap: 10px; }}
     .config-item {{
       display: grid; gap: 6px; padding: 12px 14px; border-radius: var(--radius);
-      background: rgba(244, 239, 231, 0.055); border: 1px solid rgba(181, 170, 156, 0.12);
+      background: rgba(244, 244, 245, 0.055); border: 1px solid rgba(113, 113, 122, 0.16);
     }}
     .config-label {{ color: var(--muted); font-size: 13px; }}
     .editor-grid {{ grid-template-columns: minmax(0, 1.2fr) minmax(340px, .8fr); }}
@@ -1625,15 +1625,15 @@ def render_page(
       display: grid;
       gap: 0;
       border-radius: 28px;
-      background: rgba(8, 15, 30, 0.76);
-      border: 1px solid rgba(148, 163, 184, 0.10);
+      background: rgba(12, 12, 14, 0.80);
+      border: 1px solid rgba(113, 113, 122, 0.12);
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 22px 60px rgba(2, 6, 23, 0.28);
     }}
     .editor-primary-fields-inline {{
       max-width: none;
       margin: 0;
       padding: 18px 24px 8px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+      border-bottom: 1px solid rgba(113, 113, 122, 0.10);
     }}
     .editor-title-input {{
       border: 0;
@@ -1644,7 +1644,7 @@ def render_page(
       font-size: clamp(2rem, 3.2vw, 3rem);
       line-height: 1.06;
       font-weight: 700;
-      color: #f8fafc;
+      color: #f4f4f5;
       letter-spacing: -0.03em;
     }}
     .editor-title-input:focus,
@@ -1659,7 +1659,7 @@ def render_page(
       background: transparent;
       min-height: 48px;
       resize: none;
-      color: #cbd5e1;
+      color: #d4d4d8;
       font-family: Georgia, "Times New Roman", serif;
       font-size: 1.08rem;
       line-height: 1.45;
@@ -1676,8 +1676,8 @@ def render_page(
       align-content: start;
     }}
     .editor-panel {{
-      background: rgba(11, 17, 32, 0.82);
-      border: 1px solid rgba(148, 163, 184, 0.10);
+      background: rgba(18, 18, 20, 0.86);
+      border: 1px solid rgba(113, 113, 122, 0.12);
       border-radius: 16px;
       overflow: hidden;
     }}
@@ -1700,7 +1700,7 @@ def render_page(
       gap: 8px;
       font-weight: 700;
       font-size: 13px;
-      color: #e2e8f0;
+      color: #e4e4e7;
     }}
     .editor-panel-icon {{
       display: inline-flex;
@@ -1709,9 +1709,9 @@ def render_page(
       width: 26px;
       height: 26px;
       border-radius: 8px;
-      background: rgba(30, 41, 59, 0.82);
-      color: #cbd5e1;
-      border: 1px solid rgba(51, 65, 85, 0.9);
+      background: rgba(39, 39, 42, 0.86);
+      color: #d4d4d8;
+      border: 1px solid rgba(63, 63, 70, 0.88);
       flex-shrink: 0;
     }}
     .editor-panel-icon svg {{
@@ -1725,8 +1725,8 @@ def render_page(
     .editor-panel-chevron {{
       width: 10px;
       height: 10px;
-      border-right: 2px solid #94a3b8;
-      border-bottom: 2px solid #94a3b8;
+      border-right: 2px solid #a1a1aa;
+      border-bottom: 2px solid #a1a1aa;
       transform: rotate(45deg);
       transition: transform 0.2s ease;
       margin-right: 4px;
@@ -1760,9 +1760,9 @@ def render_page(
       min-height: 92px;
       resize: vertical;
       border-radius: 14px;
-      border: 1px solid rgba(51, 65, 85, 0.9);
-      background: rgba(15, 23, 42, 0.88);
-      color: #dbe4f0;
+      border: 1px solid rgba(63, 63, 70, 0.88);
+      background: rgba(18, 18, 20, 0.90);
+      color: #d4d4d8;
       padding: 10px 11px;
       font: inherit;
       line-height: 1.45;
@@ -1775,24 +1775,24 @@ def render_page(
       min-height: 34px;
       padding: 0 12px;
       border-radius: 10px;
-      border: 1px solid rgba(56, 189, 248, 0.28);
-      background: rgba(14, 116, 144, 0.16);
-      color: #dbeafe;
+      border: 1px solid rgba(161, 161, 170, 0.22);
+      background: rgba(63, 63, 70, 0.42);
+      color: #d4d4d8;
       font-size: 12px;
       font-weight: 700;
       transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
     }}
     .editor-panel-button:hover {{
-      background: rgba(14, 116, 144, 0.24);
-      border-color: rgba(56, 189, 248, 0.44);
-      color: #f8fafc;
+      background: rgba(63, 63, 70, 0.58);
+      border-color: rgba(161, 161, 170, 0.30);
+      color: #f4f4f5;
     }}
     .editor-panel-button.subtle {{
       min-height: 30px;
       padding: 0 10px;
-      border-color: rgba(71, 85, 105, 0.9);
-      background: rgba(30, 41, 59, 0.82);
-      color: #dbe4f0;
+      border-color: rgba(82, 82, 91, 0.88);
+      background: rgba(39, 39, 42, 0.86);
+      color: #d4d4d8;
       font-weight: 600;
     }}
     .editor-ai-feedback {{
@@ -1812,7 +1812,7 @@ def render_page(
       justify-content: space-between;
       gap: 6px;
       padding: 5px 0;
-      border-top: 1px solid rgba(51, 65, 85, 0.5);
+      border-top: 1px solid rgba(63, 63, 70, 0.50);
     }}
     .revision-item:first-child {{
       border-top: 0;
@@ -1824,7 +1824,7 @@ def render_page(
       gap: 1px;
     }}
     .revision-copy strong {{
-      color: #e2e8f0;
+      color: #e4e4e7;
       font-size: 11px;
       line-height: 1.25;
       word-break: break-word;
@@ -1853,7 +1853,7 @@ def render_page(
       align-items: center;
       color: var(--muted);
       font-size: 13px;
-      border-top: 1px solid rgba(148, 163, 184, 0.10);
+      border-top: 1px solid rgba(113, 113, 122, 0.12);
       padding: 10px 2px 0;
     }}
     .editor-workbench {{
@@ -1881,8 +1881,8 @@ def render_page(
       flex-wrap: wrap;
       padding: 8px 10px;
       border-radius: 18px;
-      background: rgba(5, 10, 20, 0.94);
-      border: 1px solid rgba(51, 65, 85, 0.9);
+      background: rgba(8, 8, 10, 0.96);
+      border: 1px solid rgba(63, 63, 70, 0.88);
       backdrop-filter: blur(12px);
       box-shadow: 0 16px 40px rgba(2, 6, 23, 0.3);
     }}
@@ -1895,7 +1895,7 @@ def render_page(
     .editor-toolbar-group-actions {{
       margin-left: auto;
       padding-left: 12px;
-      border-left: 1px solid rgba(51, 65, 85, 0.9);
+      border-left: 1px solid rgba(63, 63, 70, 0.88);
     }}
     .editor-toolbar button,
     .editor-toolbar a.editor-toolbar-action {{
@@ -1904,20 +1904,20 @@ def render_page(
       justify-content: center;
       width: 36px;
       height: 36px;
-      background: rgba(30, 41, 59, 0.82);
-      color: #dbe4f0;
+      background: rgba(39, 39, 42, 0.86);
+      color: #d4d4d8;
       padding: 0;
       border-radius: 10px;
-      border: 1px solid rgba(51, 65, 85, 0.9);
+      border: 1px solid rgba(63, 63, 70, 0.88);
       font-weight: 600;
       text-decoration: none;
       transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
     }}
     .editor-toolbar button:hover,
     .editor-toolbar a.editor-toolbar-action:hover {{
-      background: rgba(51, 65, 85, 0.95);
-      border-color: rgba(71, 85, 105, 0.95);
-      color: #f8fafc;
+      background: rgba(63, 63, 70, 0.95);
+      border-color: rgba(82, 82, 91, 0.92);
+      color: #f4f4f5;
       transform: translateY(-1px);
     }}
     .editor-toolbar button svg,
@@ -1930,16 +1930,16 @@ def render_page(
       flex-shrink: 0;
     }}
     .editor-toolbar button.is-active {{
-      background: rgba(15, 23, 42, 0.98);
-      color: #7dd3fc;
-      border-color: rgba(56, 189, 248, 0.38);
-      box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.18);
+      background: rgba(10, 10, 12, 0.98);
+      color: #a1a1aa;
+      border-color: rgba(161, 161, 170, 0.30);
+      box-shadow: inset 0 0 0 1px rgba(161, 161, 170, 0.18);
     }}
     .editor-toolbar-action {{
-      background: rgba(17, 24, 39, 0.96);
+      background: rgba(18, 18, 20, 0.96);
     }}
     .editor-toolbar-action.secondary {{
-      background: rgba(30, 41, 59, 0.82);
+      background: rgba(39, 39, 42, 0.86);
     }}
     .editor-drop-hint {{
       display: none;
@@ -1947,9 +1947,9 @@ def render_page(
       justify-content: center;
       padding: 16px;
       border-radius: 18px;
-      border: 1px dashed rgba(56, 189, 248, 0.45);
-      background: rgba(56, 189, 248, 0.08);
-      color: #bae6fd;
+      border: 1px dashed rgba(161, 161, 170, 0.30);
+      background: rgba(63, 63, 70, 0.32);
+      color: #d4d4d8;
       font-size: 14px;
       font-weight: 600;
     }}
@@ -1957,8 +1957,8 @@ def render_page(
       display: flex;
     }}
     .editor-column.drag-over .editor-writing-surface {{
-      border-color: rgba(56, 189, 248, 0.38);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 3px rgba(56, 189, 248, 0.12), 0 22px 60px rgba(2, 6, 23, 0.28);
+      border-color: rgba(161, 161, 170, 0.30);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 0 0 3px rgba(161, 161, 170, 0.16), 0 22px 60px rgba(2, 6, 23, 0.28);
     }}
     .tiptap-editor {{
       min-height: 760px;
@@ -1977,10 +1977,10 @@ def render_page(
       font-family: Georgia, "Times New Roman", serif;
       font-size: 1.22rem;
       line-height: 1.95;
-      color: #f8fafc;
+      color: #f4f4f5;
     }}
     .tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {{
-      color: #64748b;
+      color: #71717a;
       content: attr(data-placeholder);
       float: left;
       height: 0;
@@ -1992,7 +1992,7 @@ def render_page(
       font-family: Georgia, "Times New Roman", serif;
       line-height: 1.18;
       margin: 1.4em 0 0.45em;
-      color: #ffffff;
+      color: #f4f4f5;
     }}
     .tiptap-editor .ProseMirror h1 {{ font-size: 2.2rem; }}
     .tiptap-editor .ProseMirror h2 {{ font-size: 1.75rem; }}
@@ -2000,13 +2000,13 @@ def render_page(
     .tiptap-editor .ProseMirror blockquote {{
       margin: 1.5em 0;
       padding-left: 1.1rem;
-      border-left: 3px solid rgba(56, 189, 248, 0.5);
-      color: #cbd5e1;
+      border-left: 3px solid rgba(161, 161, 170, 0.34);
+      color: #d4d4d8;
     }}
     .tiptap-editor .ProseMirror pre {{
-      background: #020617;
-      border: 1px solid rgba(148, 163, 184, 0.14);
-      color: #dbeafe;
+      background: #050505;
+      border: 1px solid rgba(113, 113, 122, 0.16);
+      color: #d4d4d8;
       padding: 16px 18px;
       border-radius: 16px;
       overflow-x: auto;
@@ -2016,10 +2016,10 @@ def render_page(
     }}
     .tiptap-editor .ProseMirror code {{
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      background: rgba(148, 163, 184, 0.12);
+      background: rgba(113, 113, 122, 0.14);
       border-radius: 6px;
       padding: 0.15em 0.35em;
-      color: #bfdbfe;
+      color: #d4d4d8;
     }}
     .tiptap-editor .ProseMirror pre code {{
       background: transparent;
@@ -2028,7 +2028,7 @@ def render_page(
     }}
     .tiptap-editor .ProseMirror hr {{
       border: 0;
-      border-top: 1px solid rgba(148, 163, 184, 0.20);
+      border-top: 1px solid rgba(113, 113, 122, 0.22);
       margin: 2.2rem 0;
     }}
     .tiptap-editor .ProseMirror img {{
@@ -2037,15 +2037,15 @@ def render_page(
       border-radius: 18px;
       margin: 2rem auto;
       box-shadow: 0 20px 45px rgba(2, 6, 23, 0.42);
-      border: 1px solid rgba(148, 163, 184, 0.14);
-      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(113, 113, 122, 0.16);
+      background: rgba(18, 18, 20, 0.92);
     }}
     .tiptap-editor .ProseMirror img.ProseMirror-selectednode {{
-      outline: 3px solid rgba(56, 189, 248, 0.45);
+      outline: 3px solid rgba(161, 161, 170, 0.30);
       outline-offset: 3px;
     }}
     .tiptap-editor .ProseMirror a {{
-      color: #7dd3fc;
+      color: #a1a1aa;
       text-decoration: underline;
       text-decoration-thickness: 1px;
       text-underline-offset: 3px;
@@ -2090,15 +2090,15 @@ def render_page(
       height: 38px;
       padding: 0;
       border-radius: 12px;
-      border: 1px solid rgba(51, 65, 85, 0.9);
-      background: rgba(5, 10, 20, 0.94);
-      color: #dbe4f0;
+      border: 1px solid rgba(63, 63, 70, 0.88);
+      background: rgba(8, 8, 10, 0.96);
+      color: #d4d4d8;
       transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
     }}
     .editor-preview-back:hover {{
-      background: rgba(30, 41, 59, 0.95);
-      border-color: rgba(71, 85, 105, 0.95);
-      color: #f8fafc;
+      background: rgba(39, 39, 42, 0.95);
+      border-color: rgba(82, 82, 91, 0.92);
+      color: #f4f4f5;
       transform: translateY(-1px);
     }}
     .editor-preview-back svg {{
@@ -2129,15 +2129,15 @@ def render_page(
       margin: 0;
       padding: 10px 12px;
       border-radius: 12px;
-      background: rgba(15, 23, 42, 0.55);
-      border: 1px solid rgba(51, 65, 85, 0.7);
-      color: #cbd5e1;
+      background: rgba(24, 24, 27, 0.60);
+      border: 1px solid rgba(63, 63, 70, 0.70);
+      color: #d4d4d8;
     }}
     .cover-preview {{
       border-radius: 16px;
       overflow: hidden;
-      background: rgba(15, 23, 42, 0.78);
-      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: rgba(24, 24, 27, 0.80);
+      border: 1px solid rgba(113, 113, 122, 0.14);
       min-height: 160px;
       display: grid;
       place-items: center;
@@ -2156,15 +2156,15 @@ def render_page(
       text-align: center;
     }}
     .checkbox-grid {{ display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 10px; }}
-    .checkbox-grid label {{ margin: 0; padding: 10px 12px; border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 12px; background: rgba(148, 163, 184, 0.04); }}
+    .checkbox-grid label {{ margin: 0; padding: 10px 12px; border: 1px solid rgba(113, 113, 122, 0.16); border-radius: 12px; background: rgba(113, 113, 122, 0.06); }}
     .content-list {{ display: grid; gap: 10px; }}
     .content-link {{
       display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px; border-radius: var(--radius);
-      background: rgba(244, 239, 231, 0.05); border: 1px solid rgba(181, 170, 156, 0.12);
+      background: rgba(244, 244, 245, 0.05); border: 1px solid rgba(113, 113, 122, 0.16);
     }}
     .content-link-main {{ display: grid; gap: 4px; min-width: 0; flex: 1; text-decoration: none; }}
     .content-link span {{ color: var(--muted); font-size: 13px; }}
-    .content-link.active {{ border-color: rgba(185, 144, 101, 0.34); background: rgba(111, 84, 60, 0.26); }}
+    .content-link.active {{ border-color: rgba(161, 161, 170, 0.30); background: rgba(63, 63, 70, 0.42); }}
     .content-link-menu {{ position: relative; flex-shrink: 0; align-self: flex-start; margin-top: -2px; }}
     .content-link-menu summary {{
       list-style: none;
@@ -2194,8 +2194,8 @@ def render_page(
       gap: 6px;
       padding: 8px;
       border-radius: var(--radius);
-      background: rgba(23, 19, 15, 0.98);
-      border: 1px solid rgba(181, 170, 156, 0.14);
+      background: rgba(18, 18, 20, 0.98);
+      border: 1px solid rgba(113, 113, 122, 0.18);
       box-shadow: 0 18px 50px rgba(6, 5, 4, 0.45);
       z-index: 5;
     }}
@@ -2204,44 +2204,44 @@ def render_page(
       width: 100%;
       padding: 10px 12px;
       border-radius: var(--radius);
-      background: rgba(41, 35, 29, 0.9);
+      background: rgba(31, 31, 35, 0.92);
       color: var(--text);
       text-align: left;
       font-weight: 600;
     }}
     .content-link-menu-items button.danger {{
-      background: rgba(127, 29, 29, 0.85);
-      color: #fee2e2;
+      background: rgba(39, 39, 42, 0.95);
+      color: #f4f4f5;
     }}
     .markdown-preview {{
-      border: 1px solid rgba(181, 170, 156, 0.14); border-radius: var(--radius); padding: 18px;
-      background: rgba(23, 19, 15, 0.72); min-height: 320px;
+      border: 1px solid rgba(113, 113, 122, 0.18); border-radius: var(--radius); padding: 18px;
+      background: rgba(18, 18, 20, 0.72); min-height: 320px;
     }}
     .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 {{ margin-top: 0; }}
     .markdown-preview p, .markdown-preview li {{ line-height: 1.7; }}
     .markdown-preview pre, .frontmatter-preview {{
-      overflow-x: auto; padding: 16px; border-radius: var(--radius); background: rgba(15, 13, 11, 0.9);
-      border: 1px solid rgba(181, 170, 156, 0.12); color: var(--muted-strong); white-space: pre-wrap;
+      overflow-x: auto; padding: 16px; border-radius: var(--radius); background: rgba(10, 10, 12, 0.92);
+      border: 1px solid rgba(113, 113, 122, 0.16); color: var(--muted-strong); white-space: pre-wrap;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     }}
     table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
-    th, td {{ text-align: left; padding: 11px 8px; border-bottom: 1px solid rgba(181,170,156,0.14); vertical-align: top; }}
+    th, td {{ text-align: left; padding: 11px 8px; border-bottom: 1px solid rgba(113,113,122,0.18); vertical-align: top; }}
     th {{ color: var(--muted); font-size: 12px; text-transform: uppercase; font-weight: 800; }}
-    tbody tr:hover td {{ background: rgba(244, 239, 231, 0.035); }}
+    tbody tr:hover td {{ background: rgba(244, 244, 245, 0.035); }}
     code {{ color: var(--accent-strong); overflow-wrap: anywhere; }}
-    .status-ok {{ color: #91f2b8; }}
-    .status-warn {{ color: #b99065; }}
-    .status-bad {{ color: #fca5a5; }}
+    .status-ok {{ color: #d4d4d8; }}
+    .status-warn {{ color: #a1a1aa; }}
+    .status-bad {{ color: #d4d4d8; }}
     .status-badge {{
       display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border-radius: 999px;
-      font-size: 12px; font-weight: 800; background: rgba(181, 170, 156, 0.12); color: var(--muted-strong);
-      border: 1px solid rgba(181, 170, 156, 0.18); vertical-align: middle;
+      font-size: 12px; font-weight: 800; background: rgba(113, 113, 122, 0.16); color: var(--muted-strong);
+      border: 1px solid rgba(113, 113, 122, 0.18); vertical-align: middle;
     }}
-    .status-queued, .status-idle {{ background: rgba(125, 211, 252, 0.12); border-color: rgba(125, 211, 252, 0.24); color: #c8efff; }}
-    .status-processing, .status-running {{ background: rgba(111, 84, 60, 0.22); border-color: rgba(185, 144, 101, 0.26); color: #d1b08c; }}
-    .status-done, .status-success {{ background: rgba(102, 199, 154, 0.14); border-color: rgba(102, 199, 154, 0.30); color: #d9f9e9; }}
-    .status-failed {{ background: rgba(248, 113, 113, 0.14); border-color: rgba(248, 113, 113, 0.30); color: #ffd1d1; }}
-    .empty-state {{ padding: 22px; border: 1px dashed rgba(181, 170, 156, 0.22); border-radius: var(--radius); color: var(--muted); background: rgba(15, 13, 11, 0.28); text-align: center; }}
+    .status-queued, .status-idle {{ background: rgba(63, 63, 70, 0.38); border-color: rgba(161, 161, 170, 0.22); color: #f4f4f5; }}
+    .status-processing, .status-running {{ background: rgba(113, 113, 122, 0.20); border-color: rgba(161, 161, 170, 0.26); color: #d4d4d8; }}
+    .status-done, .status-success {{ background: rgba(63, 63, 70, 0.42); border-color: rgba(161, 161, 170, 0.24); color: #f4f4f5; }}
+    .status-failed {{ background: rgba(63, 63, 70, 0.38); border-color: rgba(161, 161, 170, 0.22); color: #f4f4f5; }}
+    .empty-state {{ padding: 22px; border: 1px dashed rgba(113, 113, 122, 0.22); border-radius: var(--radius); color: var(--muted); background: rgba(10, 10, 12, 0.32); text-align: center; }}
     body.sidebar-collapsed .sidebar {{ width: var(--sidebar-collapsed-width); }}
     body.sidebar-collapsed .sidebar-label {{ display: none; }}
     body.sidebar-collapsed .sidebar-top {{ justify-content: center; }}
