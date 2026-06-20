@@ -706,6 +706,7 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
         if cover_preview_url
         else '<div class="cover-preview-empty">No cover selected yet.</div>'
     )
+    draft_context = selected_item.title or selected_item.slug or "Unsaved new draft"
     revision_items = "".join(
         f"""
         <li class="revision-item">
@@ -741,6 +742,16 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
                   <div class=\"writer-compose\">
                     <div class=\"editor-workbench\">
                       <div class=\"editor-column\">
+                        <div class=\"editor-topbar\">
+                          <div class=\"editor-topbar-copy\">
+                            <span class=\"editor-topbar-label\">Current draft</span>
+                            <strong>{html.escape(draft_context)}</strong>
+                          </div>
+                          <a class=\"button editor-new-draft-button\" href=\"{ROUTE_EDITOR}\" aria-label=\"Create a new blank draft\">
+                            <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z\"></path></svg>
+                            <span>New draft</span>
+                          </a>
+                        </div>
                         <div class=\"editor-toolbar\" id=\"editor-toolbar\">{render_editor_toolbar()}</div>
                         <div class=\"editor-writing-surface\">
                           <div class=\"editor-primary-fields editor-primary-fields-inline\">
@@ -1874,6 +1885,15 @@ def render_page(
       width: 100%;
       margin: 0 auto;
     }}
+    .editor-topbar {{
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      max-width: 860px; width: 100%; margin: 0 auto; padding: 0 2px;
+    }}
+    .editor-topbar-copy {{ display: grid; gap: 2px; min-width: 0; }}
+    .editor-topbar-copy strong {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; color: var(--text); }}
+    .editor-topbar-label {{ color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }}
+    .editor-new-draft-button {{ gap: 8px; flex-shrink: 0; }}
+    .editor-new-draft-button svg {{ width: 17px; height: 17px; fill: currentColor; }}
     .editor-toolbar {{
       position: sticky;
       top: 12px;
@@ -2252,6 +2272,8 @@ def render_page(
       .editor-two-up, .checkbox-grid, .editor-studio, .writer-layout, .editor-workbench {{ grid-template-columns: 1fr; }}
       .editor-sidebar-panel, .editor-rail {{ position: static; }}
       .editor-status-bar {{ flex-direction: column; align-items: flex-start; }}
+      .editor-topbar {{ align-items: flex-start; flex-direction: column; }}
+      .editor-new-draft-button {{ width: 100%; }}
       .editor-toolbar {{ align-items: flex-start; }}
       .editor-toolbar-group-actions {{ margin-left: 0; padding-left: 0; border-left: 0; }}
       .tiptap-editor .ProseMirror {{ padding-left: 0; padding-right: 0; }}
