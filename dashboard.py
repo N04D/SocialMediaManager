@@ -628,8 +628,6 @@ def select_content_item_for_route(
     selected = get_content_item(content_dir, content_identifier) if content_identifier else None
     if selected is not None:
         return selected
-    if route == ROUTE_EDITOR and not content_identifier and content_items:
-        return content_items[0]
     return make_empty_content_item()
 
 
@@ -1361,6 +1359,10 @@ def render_sidebar(active_route: str) -> str:
           </a>
           <button class=\"sidebar-toggle\" id=\"sidebar-toggle\" type=\"button\" aria-label=\"Toggle navigation\"><span aria-hidden=\"true\">|||</span></button>
         </div>
+        <a class=\"sidebar-new-draft\" href=\"{ROUTE_EDITOR}\" aria-label=\"Create a new draft\">
+          <span class=\"sidebar-new-icon\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\"><path d=\"M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z\"></path></svg></span>
+          <span class=\"sidebar-label\">New draft</span>
+        </a>
         <nav class=\"sidebar-nav\" aria-label=\"Primary navigation\">{''.join(items)}</nav>
       </aside>
     """
@@ -1469,6 +1471,13 @@ def render_page(
       border-color: rgba(240, 179, 90, 0.34);
       transform: translateY(-1px);
     }}
+    .sidebar-new-draft {{
+      display: flex; align-items: center; gap: 10px; min-height: 42px; margin: 0 0 12px; padding: 8px 10px;
+      border-radius: var(--radius); background: var(--accent); color: #201408; text-decoration: none; font-weight: 900;
+    }}
+    .sidebar-new-icon {{ display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 26px; flex-shrink: 0; }}
+    .sidebar-new-icon svg {{ width: 18px; height: 18px; fill: currentColor; }}
+    .sidebar-new-draft:hover {{ filter: brightness(1.06); }}
     .sidebar-nav {{ display: grid; gap: 6px; }}
     .sidebar-link {{
       display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 10px;
@@ -2237,6 +2246,7 @@ def render_page(
     body.sidebar-collapsed .sidebar-label, body.sidebar-collapsed .sidebar-brand-copy {{ display: none; }}
     body.sidebar-collapsed .sidebar-top {{ justify-content: center; }}
     body.sidebar-collapsed .sidebar-link {{ justify-content: center; padding-left: 0; padding-right: 0; }}
+    body.sidebar-collapsed .sidebar-new-draft {{ justify-content: center; padding-left: 0; padding-right: 0; }}
     @media (max-width: 980px) {{
       .page-grid {{ grid-template-columns: 1fr; }}
       .editor-two-up, .checkbox-grid, .editor-studio, .writer-layout, .editor-workbench {{ grid-template-columns: 1fr; }}
