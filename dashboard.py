@@ -452,6 +452,14 @@ def render_sidebar_icon(name: str, fallback: str) -> str:
               <path d="M12 2.8l1.5 2.4 2.8.4.5 2.8 2.4 1.5-1 2.7 1 2.7-2.4 1.5-.5 2.8-2.8.4L12 21.2l-1.5-2.4-2.8-.4-.5-2.8-2.4-1.5 1-2.7-1-2.7 2.4-1.5.5-2.8 2.8-.4z"></path>
             </svg>
         """,
+        "channels": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6h7v5H4z"></path>
+              <path d="M13 6h7v5h-7z"></path>
+              <path d="M4 13h7v5H4z"></path>
+              <path d="M13 13h7v5h-7z"></path>
+            </svg>
+        """,
     }
     svg = icons.get(name)
     if svg:
@@ -1351,18 +1359,34 @@ def render_stats_page(content_items: list[ContentItem]) -> str:
 
 
 def render_sidebar(active_route: str) -> str:
+    channel_routes = {ROUTE_LINKEDIN, ROUTE_INSTAGRAM}
     items = []
+    channel_items = []
     for route, icon_name, label, fallback in SIDEBAR_ITEMS:
         active = ' active' if route == active_route else ''
-        items.append(
-            f'<a class="sidebar-link{active}" href="{route}"><span class="sidebar-icon">{render_sidebar_icon(icon_name, fallback)}</span><span class="sidebar-label">{html.escape(label)}</span></a>'
-        )
+        item = f'<a class="sidebar-link{active}" href="{route}"><span class="sidebar-icon">{render_sidebar_icon(icon_name, fallback)}</span><span class="sidebar-label">{html.escape(label)}</span></a>'
+        if route in channel_routes:
+            channel_items.append(item)
+        else:
+            items.append(item)
+    channels_open = ' open' if active_route in channel_routes else ''
+    channels_active = ' active' if active_route in channel_routes else ''
+    channel_group = (
+        f'<details class="sidebar-section"{channels_open}>'
+        f'<summary class="sidebar-section-summary{channels_active}" aria-label="Toggle channel navigation">'
+        f'<span class="sidebar-icon">{render_sidebar_icon("channels", "CH")}</span>'
+        f'<span class="sidebar-label">Channels</span>'
+        f'<span class="sidebar-section-chevron" aria-hidden="true"></span>'
+        f'</summary>'
+        f'<div class="sidebar-subnav">{"".join(channel_items)}</div>'
+        f'</details>'
+    )
     return f"""
-      <aside class=\"sidebar\" id=\"sidebar\">
-        <div class=\"sidebar-top\">
-          <button class=\"sidebar-toggle\" id=\"sidebar-toggle\" type=\"button\" aria-label=\"Toggle navigation\"><span aria-hidden=\"true\">|||</span></button>
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-top">
+          <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Toggle navigation"><span aria-hidden="true">|||</span></button>
         </div>
-        <nav class=\"sidebar-nav\" aria-label=\"Primary navigation\">{''.join(items)}</nav>
+        <nav class="sidebar-nav" aria-label="Primary navigation">{''.join(items[:2])}{channel_group}{''.join(items[2:])}</nav>
       </aside>
     """
 
@@ -1463,6 +1487,23 @@ def render_page(
       transform: translateY(-1px);
     }}
     .sidebar-nav {{ display: grid; gap: 6px; }}
+    .sidebar-section {{ display: grid; gap: 6px; }}
+    .sidebar-section-summary {{
+      display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 10px;
+      border: 1px solid transparent; border-radius: var(--radius); color: var(--muted);
+      cursor: pointer; list-style: none; user-select: none;
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }}
+    .sidebar-section-summary::-webkit-details-marker {{ display: none; }}
+    .sidebar-section-summary:hover {{ background: rgba(244, 244, 245, 0.06); border-color: rgba(113, 113, 122, 0.20); color: var(--text); }}
+    .sidebar-section-summary.active {{ background: rgba(63, 63, 70, 0.70); color: var(--text); border-color: rgba(161, 161, 170, 0.26); box-shadow: inset 3px 0 0 var(--accent); }}
+    .sidebar-section-chevron {{
+      width: 8px; height: 8px; margin-left: auto; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+      transform: rotate(45deg); transition: transform 0.2s ease; opacity: 0.72; flex-shrink: 0;
+    }}
+    .sidebar-section[open] .sidebar-section-chevron {{ transform: rotate(225deg); }}
+    .sidebar-subnav {{ display: grid; gap: 4px; padding-left: 18px; }}
+    .sidebar-subnav .sidebar-link {{ min-height: 42px; }}
     .sidebar-link {{
       display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 10px;
       border: 1px solid transparent; border-radius: var(--radius); text-decoration: none;
@@ -2234,6 +2275,9 @@ def render_page(
     body.sidebar-collapsed .sidebar-label {{ display: none; }}
     body.sidebar-collapsed .sidebar-top {{ justify-content: center; }}
     body.sidebar-collapsed .sidebar-link {{ justify-content: center; padding-left: 0; padding-right: 0; }}
+    body.sidebar-collapsed .sidebar-section-summary {{ justify-content: center; padding-left: 0; padding-right: 0; }}
+    body.sidebar-collapsed .sidebar-section-chevron {{ display: none; }}
+    body.sidebar-collapsed .sidebar-subnav {{ padding-left: 0; }}
     @media (max-width: 980px) {{
       .page-grid {{ grid-template-columns: 1fr; }}
       .editor-two-up, .checkbox-grid, .editor-studio, .writer-layout, .editor-workbench {{ grid-template-columns: 1fr; }}
