@@ -771,10 +771,6 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
                           <div class=\"editor-drop-hint\" id=\"editor-drop-hint\">Drop images here to add them to the draft</div>
                           <div id=\"tiptap-editor\" class=\"tiptap-editor\"></div>
                         </div>
-                        <div class=\"editor-status-bar\">
-                          <span id=\"editor-last-saved\">Last saved: <code>{html.escape(last_saved)}</code></span>
-                          <span id=\"editor-autosave-state\" class=\"meta\">Autosave idle</span>
-                        </div>
                       </div>
                       <div class=\"preview-column\" id=\"editor-preview-column\">
                         <div class=\"preview-header\">
@@ -858,12 +854,12 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
                           <span class=\"editor-panel-summary-left\"><span class=\"editor-panel-icon\">{render_editor_panel_icon('ai')}</span><span>AI prompt</span></span>
                           <span class=\"editor-panel-chevron\" aria-hidden=\"true\"></span>
                         </summary>
-                        <div class=\"editor-panel-body\">
-                          <p class=\"meta\">Give one concrete editing instruction. AI edits the body text and leaves title/subtitle alone.</p>
-                          <label for=\"editor-ai-prompt\">Edit instruction</label>
-                          <textarea id=\"editor-ai-prompt\" class=\"editor-ai-prompt\" placeholder=\"For example: tighten this piece, keep my tone, and make the ending more decisive.\"></textarea>
-                          <button id=\"editor-ai-apply\" type=\"button\" class=\"editor-panel-button\">Apply AI edit</button>
-                          <p id=\"editor-ai-feedback\" class=\"meta editor-ai-feedback\">The updated text is written back into the editor so you can keep editing.</p>
+                        <div class=\"editor-panel-body ai-chat-panel\">
+                          <textarea id=\"editor-ai-prompt\" class=\"editor-ai-prompt\" aria-label=\"AI prompt\"></textarea>
+                          <div class=\"ai-chat-actions\">
+                            <button id=\"editor-ai-apply\" type=\"button\" class=\"editor-panel-button\">Send</button>
+                          </div>
+                          <p id=\"editor-ai-feedback\" class=\"meta editor-ai-feedback\"></p>
                         </div>
                       </details>
                     </div>
@@ -1794,10 +1790,11 @@ def render_page(
       border-radius: 10px;
       font-size: 13px;
     }}
+    .ai-chat-panel {{ gap: 8px; }}
     .editor-ai-prompt {{
-      min-height: 92px;
+      min-height: 72px;
       resize: vertical;
-      border-radius: 14px;
+      border-radius: 12px;
       border: 1px solid rgba(63, 63, 70, 0.88);
       background: rgba(18, 18, 20, 0.90);
       color: #d4d4d8;
@@ -1805,6 +1802,7 @@ def render_page(
       font: inherit;
       line-height: 1.45;
     }}
+    .ai-chat-actions {{ display: flex; justify-content: flex-end; }}
     .editor-panel-button {{
       justify-self: start;
       display: inline-flex;
@@ -1834,9 +1832,10 @@ def render_page(
       font-weight: 600;
     }}
     .editor-ai-feedback {{
-      margin: 2px 0 0;
-      min-height: 18px;
+      margin: 0;
+      min-height: 0;
     }}
+    .editor-ai-feedback:empty {{ display: none; }}
     .revision-list {{
       list-style: none;
       margin: 0;
@@ -1883,16 +1882,6 @@ def render_page(
       padding: 0 8px;
       font-size: 11px;
       border-radius: 9px;
-    }}
-    .editor-status-bar {{
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      align-items: center;
-      color: var(--muted);
-      font-size: 13px;
-      border-top: 1px solid rgba(113, 113, 122, 0.12);
-      padding: 10px 2px 0;
     }}
     .editor-workbench {{
       display: grid;
@@ -2291,7 +2280,6 @@ def render_page(
       .page-grid {{ grid-template-columns: 1fr; }}
       .editor-two-up, .checkbox-grid, .editor-studio, .writer-layout, .editor-workbench {{ grid-template-columns: 1fr; }}
       .editor-sidebar-panel, .editor-rail {{ position: static; }}
-      .editor-status-bar {{ flex-direction: column; align-items: flex-start; }}
       .editor-toolbar {{ align-items: flex-start; }}
       .editor-toolbar-group-actions {{ margin-left: 0; padding-left: 0; border-left: 0; }}
       .tiptap-editor .ProseMirror {{ padding-left: 0; padding-right: 0; }}
