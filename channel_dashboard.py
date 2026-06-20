@@ -422,6 +422,8 @@ def render_derivatives_panel(source_item: ContentItem, *, return_to: str) -> str
         publish_details = ''
         if latest_publish_job is not None:
             publish_details = f'<p class="meta">Latest publish job: <code>{html.escape(latest_publish_job.run_mode)}</code> · <code>{html.escape(latest_publish_job.status)}</code> · step <code>{html.escape(latest_publish_job.last_step or "queued")}</code></p>'
+        elif derivative.status == "approved":
+            publish_details = '<p class="meta"><strong>Ready to queue:</strong> this approved derivative has no publish job yet. Use Dry run publish before Live publish.</p>'
         publish_actions = ""
         if derivative.status == "approved":
             publish_actions = (
