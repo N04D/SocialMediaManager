@@ -1,0 +1,36 @@
+{
+  "id": "linkedin",
+  "name": "LinkedIn",
+  "version": "0.1.0",
+  "description": "Publish approved LinkedIn posts through a local Playwright browser session.",
+  "status": "experimental",
+  "mode": "playwright_local",
+  "capabilities": {
+    "canGenerate": true,
+    "canPreview": true,
+    "canPublish": true,
+    "canFetchMetrics": true,
+    "canReadComments": false,
+    "requiresApproval": true
+  },
+  "connection": {
+    "canConnect": true,
+    "canDisconnect": true,
+    "canCheckStatus": true
+  },
+  "outputTypes": [
+    "linkedin_post"
+  ],
+  "metrics": {
+    "mode": "playwright_local_snapshot",
+    "supportsManualRefresh": true,
+    "supportsScheduledRefresh": true,
+    "defaultRefreshWindows": [
+      "1h",
+      "6h",
+      "24h",
+      "7d"
+    ]
+  }
+}
+

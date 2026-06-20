@@ -1,0 +1,32 @@
+channel: linkedin
+
+output_types:
+  - linkedin_post
+
+limits:
+  max_characters: 3000
+  preferred_min_characters: 800
+  preferred_max_characters: 2200
+
+formatting:
+  max_paragraph_lines: 3
+  short_paragraphs: true
+  hashtags_required: false
+  hashtags_max: 3
+
+style:
+  tone:
+    - direct
+    - reflective
+    - human
+  avoid:
+    - engagement bait
+    - fake vulnerability
+    - viral bro language
+    - excessive emojis
+    - hashtag spam
+    - unsupported claims
+
+approval:
+  required: true
+

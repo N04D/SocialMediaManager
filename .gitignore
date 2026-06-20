@@ -1,0 +1,10 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+tmp_media/
+linkedin_session/
+linkedin_remote_browser/
+studio_data/
+outbox/
+node_modules/

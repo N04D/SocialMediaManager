@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=SocialMediaManager UI Browser
+Comment=Open the SocialMediaManager dashboard in a Chromium session with remote debugging
+Exec=/home/n04d/SocialMediaManager/scripts/start-linkedin-remote-browser.sh
+Path=/home/n04d/SocialMediaManager
+Terminal=false
+Categories=Network;WebBrowser;
+StartupNotify=true
+Icon=/home/n04d/.local/share/icons/socialmediamanager.svg

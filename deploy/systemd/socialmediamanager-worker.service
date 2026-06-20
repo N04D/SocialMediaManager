@@ -1,0 +1,13 @@
+[Unit]
+Description=SocialMediaManager queue worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/SocialMediaManager
+ExecStart=%h/SocialMediaManager/venv/bin/python %h/SocialMediaManager/worker.py --once
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

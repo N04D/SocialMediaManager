@@ -1,0 +1,39 @@
+{
+  "editor_json": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "  LinkedIn channel dry-run."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "  This text verifies the local publishing workflow."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "  It must not be published during the dry-run."
+          }
+        ]
+      },
+      {
+        "type": "paragraph"
+      }
+    ]
+  },
+  "markdown_body": "LinkedIn channel dry-run.\r\n\r\nThis text verifies the local publishing workflow.\r\n\r\nIt must not be published during the dry-run.",
+  "html_body": "<p>  LinkedIn channel dry-run.</p><p>  This text verifies the local publishing workflow.</p><p>  It must not be published during the dry-run.</p><p></p>"
+}

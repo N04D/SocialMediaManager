@@ -1,0 +1,31 @@
+{
+  "id": "substack",
+  "name": "Substack",
+  "version": "0.1.0",
+  "description": "Placeholder plugin for future Substack channel support.",
+  "status": "planned",
+  "mode": "placeholder",
+  "capabilities": {
+    "canGenerate": false,
+    "canPreview": false,
+    "canPublish": false,
+    "canFetchMetrics": false,
+    "canReadComments": false,
+    "requiresApproval": true
+  },
+  "connection": {
+    "canConnect": false,
+    "canDisconnect": false,
+    "canCheckStatus": false
+  },
+  "outputTypes": [
+    "substack_post"
+  ],
+  "metrics": {
+    "mode": "none",
+    "supportsManualRefresh": false,
+    "supportsScheduledRefresh": false,
+    "defaultRefreshWindows": []
+  }
+}
+

@@ -1,0 +1,1 @@
+* * * * * cd /home/YOUR_USER/SocialMediaManager && ./venv/bin/python worker.py --once >> outbox/worker.log 2>&1

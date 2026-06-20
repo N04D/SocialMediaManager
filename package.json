@@ -1,0 +1,21 @@
+{
+  "name": "socialmediamanager-studio",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild frontend/editor-app.js --bundle --format=esm --platform=browser --target=es2020 --outfile=assets/editor-app.js"
+  },
+  "dependencies": {
+    "@tiptap/core": "^2.26.1",
+    "@tiptap/extension-image": "^2.26.1",
+    "@tiptap/extension-link": "^2.26.1",
+    "@tiptap/extension-placeholder": "^2.26.1",
+    "@tiptap/extension-underline": "^2.26.1",
+    "@tiptap/starter-kit": "^2.26.1",
+    "turndown": "^7.2.0",
+    "turndown-plugin-gfm": "^1.0.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.5"
+  }
+}

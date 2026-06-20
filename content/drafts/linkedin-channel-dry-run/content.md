@@ -1,0 +1,24 @@
+---
+id: 6cc80401ae42454da33b43636e7ff91b
+title: LinkedIn channel dry-run
+subtitle: ''
+slug: linkedin-channel-dry-run
+status: draft
+channels: []
+tags: []
+categories: []
+created_at: '2026-06-20T12:27:29+02:00'
+updated_at: '2026-06-20T12:28:02+02:00'
+published_at: ''
+cover_image_path: ''
+linkedin_post_urn: ''
+instagram_media_id: ''
+substack_post_id: ''
+x_post_id: ''
+---
+
+LinkedIn channel dry-run.
+
+This text verifies the local publishing workflow.
+
+It must not be published during the dry-run.

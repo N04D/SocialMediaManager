@@ -1,0 +1,33 @@
+{
+  "id": "20260615-201641",
+  "reason": "autosave",
+  "saved_at": "2026-06-15T20:16:41+02:00",
+  "item": {
+    "id": "5cb9d0841ddb44b190ddc69513cef98b",
+    "title": "De kosmos van het verborgene",
+    "subtitle": "",
+    "slug": "de-kosmos-van-het-verborgene",
+    "status": "draft",
+    "channels": [],
+    "tags": [],
+    "categories": [],
+    "created_at": "2026-06-15T20:16:32+02:00",
+    "updated_at": "2026-06-15T20:16:32+02:00",
+    "published_at": "",
+    "cover_image_path": "",
+    "linkedin_post_urn": "",
+    "instagram_media_id": "",
+    "substack_post_id": "",
+    "x_post_id": ""
+  },
+  "editor_json": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph"
+      }
+    ]
+  },
+  "markdown_body": "---\nid: 5cb9d0841ddb44b190ddc69513cef98b\ntitle: De kosmos van het verborgene\nsubtitle: ''\nslug: de-kosmos-van-het-verborgene\nstatus: draft\nchannels: []\ntags: []\ncategories: []\ncreated_at: '2026-06-15T20:16:32+02:00'\nupdated_at: '2026-06-15T20:16:32+02:00'\npublished_at: ''\ncover_image_path: ''\nlinkedin_post_urn: ''\ninstagram_media_id: ''\nsubstack_post_id: ''\nx_post_id: ''\n---",
+  "html_body": "<p></p>"
+}

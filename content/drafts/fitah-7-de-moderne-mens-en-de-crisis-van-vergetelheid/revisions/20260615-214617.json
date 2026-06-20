@@ -1,0 +1,33 @@
+{
+  "id": "20260615-214617",
+  "reason": "autosave",
+  "saved_at": "2026-06-15T21:46:17+02:00",
+  "item": {
+    "id": "df9939d88ddd42a9a8d3d74b53f55be9",
+    "title": "Fitah #7 De moderne mens en de crisis van vergetelheid",
+    "subtitle": "",
+    "slug": "fitah-7-de-moderne-mens-en-de-crisis-van-vergetelheid",
+    "status": "draft",
+    "channels": [],
+    "tags": [],
+    "categories": [],
+    "created_at": "2026-06-15T21:45:47+02:00",
+    "updated_at": "2026-06-15T21:46:09+02:00",
+    "published_at": "",
+    "cover_image_path": "",
+    "linkedin_post_urn": "",
+    "instagram_media_id": "",
+    "substack_post_id": "",
+    "x_post_id": ""
+  },
+  "editor_json": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph"
+      }
+    ]
+  },
+  "markdown_body": "---\nid: df9939d88ddd42a9a8d3d74b53f55be9\ntitle: De moderne mens en de crisis van vergetelheid\nsubtitle: ''\nslug: de-moderne-mens-en-de-crisis-van-vergetelheid\nstatus: draft\nchannels: []\ntags: []\ncategories: []\ncreated_at: '2026-06-15T21:45:47+02:00'\nupdated_at: '2026-06-15T21:45:47+02:00'\npublished_at: ''\ncover_image_path: ''\nlinkedin_post_urn: ''\ninstagram_media_id: ''\nsubstack_post_id: ''\nx_post_id: ''\n---",
+  "html_body": "<p></p>"
+}

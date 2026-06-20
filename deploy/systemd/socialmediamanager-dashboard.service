@@ -1,0 +1,15 @@
+[Unit]
+Description=SocialMediaManager dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/SocialMediaManager
+ExecStart=%h/SocialMediaManager/venv/bin/python %h/SocialMediaManager/dashboard.py --host 127.0.0.1 --port 8080
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
