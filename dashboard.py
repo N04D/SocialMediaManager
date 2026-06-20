@@ -1364,10 +1364,6 @@ def render_sidebar(active_route: str) -> str:
     return f"""
       <aside class=\"sidebar\" id=\"sidebar\">
         <div class=\"sidebar-top\">
-          <a class=\"sidebar-brand\" href=\"{ROUTE_EDITOR}\" aria-label=\"SocialMediaManager home\">
-            <span class=\"sidebar-brand-mark\">SM</span>
-            <span class=\"sidebar-brand-copy\"><strong>SocialMediaManager</strong><small>Local publishing cockpit</small></span>
-          </a>
           <button class=\"sidebar-toggle\" id=\"sidebar-toggle\" type=\"button\" aria-label=\"Toggle navigation\"><span aria-hidden=\"true\">|||</span></button>
         </div>
         <a class=\"sidebar-new-draft\" href=\"{ROUTE_EDITOR}\" aria-label=\"Create a new draft\">
@@ -1425,8 +1421,8 @@ def render_page(
       --text: #f4efe7;
       --muted: #b5aa9c;
       --muted-strong: #d8cec0;
-      --accent: #f0b35a;
-      --accent-strong: #ffd28a;
+      --accent: #6f543c;
+      --accent-strong: #b99065;
       --accent-2: #66c79a;
       --danger: #f87171;
       --info: #7dd3fc;
@@ -1446,7 +1442,7 @@ def render_page(
     :focus-visible {{ outline: 2px solid var(--accent-strong); outline-offset: 3px; }}
     .skip-link {{
       position: fixed; left: 16px; top: 12px; z-index: 100; transform: translateY(-160%);
-      background: var(--accent); color: #201408; padding: 10px 12px; border-radius: var(--radius);
+      background: var(--accent); color: #f4efe7; padding: 10px 12px; border-radius: var(--radius);
       font-weight: 800; text-decoration: none; transition: transform 0.2s ease;
     }}
     .skip-link:focus {{ transform: translateY(0); }}
@@ -1454,7 +1450,7 @@ def render_page(
     .sidebar {{
       width: var(--sidebar-width);
       background: linear-gradient(180deg, rgba(24, 20, 16, 0.98), rgba(17, 14, 12, 0.94));
-      border-right: 1px solid rgba(240, 179, 90, 0.14);
+      border-right: 1px solid rgba(111, 84, 60, 0.22);
       padding: 14px 12px;
       position: sticky;
       top: 0;
@@ -1462,15 +1458,7 @@ def render_page(
       transition: width 0.2s ease, transform 0.2s ease;
       z-index: 20;
     }}
-    .sidebar-top {{ display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 16px; }}
-    .sidebar-brand {{ display: flex; align-items: center; gap: 10px; min-width: 0; text-decoration: none; }}
-    .sidebar-brand-mark {{
-      width: 38px; height: 38px; border-radius: var(--radius); display: inline-flex; align-items: center; justify-content: center;
-      background: #f0b35a; color: #1d1207; font-weight: 900; font-size: 12px; flex-shrink: 0;
-    }}
-    .sidebar-brand-copy {{ display: grid; gap: 1px; min-width: 0; }}
-    .sidebar-brand-copy strong {{ font-size: 13px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-    .sidebar-brand-copy small {{ color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+    .sidebar-top {{ display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 16px; }}
     .sidebar-toggle {{
       border: 1px solid rgba(181, 170, 156, 0.20); border-radius: var(--radius);
       background: rgba(41, 35, 29, 0.78); color: var(--text);
@@ -1479,12 +1467,13 @@ def render_page(
     }}
     .sidebar-toggle:hover {{
       background: rgba(64, 54, 44, 0.92);
-      border-color: rgba(240, 179, 90, 0.34);
+      border-color: rgba(185, 144, 101, 0.24);
       transform: translateY(-1px);
     }}
     .sidebar-new-draft {{
       display: flex; align-items: center; gap: 10px; min-height: 42px; margin: 0 0 12px; padding: 8px 10px;
-      border-radius: var(--radius); background: var(--accent); color: #201408; text-decoration: none; font-weight: 900;
+      border-radius: var(--radius); background: rgba(111, 84, 60, 0.72); color: #f4efe7; text-decoration: none; font-weight: 900;
+      border: 1px solid rgba(185, 144, 101, 0.28);
     }}
     .sidebar-new-icon {{ display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 26px; flex-shrink: 0; }}
     .sidebar-new-icon svg {{ width: 18px; height: 18px; fill: currentColor; }}
@@ -1495,10 +1484,10 @@ def render_page(
       border: 1px solid transparent; border-radius: var(--radius); text-decoration: none;
       color: var(--muted); transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
     }}
-    .sidebar-link:hover {{ background: rgba(244, 239, 231, 0.06); border-color: rgba(240, 179, 90, 0.12); color: var(--text); }}
+    .sidebar-link:hover {{ background: rgba(244, 239, 231, 0.06); border-color: rgba(111, 84, 60, 0.22); color: var(--text); }}
     .sidebar-link.active {{
-      background: rgba(240, 179, 90, 0.14);
-      color: var(--text); border-color: rgba(240, 179, 90, 0.30);
+      background: rgba(111, 84, 60, 0.34);
+      color: var(--text); border-color: rgba(185, 144, 101, 0.28);
       box-shadow: inset 3px 0 0 var(--accent);
     }}
     .sidebar-icon {{
@@ -1543,13 +1532,13 @@ def render_page(
     .actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }}
     .inline-form {{ margin: 0; }}
     button, .button {{
-      border: 0; border-radius: var(--radius); background: var(--accent); color: #201408; padding: 11px 16px; font-weight: 800; cursor: pointer; text-decoration: none;
+      border: 0; border-radius: var(--radius); background: var(--accent); color: #f4efe7; padding: 11px 16px; font-weight: 800; cursor: pointer; text-decoration: none;
       min-height: 40px; display: inline-flex; align-items: center; justify-content: center;
     }}
     button:hover, .button:hover {{ filter: brightness(1.06); }}
     .secondary {{ background: rgba(102, 199, 154, 0.18); color: #d9f9e9; border: 1px solid rgba(102, 199, 154, 0.32); }}
     .nav-chip {{ background: rgba(244, 239, 231, 0.07); color: var(--text); border: 1px solid rgba(181, 170, 156, 0.16); }}
-    .nav-chip.active {{ background: rgba(240, 179, 90, 0.18); outline: 1px solid rgba(240, 179, 90, 0.38); }}
+    .nav-chip.active {{ background: rgba(111, 84, 60, 0.38); outline: 1px solid rgba(185, 144, 101, 0.34); }}
     .filter-bar {{ align-items: center; padding: 10px; background: rgba(15, 13, 11, 0.42); border: 1px solid rgba(181, 170, 156, 0.12); border-radius: var(--radius); }}
     .summary-metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; margin: 16px 0 6px; }}
     .summary-pill {{
@@ -2184,7 +2173,7 @@ def render_page(
     }}
     .content-link-main {{ display: grid; gap: 4px; min-width: 0; flex: 1; text-decoration: none; }}
     .content-link span {{ color: var(--muted); font-size: 13px; }}
-    .content-link.active {{ border-color: rgba(240, 179, 90, 0.45); background: rgba(240, 179, 90, 0.10); }}
+    .content-link.active {{ border-color: rgba(185, 144, 101, 0.34); background: rgba(111, 84, 60, 0.26); }}
     .content-link-menu {{ position: relative; flex-shrink: 0; align-self: flex-start; margin-top: -2px; }}
     .content-link-menu summary {{
       list-style: none;
@@ -2250,7 +2239,7 @@ def render_page(
     tbody tr:hover td {{ background: rgba(244, 239, 231, 0.035); }}
     code {{ color: var(--accent-strong); overflow-wrap: anywhere; }}
     .status-ok {{ color: #91f2b8; }}
-    .status-warn {{ color: #ffd28a; }}
+    .status-warn {{ color: #b99065; }}
     .status-bad {{ color: #fca5a5; }}
     .status-badge {{
       display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border-radius: 999px;
@@ -2258,12 +2247,12 @@ def render_page(
       border: 1px solid rgba(181, 170, 156, 0.18); vertical-align: middle;
     }}
     .status-queued, .status-idle {{ background: rgba(125, 211, 252, 0.12); border-color: rgba(125, 211, 252, 0.24); color: #c8efff; }}
-    .status-processing, .status-running {{ background: rgba(240, 179, 90, 0.14); border-color: rgba(240, 179, 90, 0.30); color: #ffe0ad; }}
+    .status-processing, .status-running {{ background: rgba(111, 84, 60, 0.22); border-color: rgba(185, 144, 101, 0.26); color: #d1b08c; }}
     .status-done, .status-success {{ background: rgba(102, 199, 154, 0.14); border-color: rgba(102, 199, 154, 0.30); color: #d9f9e9; }}
     .status-failed {{ background: rgba(248, 113, 113, 0.14); border-color: rgba(248, 113, 113, 0.30); color: #ffd1d1; }}
     .empty-state {{ padding: 22px; border: 1px dashed rgba(181, 170, 156, 0.22); border-radius: var(--radius); color: var(--muted); background: rgba(15, 13, 11, 0.28); text-align: center; }}
     body.sidebar-collapsed .sidebar {{ width: var(--sidebar-collapsed-width); }}
-    body.sidebar-collapsed .sidebar-label, body.sidebar-collapsed .sidebar-brand-copy {{ display: none; }}
+    body.sidebar-collapsed .sidebar-label {{ display: none; }}
     body.sidebar-collapsed .sidebar-top {{ justify-content: center; }}
     body.sidebar-collapsed .sidebar-link {{ justify-content: center; padding-left: 0; padding-right: 0; }}
     body.sidebar-collapsed .sidebar-new-draft {{ justify-content: center; padding-left: 0; padding-right: 0; }}
