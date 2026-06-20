@@ -68,7 +68,10 @@ def _update_connection_state(config: AppConfig, *, channel_id: str, status: str,
 
 
 def _normalize_text(value: str) -> str:
-    return "\n".join(line.rstrip() for line in value.replace("\r\n", "\n").strip().split("\n")).strip()
+    cleaned = value.replace("\r\n", "\n").replace("\xa0", " ")
+    cleaned = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", cleaned)
+    lines = [line.strip() for line in cleaned.strip().split("\n") if line.strip()]
+    return "\n".join(lines).strip()
 
 
 
@@ -100,6 +103,20 @@ def _record_log(job: PublishJob, *, status: str, step: str, worker_id: str, erro
         )
     )
 
+
+
+def _find_composer_dialog_and_editor(page):
+    dialogs = page.get_by_role("dialog")
+    for index in range(dialogs.count()):
+        dialog = dialogs.nth(index)
+        try:
+            dialog.wait_for(state="visible", timeout=3000)
+            editor = find_composer_editor(dialog)
+            return dialog, editor
+        except Exception:
+            continue
+    editor = find_composer_editor(page)
+    return page, editor
 
 
 def _final_post_button(dialog):
@@ -141,6 +158,10 @@ def _extract_post_url(page) -> tuple[str, str]:
 def _assert_live_submit_allowed(job: PublishJob) -> None:
     if job.run_mode != "live":
         raise RuntimeError("Dry-run protection blocked the final LinkedIn submit click.")
+
+
+def _headed_default_for_publish(job: PublishJob) -> bool:
+    return job.run_mode == "live"
 
 
 
@@ -187,7 +208,7 @@ def run_publish_job(
         with linkedin_profile_lock(job.channel_id, owner=f"{resolved_worker_id}:publish:{job.id}"):
             playwright, browser, context, page, owns_session, session_label = open_local_linkedin_session(
                 config,
-                headed_default=job.run_mode != "live",
+                headed_default=_headed_default_for_publish(job),
             )
             try:
                 logged_in, reason = is_linkedin_logged_in(page, config.linkedin_feed_url)
@@ -225,9 +246,7 @@ def run_publish_job(
                 save_publish_job(job)
                 open_linkedin_post_composer(page)
 
-                dialog = page.get_by_role("dialog").first
-                dialog.wait_for(state="visible", timeout=10000)
-                editor = find_composer_editor(dialog)
+                dialog, editor = _find_composer_dialog_and_editor(page)
                 job.last_step = "fill_composer"
                 job.updated_at = now_iso()
                 save_publish_job(job)

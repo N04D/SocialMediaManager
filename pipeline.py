@@ -595,9 +595,20 @@ def generate_linkedin_article(article: Article, config: AppConfig) -> tuple[str,
 
 
 def open_linkedin_post_composer(page) -> None:
+    candidates = []
     for pattern in POST_BUTTON_PATTERNS:
+        candidates.append(page.get_by_role("button", name=re.compile(pattern, re.IGNORECASE)).first)
+    candidates.extend([
+        page.locator("button:has-text('Start a post')").first,
+        page.locator("button:has-text('Bijdrage starten')").first,
+        page.locator("button[aria-label*='Start a post']").first,
+        page.locator("button[aria-label*='Bijdrage starten']").first,
+        page.locator(".share-box-feed-entry__top-bar button").first,
+    ])
+    for candidate in candidates:
         try:
-            page.get_by_role("button", name=re.compile(pattern, re.IGNORECASE)).first.click(timeout=3000)
+            candidate.wait_for(state="visible", timeout=6000)
+            candidate.click(timeout=6000)
             return
         except PlaywrightTimeoutError:
             continue
@@ -643,15 +654,19 @@ def open_linkedin_article_composer(page) -> None:
 
 def find_composer_editor(dialog):
     candidates = [
-        dialog.locator("[contenteditable='true']").first,
+        dialog.locator("[contenteditable='true']:visible").first,
+        dialog.locator("[role='textbox']:visible").first,
         dialog.get_by_role("textbox").first,
+        dialog.locator("textarea:visible").first,
         dialog.locator("textarea").first,
     ]
     for candidate in candidates:
         try:
-            candidate.wait_for(state="visible", timeout=5000)
+            candidate.wait_for(state="visible", timeout=6000)
             return candidate
         except PlaywrightTimeoutError:
+            continue
+        except Exception:
             continue
     raise RuntimeError("Could not find the LinkedIn composer editor.")
 
