@@ -1261,17 +1261,20 @@ def render_config_page(config: AppConfig) -> str:
         <div class=\"config-tab-panels\">
           <div class=\"config-tab-panel config-panel-overview\" role=\"tabpanel\">
             <section class=\"card compact-card\">
-              <h2>Config</h2>
-              <div class=\"config-summary compact-config-summary\">
-                <div class=\"config-item\"><span class=\"config-label\">Config file</span><code>{html.escape(str(CONFIG_PATH))}</code></div>
-                <div class=\"config-item\"><span class=\"config-label\">Content directory</span><code>{html.escape(str(config.content_dir))}</code></div>
-                <div class=\"config-item\"><span class=\"config-label\">RSS feed</span><code>{html.escape(config.rss_url)}</code></div>
-                <div class=\"config-item\"><span class=\"config-label\">Publish as</span><code>{html.escape(config.linkedin_publish_as_page_name)}</code></div>
-                <div class=\"config-item\"><span class=\"config-label\">Content mode</span><code>{html.escape(config.linkedin_content_mode)}</code></div>
-                <div class=\"config-item\"><span class=\"config-label\">Schedule buffer</span><code>{html.escape(str(config.linkedin_article_schedule_buffer_minutes))} minutes</code></div>
-                <div class=\"config-item\"><span class=\"config-label\">Stats interval</span><code>{html.escape(str(config.stats_sync_interval_minutes))} minutes</code></div>
-                <div class=\"config-item\"><span class=\"config-label\">Cover upload</span><code>{'enabled' if config.linkedin_article_use_cover_image else 'disabled'}</code></div>
+              <div class=\"card-heading\">
+                <div><h2>Read-only Config</h2></div>
+                <span class=\"status-badge\">Read only</span>
               </div>
+              <dl class=\"readonly-config-list\">
+                <div><dt>Config file</dt><dd><code>{html.escape(str(CONFIG_PATH))}</code></dd></div>
+                <div><dt>Content directory</dt><dd><code>{html.escape(str(config.content_dir))}</code></dd></div>
+                <div><dt>RSS feed</dt><dd><code>{html.escape(config.rss_url)}</code></dd></div>
+                <div><dt>Publish as</dt><dd><code>{html.escape(config.linkedin_publish_as_page_name)}</code></dd></div>
+                <div><dt>Content mode</dt><dd><code>{html.escape(config.linkedin_content_mode)}</code></dd></div>
+                <div><dt>Schedule buffer</dt><dd><code>{html.escape(str(config.linkedin_article_schedule_buffer_minutes))} minutes</code></dd></div>
+                <div><dt>Stats interval</dt><dd><code>{html.escape(str(config.stats_sync_interval_minutes))} minutes</code></dd></div>
+                <div><dt>Cover upload</dt><dd><code>{'enabled' if config.linkedin_article_use_cover_image else 'disabled'}</code></dd></div>
+              </dl>
             </section>
           </div>
           <div class=\"config-tab-panel config-panel-system\" role=\"tabpanel\">
@@ -1621,12 +1624,19 @@ def render_page(
     #config-tab-article:checked ~ .config-tab-panels .config-panel-article,
     #config-tab-channels:checked ~ .config-tab-panels .config-panel-channels {{ display: block; }}
     .config-summary {{ display: grid; gap: 10px; }}
-    .compact-config-summary {{ grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }}
     .config-item {{
       display: grid; gap: 6px; padding: 12px 14px; border-radius: var(--radius);
       background: rgba(244, 244, 245, 0.055); border: 1px solid rgba(113, 113, 122, 0.16);
     }}
     .config-label {{ color: var(--muted); font-size: 13px; }}
+    .readonly-config-list {{ display: grid; gap: 0; margin: 14px 0 0; }}
+    .readonly-config-list div {{
+      display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); gap: 12px;
+      padding: 10px 0; border-top: 1px solid rgba(113, 113, 122, 0.16);
+    }}
+    .readonly-config-list div:first-child {{ border-top: 0; }}
+    .readonly-config-list dt {{ color: var(--muted); font-size: 13px; font-weight: 700; }}
+    .readonly-config-list dd {{ margin: 0; min-width: 0; overflow-wrap: anywhere; }}
     .editor-grid {{ grid-template-columns: minmax(0, 1.2fr) minmax(340px, .8fr); }}
     .editor-two-up {{ display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }}
     .editor-textarea {{ min-height: 420px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
