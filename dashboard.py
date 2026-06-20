@@ -465,6 +465,13 @@ def status_filter_url(route: str, status: str | None, detail_id: str | None = No
     return route + (("?" + "&".join(params)) if params else "")
 
 
+def render_status_badge(status: str, label: str | None = None) -> str:
+    normalized = (status or "unknown").strip().lower()
+    known = {"queued", "processing", "done", "failed", "success", "idle", "running"}
+    class_name = normalized if normalized in known else "unknown"
+    return f'<span class="status-badge status-{html.escape(class_name)}">{html.escape(label or status or "Unknown")}</span>'
+
+
 def launch_draft_process(config_path: str) -> None:
     log_path = ROOT_DIR / "outbox" / "article_launch.log"
     save_launch_status(
@@ -918,7 +925,7 @@ def render_record_detail(record: dict[str, Any] | None, return_to: str) -> str:
           <p class="meta">Platform: <code>{html.escape(str(record.get('platform', '')))}</code></p>
           <p class="meta">Content type: <code>{html.escape(str(record.get('content_type', 'post')))}</code></p>
           <p class="meta">Route: <code>{html.escape(route)}</code></p>
-          <p class="meta">Status: <code>{html.escape(str(record.get('status', 'queued')))}</code></p>
+          <p class="meta">Status: {render_status_badge(str(record.get('status', 'queued')))}</p>
           <p class="meta">Scheduled for: <code>{html.escape(str(record.get('scheduled_for', '')))}</code></p>
           <p class="meta">Source published at: <code>{html.escape(str(record.get('source_published_at', '')) or 'Unknown')}</code></p>
           <p class="meta">Created at: <code>{html.escape(str(record.get('created_at', '')))}</code></p>
@@ -943,12 +950,12 @@ def render_worker_history() -> str:
         rows.append(
             "<tr>"
             f"<td>{html.escape(str(record.get('timestamp', '')))}</td>"
-            f"<td>{html.escape(str(record.get('status', '')))}</td>"
+            f"<td>{render_status_badge(str(record.get('status', '')))}</td>"
             f"<td>{html.escape(str(record.get('message', '')))}</td>"
             "</tr>"
         )
     if not rows:
-        rows.append("<tr><td colspan='3'>No worker runs yet.</td></tr>")
+        rows.append("<tr><td colspan='3'><div class='empty-state'>No worker runs yet.</div></td></tr>")
     return f"""
         <section class="card">
           <h2>Worker Runs</h2>
@@ -965,7 +972,7 @@ def render_launch_status() -> str:
         <section class="card">
           <h2>Article Launch</h2>
           <div id="launch-status-content">
-            <p class="meta">No launch in progress yet.</p>
+            <div class="empty-state">No launch in progress yet.</div>
           </div>
         </section>
     """
@@ -1046,7 +1053,7 @@ def render_status_filters(route: str, records: list[dict[str, Any]], selected_st
     chips.append(
         f'<form class="inline-form" method="post" action="/retry-all"><input type="hidden" name="return_to" value="{html.escape(route)}" /><button type="submit">Retry all failed</button></form>'
     )
-    return f"<div class='actions'>{''.join(chips)}</div>"
+    return f"<div class='actions filter-bar' aria-label='Queue filters'>{''.join(chips)}</div>"
 
 
 def render_scheduler_summary(records: list[dict[str, Any]]) -> str:
@@ -1095,10 +1102,10 @@ def render_queue_table(queue: list[dict[str, Any]], route: str) -> str:
             f"<td>{html.escape(str(item.get('content_type', 'article')))}</td>"
             f"<td>{html.escape(str(item.get('source_published_at', '') or 'Unknown'))}</td>"
             f"<td>{html.escape(str(item.get('article_title', '')))}</td>"
-            f"<td>{html.escape(str(item.get('status', 'queued')))}</td></tr>"
+            f"<td>{render_status_badge(str(item.get('status', 'queued')))}</td></tr>"
         )
     if not queue_rows:
-        queue_rows.append("<tr><td colspan='6'>No scheduled items yet.</td></tr>")
+        queue_rows.append("<tr><td colspan='6'><div class='empty-state'>No scheduled items yet.</div></td></tr>")
     return f"""
       <section class="card">
         <h2>Schedule Queue</h2>
@@ -1348,9 +1355,13 @@ def render_sidebar(active_route: str) -> str:
     return f"""
       <aside class=\"sidebar\" id=\"sidebar\">
         <div class=\"sidebar-top\">
-          <button class=\"sidebar-toggle\" id=\"sidebar-toggle\" type=\"button\" aria-label=\"Toggle navigation\">≡</button>
+          <a class=\"sidebar-brand\" href=\"{ROUTE_EDITOR}\" aria-label=\"SocialMediaManager home\">
+            <span class=\"sidebar-brand-mark\">SM</span>
+            <span class=\"sidebar-brand-copy\"><strong>SocialMediaManager</strong><small>Local publishing cockpit</small></span>
+          </a>
+          <button class=\"sidebar-toggle\" id=\"sidebar-toggle\" type=\"button\" aria-label=\"Toggle navigation\"><span aria-hidden=\"true\">|||</span></button>
         </div>
-        <nav class=\"sidebar-nav\">{''.join(items)}</nav>
+        <nav class=\"sidebar-nav\" aria-label=\"Primary navigation\">{''.join(items)}</nav>
       </aside>
     """
 
@@ -1393,29 +1404,44 @@ def render_page(
   <title>SocialMediaManager</title>
   <style>
     :root {{
-      --bg: #0f172a;
-      --panel: #111827;
-      --line: #1f2937;
-      --text: #e5e7eb;
-      --muted: #94a3b8;
-      --accent: #38bdf8;
-      --accent-2: #22c55e;
-      --sidebar-width: 252px;
-      --sidebar-collapsed-width: 72px;
+      --bg: #13110f;
+      --bg-soft: #1b1713;
+      --panel: #211d18;
+      --panel-raised: #29231d;
+      --line: #4a4035;
+      --text: #f4efe7;
+      --muted: #b5aa9c;
+      --muted-strong: #d8cec0;
+      --accent: #f0b35a;
+      --accent-strong: #ffd28a;
+      --accent-2: #66c79a;
+      --danger: #f87171;
+      --info: #7dd3fc;
+      --radius: 8px;
+      --sidebar-width: 268px;
+      --sidebar-collapsed-width: 76px;
     }}
     * {{ box-sizing: border-box; }}
     body {{
       margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top, #1e293b, var(--bg));
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #211b15 0%, var(--bg) 42%, #0f0d0b 100%);
       color: var(--text);
+      line-height: 1.5;
     }}
     a {{ color: inherit; }}
+    :focus-visible {{ outline: 2px solid var(--accent-strong); outline-offset: 3px; }}
+    .skip-link {{
+      position: fixed; left: 16px; top: 12px; z-index: 100; transform: translateY(-160%);
+      background: var(--accent); color: #201408; padding: 10px 12px; border-radius: var(--radius);
+      font-weight: 800; text-decoration: none; transition: transform 0.2s ease;
+    }}
+    .skip-link:focus {{ transform: translateY(0); }}
     .app-shell {{ display: flex; min-height: 100vh; }}
     .sidebar {{
       width: var(--sidebar-width);
-      background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(15, 23, 42, 0.92));
-      border-right: 1px solid rgba(148, 163, 184, 0.12);
+      background: linear-gradient(180deg, rgba(24, 20, 16, 0.98), rgba(17, 14, 12, 0.94));
+      border-right: 1px solid rgba(240, 179, 90, 0.14);
       padding: 14px 12px;
       position: sticky;
       top: 0;
@@ -1423,31 +1449,40 @@ def render_page(
       transition: width 0.2s ease, transform 0.2s ease;
       z-index: 20;
     }}
-    .sidebar-top {{ display: flex; justify-content: flex-end; align-items: center; margin-bottom: 14px; }}
+    .sidebar-top {{ display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 16px; }}
+    .sidebar-brand {{ display: flex; align-items: center; gap: 10px; min-width: 0; text-decoration: none; }}
+    .sidebar-brand-mark {{
+      width: 38px; height: 38px; border-radius: var(--radius); display: inline-flex; align-items: center; justify-content: center;
+      background: #f0b35a; color: #1d1207; font-weight: 900; font-size: 12px; flex-shrink: 0;
+    }}
+    .sidebar-brand-copy {{ display: grid; gap: 1px; min-width: 0; }}
+    .sidebar-brand-copy strong {{ font-size: 13px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+    .sidebar-brand-copy small {{ color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
     .sidebar-toggle {{
-      border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 12px;
-      background: rgba(30, 41, 59, 0.72); color: var(--text);
-      width: 40px; height: 40px; cursor: pointer; font-size: 17px;
+      border: 1px solid rgba(181, 170, 156, 0.20); border-radius: var(--radius);
+      background: rgba(41, 35, 29, 0.78); color: var(--text);
+      width: 38px; height: 38px; cursor: pointer; font-size: 13px;
       transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
     }}
     .sidebar-toggle:hover {{
-      background: rgba(51, 65, 85, 0.88);
-      border-color: rgba(56, 189, 248, 0.22);
+      background: rgba(64, 54, 44, 0.92);
+      border-color: rgba(240, 179, 90, 0.34);
       transform: translateY(-1px);
     }}
     .sidebar-nav {{ display: grid; gap: 6px; }}
     .sidebar-link {{
       display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 10px;
-      border: 1px solid transparent; border-radius: 14px; text-decoration: none;
+      border: 1px solid transparent; border-radius: var(--radius); text-decoration: none;
       color: var(--muted); transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
     }}
-    .sidebar-link:hover {{ background: rgba(148, 163, 184, 0.06); border-color: rgba(148, 163, 184, 0.08); color: var(--text); }}
+    .sidebar-link:hover {{ background: rgba(244, 239, 231, 0.06); border-color: rgba(240, 179, 90, 0.12); color: var(--text); }}
     .sidebar-link.active {{
-      background: linear-gradient(180deg, rgba(56, 189, 248, 0.16), rgba(56, 189, 248, 0.1));
-      color: var(--text); border-color: rgba(56, 189, 248, 0.22);
+      background: rgba(240, 179, 90, 0.14);
+      color: var(--text); border-color: rgba(240, 179, 90, 0.30);
+      box-shadow: inset 3px 0 0 var(--accent);
     }}
     .sidebar-icon {{
-      width: 32px; height: 32px; border-radius: 10px; background: rgba(148, 163, 184, 0.07);
+      width: 32px; height: 32px; border-radius: var(--radius); background: rgba(244, 239, 231, 0.07);
       display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;
       color: currentColor;
     }}
@@ -1456,50 +1491,58 @@ def render_page(
     .sidebar-label {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; font-weight: 600; }}
     .main-shell {{ flex: 1; min-width: 0; transition: margin 0.2s ease, width 0.2s ease; }}
     .wrap {{ max-width: 1360px; margin: 0 auto; padding: 28px 24px 40px; }}
-    .page-header {{ display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 24px; }}
-    .page-title {{ margin: 0; font-size: 32px; }}
-    .page-subtitle {{ margin: 8px 0 0; color: var(--muted); }}
+    .page-header {{ display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; margin-bottom: 24px; padding-bottom: 18px; border-bottom: 1px solid rgba(181, 170, 156, 0.14); }}
+    .page-kicker {{ margin: 0 0 7px; color: var(--accent-strong); font-size: 12px; font-weight: 800; text-transform: uppercase; }}
+    .page-title {{ margin: 0; font-size: 30px; line-height: 1.1; }}
+    .page-subtitle {{ margin: 8px 0 0; color: var(--muted); max-width: 68ch; }}
+    .page-feed {{ max-width: min(460px, 42vw); overflow-wrap: anywhere; text-align: right; }}
     .page-grid {{ display: grid; gap: 20px; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); }}
     .stack {{ display: grid; gap: 20px; align-content: start; }}
     .card {{
-      background: rgba(17, 24, 39, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.14);
-      border-radius: 18px;
+      position: relative;
+      background: rgba(33, 29, 24, 0.92);
+      border: 1px solid rgba(181, 170, 156, 0.16);
+      border-radius: var(--radius);
       padding: 20px;
-      box-shadow: 0 18px 60px rgba(15, 23, 42, 0.45);
+      box-shadow: 0 18px 48px rgba(6, 5, 4, 0.34);
       min-width: 0;
     }}
+    .card::before {{ content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; border-radius: var(--radius) 0 0 var(--radius); background: rgba(181, 170, 156, 0.18); }}
     .compact-card {{ padding: 18px 20px; }}
     .card-heading {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }}
     h1, h2, h3 {{ margin: 0 0 12px; }}
     .meta {{ color: var(--muted); font-size: 14px; }}
+    p {{ margin-top: 0; }}
     .teaser {{ white-space: pre-wrap; line-height: 1.6; word-break: break-word; }}
     .inline-link {{ color: var(--accent); text-decoration: none; }}
     label {{ display: block; margin: 14px 0 6px; color: var(--muted); font-size: 14px; }}
     input, select, textarea {{
-      width: 100%; border-radius: 12px; border: 1px solid var(--line); background: #0b1120; color: var(--text); padding: 12px; font: inherit;
+      width: 100%; border-radius: var(--radius); border: 1px solid var(--line); background: #17130f; color: var(--text); padding: 12px; font: inherit;
     }}
     textarea {{ min-height: 180px; resize: vertical; }}
     .actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }}
     .inline-form {{ margin: 0; }}
     button, .button {{
-      border: 0; border-radius: 999px; background: var(--accent); color: #00111f; padding: 11px 16px; font-weight: 700; cursor: pointer; text-decoration: none;
+      border: 0; border-radius: var(--radius); background: var(--accent); color: #201408; padding: 11px 16px; font-weight: 800; cursor: pointer; text-decoration: none;
+      min-height: 40px; display: inline-flex; align-items: center; justify-content: center;
     }}
-    .secondary {{ background: var(--accent-2); }}
-    .nav-chip {{ background: rgba(56, 189, 248, 0.16); color: var(--text); }}
-    .nav-chip.active {{ outline: 1px solid rgba(56, 189, 248, 0.35); }}
+    button:hover, .button:hover {{ filter: brightness(1.06); }}
+    .secondary {{ background: rgba(102, 199, 154, 0.18); color: #d9f9e9; border: 1px solid rgba(102, 199, 154, 0.32); }}
+    .nav-chip {{ background: rgba(244, 239, 231, 0.07); color: var(--text); border: 1px solid rgba(181, 170, 156, 0.16); }}
+    .nav-chip.active {{ background: rgba(240, 179, 90, 0.18); outline: 1px solid rgba(240, 179, 90, 0.38); }}
+    .filter-bar {{ align-items: center; padding: 10px; background: rgba(15, 13, 11, 0.42); border: 1px solid rgba(181, 170, 156, 0.12); border-radius: var(--radius); }}
     .summary-metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; margin: 16px 0 6px; }}
     .summary-pill {{
-      display: grid; gap: 4px; text-decoration: none; padding: 12px; border-radius: 14px;
-      background: rgba(148, 163, 184, 0.08); border: 1px solid rgba(148, 163, 184, 0.12);
+      display: grid; gap: 4px; text-decoration: none; padding: 12px; border-radius: var(--radius);
+      background: rgba(244, 239, 231, 0.06); border: 1px solid rgba(181, 170, 156, 0.13);
     }}
     .summary-pill.static {{ cursor: default; }}
     .summary-pill strong {{ font-size: 20px; }}
     .summary-pill span {{ color: var(--muted); font-size: 13px; }}
     .config-summary {{ display: grid; gap: 10px; }}
     .config-item {{
-      display: grid; gap: 6px; padding: 12px 14px; border-radius: 14px;
-      background: rgba(148, 163, 184, 0.06); border: 1px solid rgba(148, 163, 184, 0.10);
+      display: grid; gap: 6px; padding: 12px 14px; border-radius: var(--radius);
+      background: rgba(244, 239, 231, 0.055); border: 1px solid rgba(181, 170, 156, 0.12);
     }}
     .config-label {{ color: var(--muted); font-size: 13px; }}
     .editor-grid {{ grid-template-columns: minmax(0, 1.2fr) minmax(340px, .8fr); }}
@@ -1533,6 +1576,7 @@ def render_page(
       box-shadow: none;
       padding: 0;
     }}
+    body.route-editor .editor-main > .card::before {{ display: none; }}
     .writer-shell {{
       display: grid;
       gap: 12px;
@@ -2106,12 +2150,12 @@ def render_page(
     .checkbox-grid label {{ margin: 0; padding: 10px 12px; border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 12px; background: rgba(148, 163, 184, 0.04); }}
     .content-list {{ display: grid; gap: 10px; }}
     .content-link {{
-      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px; border-radius: 14px;
-      background: rgba(148, 163, 184, 0.05); border: 1px solid rgba(148, 163, 184, 0.10);
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px; border-radius: var(--radius);
+      background: rgba(244, 239, 231, 0.05); border: 1px solid rgba(181, 170, 156, 0.12);
     }}
     .content-link-main {{ display: grid; gap: 4px; min-width: 0; flex: 1; text-decoration: none; }}
     .content-link span {{ color: var(--muted); font-size: 13px; }}
-    .content-link.active {{ border-color: rgba(56, 189, 248, 0.45); background: rgba(56, 189, 248, 0.10); }}
+    .content-link.active {{ border-color: rgba(240, 179, 90, 0.45); background: rgba(240, 179, 90, 0.10); }}
     .content-link-menu {{ position: relative; flex-shrink: 0; align-self: flex-start; margin-top: -2px; }}
     .content-link-menu summary {{
       list-style: none;
@@ -2140,18 +2184,18 @@ def render_page(
       display: grid;
       gap: 6px;
       padding: 8px;
-      border-radius: 14px;
-      background: rgba(11, 17, 32, 0.98);
-      border: 1px solid rgba(148, 163, 184, 0.12);
-      box-shadow: 0 18px 50px rgba(2, 6, 23, 0.45);
+      border-radius: var(--radius);
+      background: rgba(23, 19, 15, 0.98);
+      border: 1px solid rgba(181, 170, 156, 0.14);
+      box-shadow: 0 18px 50px rgba(6, 5, 4, 0.45);
       z-index: 5;
     }}
     .content-link-menu-items form {{ margin: 0; }}
     .content-link-menu-items button {{
       width: 100%;
       padding: 10px 12px;
-      border-radius: 10px;
-      background: rgba(30, 41, 59, 0.9);
+      border-radius: var(--radius);
+      background: rgba(41, 35, 29, 0.9);
       color: var(--text);
       text-align: left;
       font-weight: 600;
@@ -2161,25 +2205,36 @@ def render_page(
       color: #fee2e2;
     }}
     .markdown-preview {{
-      border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 16px; padding: 18px;
-      background: rgba(11, 17, 32, 0.72); min-height: 320px;
+      border: 1px solid rgba(181, 170, 156, 0.14); border-radius: var(--radius); padding: 18px;
+      background: rgba(23, 19, 15, 0.72); min-height: 320px;
     }}
     .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 {{ margin-top: 0; }}
     .markdown-preview p, .markdown-preview li {{ line-height: 1.7; }}
     .markdown-preview pre, .frontmatter-preview {{
-      overflow-x: auto; padding: 16px; border-radius: 14px; background: rgba(11, 17, 32, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.10); color: #cbd5e1; white-space: pre-wrap;
+      overflow-x: auto; padding: 16px; border-radius: var(--radius); background: rgba(15, 13, 11, 0.9);
+      border: 1px solid rgba(181, 170, 156, 0.12); color: var(--muted-strong); white-space: pre-wrap;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     }}
     table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
-    th, td {{ text-align: left; padding: 10px 8px; border-bottom: 1px solid rgba(148,163,184,0.14); vertical-align: top; }}
-    th {{ color: var(--muted); font-size: 13px; }}
-    code {{ color: #93c5fd; }}
-    .status-ok {{ color: #86efac; }}
-    .status-warn {{ color: #fbbf24; }}
+    th, td {{ text-align: left; padding: 11px 8px; border-bottom: 1px solid rgba(181,170,156,0.14); vertical-align: top; }}
+    th {{ color: var(--muted); font-size: 12px; text-transform: uppercase; font-weight: 800; }}
+    tbody tr:hover td {{ background: rgba(244, 239, 231, 0.035); }}
+    code {{ color: var(--accent-strong); overflow-wrap: anywhere; }}
+    .status-ok {{ color: #91f2b8; }}
+    .status-warn {{ color: #ffd28a; }}
     .status-bad {{ color: #fca5a5; }}
+    .status-badge {{
+      display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border-radius: 999px;
+      font-size: 12px; font-weight: 800; background: rgba(181, 170, 156, 0.12); color: var(--muted-strong);
+      border: 1px solid rgba(181, 170, 156, 0.18); vertical-align: middle;
+    }}
+    .status-queued, .status-idle {{ background: rgba(125, 211, 252, 0.12); border-color: rgba(125, 211, 252, 0.24); color: #c8efff; }}
+    .status-processing, .status-running {{ background: rgba(240, 179, 90, 0.14); border-color: rgba(240, 179, 90, 0.30); color: #ffe0ad; }}
+    .status-done, .status-success {{ background: rgba(102, 199, 154, 0.14); border-color: rgba(102, 199, 154, 0.30); color: #d9f9e9; }}
+    .status-failed {{ background: rgba(248, 113, 113, 0.14); border-color: rgba(248, 113, 113, 0.30); color: #ffd1d1; }}
+    .empty-state {{ padding: 22px; border: 1px dashed rgba(181, 170, 156, 0.22); border-radius: var(--radius); color: var(--muted); background: rgba(15, 13, 11, 0.28); text-align: center; }}
     body.sidebar-collapsed .sidebar {{ width: var(--sidebar-collapsed-width); }}
-    body.sidebar-collapsed .sidebar-label {{ display: none; }}
+    body.sidebar-collapsed .sidebar-label, body.sidebar-collapsed .sidebar-brand-copy {{ display: none; }}
     body.sidebar-collapsed .sidebar-top {{ justify-content: center; }}
     body.sidebar-collapsed .sidebar-link {{ justify-content: center; padding-left: 0; padding-right: 0; }}
     @media (max-width: 980px) {{
@@ -2197,15 +2252,18 @@ def render_page(
       .main-shell {{ margin-left: var(--sidebar-width); }}
       body.sidebar-collapsed .main-shell {{ margin-left: var(--sidebar-collapsed-width); }}
       .wrap {{ padding: 20px 16px 32px; }}
+      .page-header {{ align-items: flex-start; flex-direction: column; }}
+      .page-feed {{ max-width: 100%; text-align: left; }}
     }}
   </style>
 </head>
 <body class="route-{html.escape(route.strip('/') or 'root')}">
+  <a class=\"skip-link\" href=\"#main-content\">Skip to content</a>
   <div class=\"app-shell\">
     {render_sidebar(route)}
-    <main class=\"main-shell\">
+    <main class=\"main-shell\" id=\"main-content\" tabindex=\"-1\">
       <div class=\"wrap\">
-        {"<header class=\"page-header\"><div><h1 class=\"page-title\">%s</h1><p class=\"page-subtitle\">%s</p></div><p class=\"meta\">RSS feed: <code>%s</code></p></header>" % (html.escape(page_title), html.escape(page_intro), html.escape(config.rss_url)) if page_title or page_intro else ""}
+        {"<header class=\"page-header\"><div><p class=\"page-kicker\">%s</p><h1 class=\"page-title\">%s</h1><p class=\"page-subtitle\">%s</p></div><p class=\"page-feed meta\">RSS feed <code>%s</code></p></header>" % (html.escape(route.strip('/') or 'editor'), html.escape(page_title), html.escape(page_intro), html.escape(config.rss_url)) if page_title or page_intro else ""}
         {page_content}
       </div>
     </main>
