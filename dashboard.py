@@ -120,6 +120,7 @@ EDITOR_TOOLBAR_BUTTONS = [
 ]
 
 EDITOR_ACTION_BUTTONS = [
+    ("editor-new-draft", "New draft", "secondary", "link", ROUTE_EDITOR, '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>'),
     ("editor-toggle-preview", "Preview mode", "secondary", "button", "", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c5.5 0 9.3 4.2 10.6 6-1.3 1.8-5.1 6-10.6 6S2.7 12.8 1.4 11C2.7 9.2 6.5 5 12 5zm0 2C8.3 7 5.3 9.5 3.8 11 5.3 12.5 8.3 15 12 15s6.7-2.5 8.2-4C18.7 9.5 15.7 7 12 7zm0 1.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z"/></svg>'),
     ("editor-toggle-focus", "Focus mode", "secondary", "button", "", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5v2H6v3H4zm10-5h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm13 0h2v5h-5v-2h3v-3z"/></svg>'),
     ("editor-export-markdown", "Export Markdown", "secondary", "button", "", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5V4zm9 1.5V9h3.5L14 5.5zM8 12v4H6v-4h2zm1 4 1.6-4h1.6l1.6 4h-1.7l-.2-.7h-1.4l-.2.7H9zm2.1-1.9h.8l-.4-1.3-.4 1.3zm3.1-2.1h1.7l1 1.6 1-1.6h1.7l-1.8 2.8 1.9 3h-1.7l-1.1-1.7-1.1 1.7h-1.7l1.9-3-1.8-2.8z"/></svg>'),
@@ -203,6 +204,12 @@ def render_editor_toolbar() -> str:
         if variant:
             classes += f" {variant}"
         id_attr = f' id="{html.escape(button_id)}"' if button_id else ""
+        if button_type == "link":
+            href_attr = f' href="{html.escape(form_action)}"'
+            action_buttons.append(
+                f'<a class="{classes}"{id_attr}{href_attr} title="{html.escape(label)}" aria-label="{html.escape(label)}">{icon}<span class="sr-only action-label">{html.escape(label)}</span></a>'
+            )
+            continue
         formaction_attr = f' formaction="{html.escape(form_action)}"' if form_action else ""
         action_buttons.append(
             f'<button class="{classes}" type="{html.escape(button_type)}"{id_attr}{formaction_attr} title="{html.escape(label)}" aria-label="{html.escape(label)}">{icon}<span class="sr-only action-label">{html.escape(label)}</span></button>'
@@ -706,7 +713,6 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
         if cover_preview_url
         else '<div class="cover-preview-empty">No cover selected yet.</div>'
     )
-    draft_context = selected_item.title or selected_item.slug or "Unsaved new draft"
     revision_items = "".join(
         f"""
         <li class="revision-item">
@@ -742,16 +748,6 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
                   <div class=\"writer-compose\">
                     <div class=\"editor-workbench\">
                       <div class=\"editor-column\">
-                        <div class=\"editor-topbar\">
-                          <div class=\"editor-topbar-copy\">
-                            <span class=\"editor-topbar-label\">Current draft</span>
-                            <strong>{html.escape(draft_context)}</strong>
-                          </div>
-                          <a class=\"button editor-new-draft-button\" href=\"{ROUTE_EDITOR}\" aria-label=\"Create a new blank draft\">
-                            <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z\"></path></svg>
-                            <span>New draft</span>
-                          </a>
-                        </div>
                         <div class=\"editor-toolbar\" id=\"editor-toolbar\">{render_editor_toolbar()}</div>
                         <div class=\"editor-writing-surface\">
                           <div class=\"editor-primary-fields editor-primary-fields-inline\">
@@ -1874,15 +1870,6 @@ def render_page(
       width: 100%;
       margin: 0 auto;
     }}
-    .editor-topbar {{
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      max-width: 860px; width: 100%; margin: 0 auto; padding: 0 2px;
-    }}
-    .editor-topbar-copy {{ display: grid; gap: 2px; min-width: 0; }}
-    .editor-topbar-copy strong {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; color: var(--text); }}
-    .editor-topbar-label {{ color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }}
-    .editor-new-draft-button {{ gap: 8px; flex-shrink: 0; }}
-    .editor-new-draft-button svg {{ width: 17px; height: 17px; fill: currentColor; }}
     .editor-toolbar {{
       position: sticky;
       top: 12px;
@@ -1910,7 +1897,8 @@ def render_page(
       padding-left: 12px;
       border-left: 1px solid rgba(51, 65, 85, 0.9);
     }}
-    .editor-toolbar button {{
+    .editor-toolbar button,
+    .editor-toolbar a.editor-toolbar-action {{
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -1922,15 +1910,18 @@ def render_page(
       border-radius: 10px;
       border: 1px solid rgba(51, 65, 85, 0.9);
       font-weight: 600;
+      text-decoration: none;
       transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
     }}
-    .editor-toolbar button:hover {{
+    .editor-toolbar button:hover,
+    .editor-toolbar a.editor-toolbar-action:hover {{
       background: rgba(51, 65, 85, 0.95);
       border-color: rgba(71, 85, 105, 0.95);
       color: #f8fafc;
       transform: translateY(-1px);
     }}
-    .editor-toolbar button svg {{
+    .editor-toolbar button svg,
+    .editor-toolbar a.editor-toolbar-action svg {{
       width: 17px;
       height: 17px;
       fill: currentColor;
@@ -2261,8 +2252,6 @@ def render_page(
       .editor-two-up, .checkbox-grid, .editor-studio, .writer-layout, .editor-workbench {{ grid-template-columns: 1fr; }}
       .editor-sidebar-panel, .editor-rail {{ position: static; }}
       .editor-status-bar {{ flex-direction: column; align-items: flex-start; }}
-      .editor-topbar {{ align-items: flex-start; flex-direction: column; }}
-      .editor-new-draft-button {{ width: 100%; }}
       .editor-toolbar {{ align-items: flex-start; }}
       .editor-toolbar-group-actions {{ margin-left: 0; padding-left: 0; border-left: 0; }}
       .tiptap-editor .ProseMirror {{ padding-left: 0; padding-right: 0; }}
