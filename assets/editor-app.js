@@ -20762,6 +20762,7 @@ if (!seed) {
   const aiPromptInput = document.getElementById("editor-ai-prompt");
   const aiApplyButton = document.getElementById("editor-ai-apply");
   const aiFeedbackNode = document.getElementById("editor-ai-feedback");
+  const aiPanel = aiPromptInput?.closest("details");
   const toolbar = document.getElementById("editor-toolbar");
   const editorColumn = document.querySelector(".editor-column");
   const channelInputs = Array.from(document.querySelectorAll('input[name="channels"]'));
@@ -21170,6 +21171,10 @@ if (!seed) {
       event.preventDefault();
       applyAiEdit();
     }
+  });
+  aiPanel?.addEventListener("toggle", () => {
+    if (!aiPanel.open) return;
+    window.requestAnimationFrame(() => aiPromptInput?.focus());
   });
   form?.addEventListener("submit", () => {
     updateHiddenFields();
