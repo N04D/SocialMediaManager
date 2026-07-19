@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import os
 from collections.abc import Callable
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -58,30 +59,122 @@ class LegacyBrowserSession:
         return self._session_id
 
     def navigate(self, url: str) -> BrowserSnapshot:
-        self.page.goto(url, wait_until="domcontentloaded")
-        return self.snapshot()
+        try:
+            self.page.goto(url, wait_until="domcontentloaded")
+            return self.snapshot()
+        except Exception as exc:
+            raise BrowserUnavailableError(
+                "browser_navigation.failed",
+                "Could not navigate the browser session.",
+                {"error": str(exc), "url": url},
+            ) from exc
 
     def snapshot(self) -> BrowserSnapshot:
-        title = ""
-        try:
-            title = str(self.page.title())
-        except Exception:
-            title = ""
         return BrowserSnapshot(
             session_id=self.session_id,
-            url=str(getattr(self.page, "url", "")),
-            title=title,
+            url=self.current_url(),
+            title=self.title(),
             metadata={"browser_session_status": self.status.value, "human_takeover_status": self.takeover_status.value},
         )
 
+    def current_url(self) -> str:
+        try:
+            return str(getattr(self.page, "url", "") or "")
+        except Exception:
+            return ""
+
+    def title(self) -> str:
+        try:
+            return str(self.page.title())
+        except Exception:
+            return ""
+
+    def element_exists(self, target: BrowserTarget, *, timeout_millis: int = 0) -> bool:
+        try:
+            locator = self._locator(target)
+            if timeout_millis > 0:
+                try:
+                    locator.first.wait_for(state="visible", timeout=timeout_millis)
+                    return True
+                except Exception:
+                    return False
+            return bool(locator.count())
+        except Exception:
+            return False
+
+    def text_content(self, target: BrowserTarget) -> str:
+        try:
+            return str(self._locator(target).first.inner_text())
+        except Exception as exc:
+            raise BrowserInteractionError(
+                "browser_interaction.text_content_failed",
+                "Could not read browser text content.",
+                {"error": str(exc)},
+            ) from exc
+
+    def attribute(self, target: BrowserTarget, name: str) -> str:
+        try:
+            return str(self._locator(target).first.get_attribute(name) or "")
+        except Exception as exc:
+            raise BrowserInteractionError(
+                "browser_interaction.attribute_failed",
+                "Could not read browser element attribute.",
+                {"error": str(exc), "attribute": name},
+            ) from exc
+
+    def wait_for(self, target: BrowserTarget, *, state: str = "visible", timeout_millis: int = 1000) -> bool:
+        try:
+            self._locator(target).first.wait_for(state=state, timeout=timeout_millis)
+            return True
+        except Exception:
+            return False
+
+    def wait_for_timeout(self, millis: int) -> None:
+        self.page.wait_for_timeout(millis)
+
+    def reload(self) -> BrowserSnapshot:
+        self.page.reload()
+        return self.snapshot()
+
+    def go_back(self) -> BrowserSnapshot:
+        self.page.go_back()
+        return self.snapshot()
+
+    def keyboard_press(self, key: str) -> None:
+        self.page.keyboard.press(key)
+
+    def keyboard_insert_text(self, text: str) -> None:
+        self.page.keyboard.insert_text(text)
+
     def click(self, target: BrowserTarget) -> None:
-        self._locator(target).click()
+        try:
+            self._locator(target).click()
+        except Exception as exc:
+            raise BrowserInteractionError(
+                "browser_interaction.click_failed",
+                "Could not click the requested browser target.",
+                {"error": str(exc)},
+            ) from exc
 
     def fill(self, target: BrowserTarget, value: str) -> None:
-        self._locator(target).fill(value)
+        try:
+            self._locator(target).fill(value)
+        except Exception as exc:
+            raise BrowserInteractionError(
+                "browser_interaction.fill_failed",
+                "Could not fill the requested browser target.",
+                {"error": str(exc)},
+            ) from exc
 
     def upload(self, target: BrowserTarget, path: Path) -> None:
-        self._locator(target).set_input_files(str(path))
+        try:
+            self._locator(target).set_input_files(str(path))
+        except Exception as exc:
+            raise BrowserInteractionError(
+                "browser_interaction.upload_failed",
+                "Could not upload to the requested browser target.",
+                {"error": str(exc)},
+            ) from exc
 
     def evaluate(self, script: str, arg: Any | None = None) -> Any:
         if arg is None:
@@ -169,6 +262,11 @@ class LegacyBrowserProvider:
                 owner=str(options.metadata.get("owner") or f"{self.provider_id}:{session_id}"),
                 session_id=session_id,
                 provider_id=self.provider_id,
+                metadata={
+                    "purpose": str(options.metadata.get("purpose") or "browser.session"),
+                    "job_id": str(options.metadata.get("job_id") or ""),
+                    "channel_id": str(options.metadata.get("channel_id") or self.channel_id),
+                },
             )
         try:
             open_session = self.open_session
@@ -279,5 +377,29 @@ class LegacyBrowserProvider:
             "reason": request.reason,
         }
 
-    def force_unlock_profile(self, profile_id: str, *, admin_reason: str) -> dict[str, Any]:
-        return self.lock_manager.force_unlock(profile_id, admin_reason=admin_reason)
+    @contextmanager
+    def acquire_legacy_execution_session(
+        self,
+        *,
+        profile_id: str,
+        purpose: str,
+        job_id: str = "",
+        headless: bool = True,
+    ):
+        session = self.create_session(
+            BrowserSessionOptions(
+                profile_id=profile_id,
+                headless=headless,
+                exclusive=True,
+                metadata={"purpose": purpose, "job_id": job_id},
+            )
+        )
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def force_unlock_profile(
+        self, profile_id: str, *, admin_reason: str, actor: str = "local-dashboard"
+    ) -> dict[str, Any]:
+        return self.lock_manager.force_unlock(profile_id, admin_reason=admin_reason, actor=actor)

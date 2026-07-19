@@ -21,11 +21,7 @@ from src.core.plugins import PluginCapabilityError, PluginDependencyError
 
 from .browser import persistent_profile_path
 from .runtime import save_channel_worker_heartbeat, worker_id_for_channel
-from .session import (
-    attach_navigation_observer,
-    inspect_linkedin_auth_state,
-    wait_for_manual_linkedin_login,
-)
+from .session import inspect_linkedin_auth_state_session, wait_for_manual_linkedin_login_session
 
 
 def _finalize_connect_state(
@@ -163,8 +159,9 @@ def safe_error_message(error: Exception) -> str:
     return str(error) or "Unexpected LinkedIn Connect error."
 
 
-def run_connect_action(
+def run_connect_with_runtime(
     config: AppConfig,
+    app_runtime,
     *,
     channel_id: str = "linkedin",
     action_id: str = "",
@@ -225,8 +222,7 @@ def run_connect_action(
     )
 
     try:
-        runtime = get_plugin_runtime(config, reset=True, strict=True)
-        provider_runtime = runtime.resolve_provider("browser.session")
+        provider_runtime = app_runtime.resolve_provider("browser.session")
         browser_provider = provider_runtime.services["browser_provider"]
         diagnostics["browser_provider_id"] = provider_runtime.manifest.id
         profile_id = channel_id
@@ -239,23 +235,21 @@ def run_connect_action(
                 headless=False,
                 exclusive=True,
                 start_url="",
-                metadata={"owner": f"{resolved_worker_id}:connect", "channel_id": channel_id},
+                metadata={
+                    "owner": f"{resolved_worker_id}:connect",
+                    "purpose": "linkedin.connect",
+                    "job_id": resolved_action_id,
+                    "channel_id": channel_id,
+                },
             )
         )
         diagnostics["browser_launch_count"] = 1
         diagnostics["browser_session_id"] = browser_session.session_id
         diagnostics["browser_session_status"] = "active"
-        page = getattr(browser_session, "page", None)
-        if page is None:
-            raise BrowserUnavailableError(
-                "browser_session.page_unavailable",
-                "Browser session did not expose a page for LinkedIn authentication checks.",
-            )
-        attach_navigation_observer(page, diagnostics)
         try:
             diagnostics["requested_navigation_count"] = int(diagnostics.get("requested_navigation_count", 0)) + 1
             browser_session.navigate(config.linkedin_feed_url)
-            result = inspect_linkedin_auth_state(page, diagnostics=diagnostics)
+            result = inspect_linkedin_auth_state_session(browser_session, diagnostics=diagnostics)
             if not result["authenticated"]:
                 takeover = browser_provider.request_human_takeover(
                     HumanTakeoverRequest(
@@ -267,7 +261,7 @@ def run_connect_action(
                 )
                 diagnostics["human_takeover_status"] = takeover.get("status", "requested")
                 diagnostics["human_takeover_reference"] = takeover.get("takeover_reference", "")
-                logged_in, reason = wait_for_manual_linkedin_login(page, diagnostics=diagnostics)
+                logged_in, reason = wait_for_manual_linkedin_login_session(browser_session, diagnostics=diagnostics)
                 if not logged_in:
                     diagnostics["human_takeover_status"] = "expired"
                     connection = _finalize_connect_state(
@@ -409,3 +403,21 @@ def run_connect_action(
             error_message=str(exc),
         )
         raise
+
+
+def run_connect_action(
+    config: AppConfig,
+    *,
+    channel_id: str = "linkedin",
+    action_id: str = "",
+    worker_id: str = "",
+    started_at: str = "",
+) -> ChannelConnection | None:
+    return run_connect_with_runtime(
+        config,
+        get_plugin_runtime(config, reset=True, strict=True),
+        channel_id=channel_id,
+        action_id=action_id,
+        worker_id=worker_id,
+        started_at=started_at,
+    )

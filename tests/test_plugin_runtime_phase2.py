@@ -249,7 +249,9 @@ class ConnectFlowProviderTests(unittest.TestCase):
         connection = self._begin()
         provider = self._provider_for_page(FakePage(authenticated=False))
         with patch.object(connect_module, "get_plugin_runtime", return_value=runtime_with_provider(provider)):
-            with patch.object(connect_module, "wait_for_manual_linkedin_login", return_value=(False, "Timed out.")):
+            with patch.object(
+                connect_module, "wait_for_manual_linkedin_login_session", return_value=(False, "Timed out.")
+            ):
                 result = connect_module.run_connect_action(
                     self.config, action_id=connection.active_job_id, worker_id="worker-a"
                 )
@@ -285,7 +287,7 @@ class ConnectFlowProviderTests(unittest.TestCase):
         provider = self._provider_for_page(FakePage(authenticated=True))
         with patch.object(connect_module, "get_plugin_runtime", return_value=runtime_with_provider(provider)):
             with patch.object(
-                connect_module, "inspect_linkedin_auth_state", side_effect=RuntimeError("inspect failed")
+                connect_module, "inspect_linkedin_auth_state_session", side_effect=RuntimeError("inspect failed")
             ):
                 with self.assertRaises(RuntimeError):
                     connect_module.run_connect_action(
@@ -298,7 +300,9 @@ class ConnectFlowProviderTests(unittest.TestCase):
         connection = self._begin()
         provider = self._provider_for_page(FakePage(authenticated=False))
         with patch.object(connect_module, "get_plugin_runtime", return_value=runtime_with_provider(provider)):
-            with patch.object(connect_module, "wait_for_manual_linkedin_login", return_value=(False, "Please log in.")):
+            with patch.object(
+                connect_module, "wait_for_manual_linkedin_login_session", return_value=(False, "Please log in.")
+            ):
                 connect_module.run_connect_action(self.config, action_id=connection.active_job_id, worker_id="worker-a")
         stored = get_channel_connection("linkedin")
         self.assertEqual(stored.status, "needs_login")

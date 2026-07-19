@@ -204,12 +204,18 @@ def render_channel_cards(*, return_to: str) -> str:
             )
         actions: list[str] = []
         if entry.profile_busy:
+            lease_warning = (
+                "Active lease: verify the browser process before unlocking."
+                if not entry.profile_lock_owner.lower().startswith("legacy")
+                else "Legacy or stale lock detected."
+            )
             actions.append(
                 f'<form method="post" action="/channels/force-unlock" class="inline-form">'
                 f'<input type="hidden" name="channel_id" value="{html.escape(entry.id)}" />'
                 f'<input type="hidden" name="return_to" value="{html.escape(return_to)}" />'
-                f'<input type="hidden" name="reason" value="Manual admin force unlock from channel dashboard." />'
-                f'<button class="secondary" type="submit">Force unlock profile</button></form>'
+                f'<input name="reason" placeholder="Reason for force unlock" required minlength="8" />'
+                f'<label><input type="checkbox" name="confirm_force_unlock" value="yes" required /> Confirm force unlock</label>'
+                f'<button class="secondary" type="submit" title="{html.escape(lease_warning)}">Force unlock profile</button></form>'
             )
         if entry.connection_status == "not_configured":
             actions.append(

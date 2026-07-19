@@ -132,12 +132,14 @@ class FileBackedBrowserProfileLockManager:
         owner: str = "",
         session_id: str = "",
         provider_id: str = "",
+        metadata: dict[str, Any] | None = None,
     ) -> BrowserProfileLock:
         self.lock_dir.mkdir(parents=True, exist_ok=True)
         lock_path = self.lock_path(profile_id)
         resolved_owner = owner or f"pid:{os.getpid()}:{uuid4().hex}"
         resolved_session_id = session_id or f"session:{uuid4().hex}"
-        metadata = self._metadata(profile_id, resolved_owner, resolved_session_id, provider_id)
+        metadata_payload = self._metadata(profile_id, resolved_owner, resolved_session_id, provider_id)
+        metadata_payload.update(metadata or {})
         while True:
             try:
                 fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
@@ -160,15 +162,15 @@ class FileBackedBrowserProfileLockManager:
                     continue
                 continue
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(metadata, handle, sort_keys=True)
+                json.dump(metadata_payload, handle, sort_keys=True)
                 handle.write("\n")
                 handle.flush()
                 os.fsync(handle.fileno())
             lease = BrowserProfileLease(
                 profile_id=profile_id,
                 owner=resolved_owner,
-                acquired_at=float(metadata["created_at_epoch"]),
-                heartbeat_at=float(metadata["heartbeat_at_epoch"]),
+                acquired_at=float(metadata_payload["created_at_epoch"]),
+                heartbeat_at=float(metadata_payload["heartbeat_at_epoch"]),
                 lease_seconds=self.lease_seconds,
             )
             return BrowserProfileLock(self, profile_id, lease)
@@ -192,17 +194,24 @@ class FileBackedBrowserProfileLockManager:
             except FileNotFoundError:
                 pass
 
-    def force_unlock(self, profile_id: str, *, admin_reason: str) -> dict[str, Any]:
+    def force_unlock(self, profile_id: str, *, admin_reason: str, actor: str = "local-dashboard") -> dict[str, Any]:
         if not admin_reason.strip():
             raise ValueError("force_unlock requires an explicit administrative reason.")
         lock_path = self.lock_path(profile_id)
         old_metadata = self._read_lock(lock_path)
+        lease_status = self.status(profile_id)
         audit = {
             "profile_id": profile_id,
+            "provider_id": str(old_metadata.get("provider_id") or ""),
             "old_owner": str(old_metadata.get("owner") or ""),
             "old_session_id": str(old_metadata.get("session_id") or ""),
+            "lease_status": "stale"
+            if lease_status.get("stale")
+            else ("active" if lease_status.get("busy") else "missing"),
+            "actor": actor,
             "timestamp": self._iso(self.clock()),
             "reason": admin_reason,
+            "result": "lock_removed",
             "warning": "Force unlock only removes the coordination lock; verify active browser processes manually.",
         }
         self.audit_path.parent.mkdir(parents=True, exist_ok=True)

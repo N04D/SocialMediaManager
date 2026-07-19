@@ -17,12 +17,13 @@ from channel_store import (
     update_channel_connection,
 )
 from pipeline import AppConfig
+from plugin_runtime import get_plugin_runtime
+from src.core.browser import BrowserProfileBusyError, BrowserProviderError
 
-from .browser import ProfileBusyError, capture_worker_screenshot, linkedin_profile_lock, open_local_linkedin_session
+from .browser import capture_worker_screenshot
 from .runtime import save_channel_worker_heartbeat, worker_id_for_channel
 from .session import is_linkedin_logged_in
 from .urls import LinkedInUrlError, normalize_linkedin_post_url
-
 
 _METRIC_PATTERNS = {
     "impressions": [r"([0-9][0-9.,]*\s*[KMB]?)\s+impressions?"],
@@ -191,8 +192,9 @@ def _set_profile_busy(job: MetricJob, message: str) -> MetricJob:
 
 
 
-def run_metric_job(
+def run_metric_job_with_runtime(
     config: AppConfig,
+    app_runtime,
     job_id: str,
     *,
     worker_id: str = "",
@@ -233,11 +235,15 @@ def run_metric_job(
         return job
 
     try:
-        with linkedin_profile_lock(job.channel_id, owner=f"{resolved_worker_id}:metrics:{job.id}"):
-            playwright, browser, context, page, owns_session, session_label = open_local_linkedin_session(
-                config,
-                headed_default=False,
-            )
+        provider = app_runtime.browser_provider(preferred_provider_id=str(getattr(config, "linkedin_browser_provider_id", "") or ""))
+        with provider.acquire_legacy_execution_session(
+            profile_id=job.channel_id,
+            purpose="linkedin.metrics",
+            job_id=job.id,
+            headless=True,
+        ) as browser_session:
+            page = browser_session.page
+            session_label = browser_session.session_label
             try:
                 logged_in, reason = is_linkedin_logged_in(page, config.linkedin_feed_url)
                 if not logged_in:
@@ -332,21 +338,41 @@ def run_metric_job(
                 _record_log(job, status=job.status, step="metrics_captured", worker_id=resolved_worker_id)
                 return job
             finally:
-                if owns_session:
-                    context.close()
-                playwright.stop()
-    except ProfileBusyError as exc:
-        job = _set_profile_busy(job, str(exc))
+                pass
+    except BrowserProfileBusyError as exc:
+        job = _set_profile_busy(job, exc.user_message)
         save_channel_worker_heartbeat(
             job.channel_id,
             status="error",
             current_job_id=job.id,
             current_job_type="metrics",
-            last_error=str(exc),
+            last_error=exc.user_message,
             worker_id=resolved_worker_id,
             started_at=started_at,
         )
         _record_log(job, status=job.status, step="profile_busy", worker_id=resolved_worker_id, error_code=job.error_code, error_message=job.error_message)
+        return job
+    except BrowserProviderError as exc:
+        job.status = "failed"
+        job.error_code = exc.code
+        job.error_message = exc.user_message
+        job.finished_at = now_iso()
+        job.updated_at = now_iso()
+        job.claimed_by = ""
+        job.claimed_at = ""
+        job.lease_expires_at = ""
+        job.heartbeat_at = ""
+        save_metric_job(job)
+        save_channel_worker_heartbeat(
+            job.channel_id,
+            status="error",
+            current_job_id=job.id,
+            current_job_type="metrics",
+            last_error=exc.user_message,
+            worker_id=resolved_worker_id,
+            started_at=started_at,
+        )
+        _record_log(job, status=job.status, step="metrics_error", worker_id=resolved_worker_id, error_code=job.error_code, error_message=job.error_message)
         return job
     except Exception as exc:
         job.status = "failed"
@@ -370,3 +396,19 @@ def run_metric_job(
         )
         _record_log(job, status=job.status, step="metrics_error", worker_id=resolved_worker_id, error_code=job.error_code, error_message=job.error_message)
         raise
+
+
+def run_metric_job(
+    config: AppConfig,
+    job_id: str,
+    *,
+    worker_id: str = "",
+    started_at: str = "",
+) -> MetricJob:
+    return run_metric_job_with_runtime(
+        config,
+        get_plugin_runtime(config, reset=True, strict=True),
+        job_id,
+        worker_id=worker_id,
+        started_at=started_at,
+    )

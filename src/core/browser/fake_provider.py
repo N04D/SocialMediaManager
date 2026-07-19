@@ -40,7 +40,7 @@ class InMemoryBrowserSession:
         self.profile_lock = profile_lock
         self.status = BrowserSessionStatus.READY
         self.url = options.start_url or "about:blank"
-        self.title = ""
+        self._title = ""
 
     @property
     def session_id(self) -> str:
@@ -54,7 +54,48 @@ class InMemoryBrowserSession:
 
     def snapshot(self) -> BrowserSnapshot:
         self.provider.record(self.session_id, "snapshot", {"url": self.url})
-        return BrowserSnapshot(session_id=self.session_id, url=self.url, title=self.title)
+        return BrowserSnapshot(session_id=self.session_id, url=self.url, title=self._title)
+
+    def current_url(self) -> str:
+        return self.url
+
+    def title(self) -> str:
+        return self._title
+
+    def element_exists(self, target: BrowserTarget, *, timeout_millis: int = 0) -> bool:
+        self.provider.record(self.session_id, "element_exists", {"target": target, "timeout_millis": timeout_millis})
+        return self.provider.element_exists_result
+
+    def text_content(self, target: BrowserTarget) -> str:
+        self.provider.record(self.session_id, "text_content", {"target": target})
+        return self.provider.text_content_result
+
+    def attribute(self, target: BrowserTarget, name: str) -> str:
+        self.provider.record(self.session_id, "attribute", {"target": target, "name": name})
+        return self.provider.attribute_result
+
+    def wait_for(self, target: BrowserTarget, *, state: str = "visible", timeout_millis: int = 1000) -> bool:
+        self.provider.record(
+            self.session_id, "wait_for", {"target": target, "state": state, "timeout_millis": timeout_millis}
+        )
+        return self.element_exists(target, timeout_millis=timeout_millis)
+
+    def wait_for_timeout(self, millis: int) -> None:
+        self.provider.record(self.session_id, "wait_for_timeout", {"millis": millis})
+
+    def reload(self) -> BrowserSnapshot:
+        self.provider.record(self.session_id, "reload", {})
+        return self.snapshot()
+
+    def go_back(self) -> BrowserSnapshot:
+        self.provider.record(self.session_id, "go_back", {})
+        return self.snapshot()
+
+    def keyboard_press(self, key: str) -> None:
+        self.provider.record(self.session_id, "keyboard_press", {"key": key})
+
+    def keyboard_insert_text(self, text: str) -> None:
+        self.provider.record(self.session_id, "keyboard_insert_text", {"text": text})
 
     def click(self, target: BrowserTarget) -> None:
         self.provider.raise_if_configured("click")
@@ -104,6 +145,9 @@ class InMemoryBrowserProvider:
         self.artifacts: list[BrowserArtifact] = []
         self.failures: dict[str, BrowserProviderError] = {}
         self.evaluate_result: Any = None
+        self.element_exists_result = True
+        self.text_content_result = ""
+        self.attribute_result = ""
         self.takeovers: list[HumanTakeoverRequest] = []
 
     def create_session(self, options: BrowserSessionOptions) -> InMemoryBrowserSession:

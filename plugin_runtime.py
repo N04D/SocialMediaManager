@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from channels.linkedin.runtime import LinkedInChannelRuntime
 from plugins.providers.legacy_browser import LegacyBrowserProvider
 from src.core.plugins import PluginContext, PluginDependencyError, PluginRegistry, PluginValidationError
 from src.core.plugins.manifest import PluginManifest, PluginStatus
@@ -36,6 +37,52 @@ class ApplicationPluginRuntime:
             "browser_provider",
             preferred_provider_id=preferred_provider_id,
         )
+
+    def get_plugin_service(self, plugin_id: str, service_name: str, *, require_ready: bool = True) -> Any:
+        runtime = self.runtimes.get(plugin_id)
+        if runtime is None:
+            raise RuntimeError(f"Plugin {plugin_id} is not registered.")
+        service = runtime.service(service_name, require_ready=require_ready)
+        if service is None:
+            raise RuntimeError(f"Plugin {plugin_id} does not expose service {service_name}.")
+        return service
+
+    def health_payload(self) -> dict[str, Any]:
+        plugins = []
+        for plugin_id, plugin_runtime in sorted(self.runtimes.items()):
+            dependencies = []
+            for dependency in plugin_runtime.manifest.dependencies:
+                resolved = None
+                if dependency.capability:
+                    try:
+                        resolved = self.resolve_provider(dependency.capability).manifest.id
+                    except Exception:
+                        resolved = None
+                elif dependency.plugin_id and dependency.plugin_id in self.runtimes:
+                    resolved = dependency.plugin_id
+                dependencies.append(
+                    {
+                        "plugin_id": dependency.plugin_id,
+                        "capability": dependency.capability,
+                        "resolved_provider": resolved or "",
+                        "ok": bool(resolved),
+                    }
+                )
+            plugins.append(
+                {
+                    "id": plugin_id,
+                    "type": plugin_runtime.manifest.type.value,
+                    "version": plugin_runtime.manifest.version,
+                    "status": plugin_runtime.status.value,
+                    "capabilities": list(plugin_runtime.manifest.capabilities),
+                    "dependencies": dependencies,
+                    "selected_provider": plugin_runtime.health.get("browser_provider", ""),
+                    "health": plugin_runtime.health,
+                    "last_error_code": plugin_runtime.health.get("code", ""),
+                    "degraded_reason": "; ".join(plugin_runtime.health.get("messages", []) or []),
+                }
+            )
+        return {"plugins": plugins}
 
 
 _RUNTIME: ApplicationPluginRuntime | None = None
@@ -73,7 +120,7 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
             run_lifecycle_hook(provider, hook_name, context)
         health = run_lifecycle_hook(provider, "health_check", context) or provider.health_check()
         legacy.instance = provider
-        legacy.services["browser_provider"] = provider
+        legacy.register_service("browser_provider", provider)
         legacy.health = health
         legacy.status = PluginStatus.READY if health.get("status") == "ready" else PluginStatus.DEGRADED
 
@@ -98,6 +145,15 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
                 "dependencies_resolved": provider_ready,
                 "browser_provider": "provider.browser.legacy" if provider_ready else "",
             }
+            if provider_ready:
+                channel_service = LinkedInChannelRuntime(
+                    manifest=linkedin.manifest,
+                    app_runtime=runtime,
+                    config=config,
+                )
+                linkedin.instance = channel_service
+                linkedin.register_service("channel_runtime", channel_service)
+                linkedin.health = channel_service.health_check()
 
     runtime.resolver = ProviderResolver(runtime.registry, runtime.runtimes)
     runtime.errors = startup_errors

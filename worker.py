@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import importlib
 import os
 import signal
 import threading
-import time
 from datetime import datetime
 
 from channel_models import WorkerHeartbeat
@@ -18,10 +16,16 @@ from channel_store import (
     now_iso,
     save_worker_heartbeat,
 )
-from pipeline import AppConfig, cleanup_media, download_images_from_urls, ensure_runtime_dirs, load_config, stage_linkedin_post
+from pipeline import (
+    AppConfig,
+    cleanup_media,
+    download_images_from_urls,
+    ensure_runtime_dirs,
+    load_config,
+    stage_linkedin_post,
+)
 from plugin_runtime import get_plugin_runtime
 from scheduler import append_worker_run, load_schedule, next_due_record, update_schedule_record
-
 
 DEFAULT_CHANNEL_WORKER_POLL_SECONDS = int(os.environ.get("CHANNEL_WORKER_POLL_SECONDS", "15"))
 DEFAULT_CHANNEL_WORKER_HEARTBEAT_SECONDS = int(os.environ.get("CHANNEL_WORKER_HEARTBEAT_SECONDS", "10"))
@@ -94,13 +98,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--channel-action-id", default="", help="Optional claimed action id for one-shot channel actions.")
     return parser.parse_args()
 
-
-
-def _channel_worker_module(channel_id: str):
-    return importlib.import_module(f"channels.{channel_id}.worker.index")
-
-
-
 def _save_channel_heartbeat(
     channel_id: str,
     *,
@@ -128,13 +125,20 @@ def _save_channel_heartbeat(
 
 
 
+def _channel_runtime_service(config: AppConfig, channel_id: str):
+    if channel_id != "linkedin":
+        raise ValueError(f"Unsupported channel runtime: {channel_id}")
+    runtime = get_plugin_runtime(config, reset=False, strict=True)
+    return runtime.get_plugin_service("channel.linkedin", "channel_runtime")
+
+
 def run_channel_action(config: AppConfig, *, channel_id: str, action: str, action_id: str, worker_id: str, started_at: str) -> int:
-    module = _channel_worker_module(channel_id)
+    service = _channel_runtime_service(config, channel_id)
     if action == "connect":
-        module.run_connect_action(config, channel_id=channel_id, action_id=action_id, worker_id=worker_id, started_at=started_at)
+        service.connect(channel_id=channel_id, action_id=action_id, worker_id=worker_id, started_at=started_at)
         return 1
     if action == "check_session":
-        module.run_session_check_action(config, channel_id=channel_id, worker_id=worker_id, started_at=started_at)
+        service.check_session(channel_id=channel_id, worker_id=worker_id, started_at=started_at)
         return 1
     raise ValueError(f"Unsupported channel action: {action}")
 
@@ -151,7 +155,7 @@ def _process_claimed_channel_job(
     heartbeat_seconds: int,
     lease_seconds: int,
 ) -> int:
-    module = _channel_worker_module(channel_id)
+    service = _channel_runtime_service(config, channel_id)
     keeper = LeaseKeeper(
         channel_id=channel_id,
         worker_id=worker_id,
@@ -172,9 +176,9 @@ def _process_claimed_channel_job(
     keeper.start()
     try:
         if job_type == "publish":
-            module.run_publish_job(config, job_id, worker_id=worker_id, started_at=started_at)
+            service.publish(job_id, worker_id=worker_id, started_at=started_at)
         else:
-            module.run_metric_job(config, job_id, worker_id=worker_id, started_at=started_at)
+            service.collect_metrics(job_id, worker_id=worker_id, started_at=started_at)
     finally:
         keeper.stop()
     append_worker_run(

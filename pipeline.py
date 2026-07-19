@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from html import escape as html_escape
 import json
 import re
 import shutil
@@ -9,21 +8,20 @@ import subprocess
 import sys
 import textwrap
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
+from html import escape as html_escape
 from pathlib import Path
-from typing import Iterable
 from urllib.parse import urlparse
 
 import feedparser
 import requests
 from bs4 import BeautifulSoup
-from bs4.element import NavigableString, Tag
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from timing import compute_article_schedule_time
-
 
 ROOT_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT_DIR / "config.json"
@@ -42,6 +40,7 @@ DEFAULT_CONFIG = {
     "linkedin_article_schedule_buffer_minutes": 10080,
     "linkedin_user_data_dir": "./linkedin_session",
     "linkedin_remote_debugging_url": "",
+    "linkedin_browser_provider_id": "",
     "media_dir": "./tmp_media",
     "ai_cli_command": "auto",
     "ai_cli_args": [],
@@ -102,6 +101,7 @@ class AppConfig:
     linkedin_article_schedule_buffer_minutes: int
     linkedin_user_data_dir: Path
     linkedin_remote_debugging_url: str
+    linkedin_browser_provider_id: str
     media_dir: Path
     ai_cli_command: str
     ai_cli_args: list[str] = field(default_factory=list)
@@ -190,6 +190,7 @@ def load_config(config_path: str) -> AppConfig:
         linkedin_article_schedule_buffer_minutes=int(raw.get("linkedin_article_schedule_buffer_minutes", 1)),
         linkedin_user_data_dir=ROOT_DIR / str(raw["linkedin_user_data_dir"]),
         linkedin_remote_debugging_url=str(raw.get("linkedin_remote_debugging_url", "")),
+        linkedin_browser_provider_id=str(raw.get("linkedin_browser_provider_id", "")),
         media_dir=ROOT_DIR / str(raw["media_dir"]),
         ai_cli_command=str(raw["ai_cli_command"]),
         ai_cli_args=[str(item) for item in ai_args],
@@ -236,7 +237,7 @@ def fetch_article(feed_url: str, delay_index: int) -> Article:
     published_at = None
     published_struct = entry.get("published_parsed") or entry.get("updated_parsed")
     if published_struct:
-        published_at = datetime(*published_struct[:6], tzinfo=timezone.utc).isoformat()
+        published_at = datetime(*published_struct[:6], tzinfo=UTC).isoformat()
     return Article(title=title, link=link, html=html, text=extract_text(html), published_at=published_at)
 
 

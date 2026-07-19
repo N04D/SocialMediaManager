@@ -16,7 +16,22 @@ class PluginRuntime:
     services: dict[str, Any] = field(default_factory=dict)
     health: dict[str, Any] = field(default_factory=dict)
 
-    def service(self, name: str) -> Any:
+    def register_service(self, name: str, service: Any) -> None:
+        if name in self.services:
+            raise PluginCapabilityError(
+                "plugin_runtime.duplicate_service",
+                "Plugin service is already registered.",
+                {"plugin_id": self.manifest.id, "service_name": name},
+            )
+        self.services[name] = service
+
+    def service(self, name: str, *, require_ready: bool = True) -> Any:
+        if require_ready and self.status != PluginStatus.READY:
+            raise PluginCapabilityError(
+                "plugin_runtime.service_not_ready",
+                "Plugin is not ready to provide this service.",
+                {"plugin_id": self.manifest.id, "service_name": name, "status": self.status.value},
+            )
         return self.services.get(name)
 
 

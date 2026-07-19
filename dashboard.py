@@ -56,25 +56,46 @@ from content_store import (
     create_revision_snapshot,
     delete_content_item,
     ensure_studio_dirs,
-    export_html,
-    export_markdown,
     get_content_item,
-    list_content_revisions,
-    load_content_revision,
     list_content_items,
+    list_content_revisions,
     list_publications,
     list_stats_snapshots,
+    load_content_revision,
     plain_text_from_markdown,
     render_markdown_html,
     save_content_item,
     slugify,
 )
-from pipeline import CONFIG_PATH, AppConfig, Article, build_prompt, ensure_runtime_dirs, fetch_article, load_config, run_local_ai
+from pipeline import (
+    CONFIG_PATH,
+    AppConfig,
+    Article,
+    build_prompt,
+    ensure_runtime_dirs,
+    fetch_article,
+    load_config,
+    run_local_ai,
+)
 from plugin_runtime import get_plugin_runtime
-from timing import compute_article_schedule_time
-from scheduler import append_schedule, build_schedule_record, cache_preview, ensure_outbox_dir, get_schedule_record, load_launch_status, load_preview, load_schedule, load_worker_runs, queue_summary, reset_failed_schedule_records, save_launch_status, update_schedule_record, worker_run_summary
+from scheduler import (
+    append_schedule,
+    build_schedule_record,
+    cache_preview,
+    ensure_outbox_dir,
+    get_schedule_record,
+    load_launch_status,
+    load_preview,
+    load_schedule,
+    load_worker_runs,
+    queue_summary,
+    reset_failed_schedule_records,
+    save_launch_status,
+    update_schedule_record,
+    worker_run_summary,
+)
 from studio_models import ContentItem
-
+from timing import compute_article_schedule_time
 
 ROOT_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = ROOT_DIR / "assets"
@@ -163,6 +184,14 @@ def form_value(form: dict[str, list[str]], key: str, default: str = "") -> str:
 
 def form_values(form: dict[str, list[str]], key: str) -> list[str]:
     return [value for value in form.get(key, []) if value]
+
+
+def validate_force_unlock_confirmation(reason: str, confirmation: str) -> tuple[bool, str]:
+    if len(reason.strip()) < 8:
+        return False, "Force unlock requires a reason of at least 8 characters."
+    if confirmation.strip().lower() not in {"yes", "on", "true", "1"}:
+        return False, "Force unlock requires explicit confirmation."
+    return True, ""
 
 
 def parse_checkbox(form: dict[str, list[str]], key: str) -> bool:
@@ -719,7 +748,6 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
     selected_channels = set(selected_item.channels)
     editor_html_seed = selected_item.html_body or ""
     preview_html = editor_html_seed or render_markdown_html(selected_item.markdown_body)
-    last_saved = selected_item.updated_at or "Not saved yet"
     editor_json_seed = json.dumps(selected_item.editor_json or {}, ensure_ascii=False)
     cover_preview_url = public_asset_url(config.content_dir, selected_item.cover_image_path)
     revisions = list_content_revisions(config.content_dir, selected_item.id or selected_item.slug, limit=10) if selected_item.id or selected_item.slug else []
@@ -1443,6 +1471,16 @@ def render_page(
     selected_content_item: ContentItem,
 ) -> str:
     page_title, page_intro, page_content = render_main_content(route, config, snapshot, all_records, queue, preview, selected_record, selected_status, content_items, selected_content_item)
+    header_markup = (
+        '<header class="page-header">'
+        f'<div><p class="page-kicker">{html.escape(route.strip("/") or "editor")}</p>'
+        f'<h1 class="page-title">{html.escape(page_title)}</h1>'
+        f'<p class="page-subtitle">{html.escape(page_intro)}</p></div>'
+        f'<p class="page-feed meta">RSS feed <code>{html.escape(config.rss_url)}</code></p>'
+        "</header>"
+        if page_title or page_intro
+        else ""
+    )
     return f"""<!doctype html>
 <html lang=\"en\">
 <head>
@@ -2355,7 +2393,7 @@ def render_page(
     {render_sidebar(route)}
     <main class=\"main-shell\" id=\"main-content\" tabindex=\"-1\">
       <div class=\"wrap\">
-        {"<header class=\"page-header\"><div><p class=\"page-kicker\">%s</p><h1 class=\"page-title\">%s</h1><p class=\"page-subtitle\">%s</p></div><p class=\"page-feed meta\">RSS feed <code>%s</code></p></header>" % (html.escape(route.strip('/') or 'editor'), html.escape(page_title), html.escape(page_intro), html.escape(config.rss_url)) if page_title or page_intro else ""}
+        {header_markup}
         {page_content}
       </div>
     </main>
@@ -2498,6 +2536,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 {"channels": [entry.to_dict() for entry in scan_channel_registry(rescan=True)]},
                 ensure_ascii=False,
             ).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if parsed.path == "/api/plugins/health":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            body = json.dumps(runtime.health_payload(), ensure_ascii=False).encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -2914,16 +2961,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
             elif path == "/channels/force-unlock":
                 channel_id = form_value(form, "channel_id").strip()
-                reason = form_value(form, "reason", "Manual admin force unlock from dashboard.").strip()
+                reason = form_value(form, "reason", "").strip()
+                confirmation = form_value(form, "confirm_force_unlock", "").strip().lower()
+                valid, validation_message = validate_force_unlock_confirmation(reason, confirmation)
+                if not valid:
+                    self.send_error(HTTPStatus.BAD_REQUEST, validation_message)
+                    return
                 runtime = get_plugin_runtime(self.config, reset=True, strict=False)
                 provider = runtime.browser_provider()
-                provider.force_unlock_profile(channel_id, admin_reason=reason or "Manual admin force unlock from dashboard.")
+                provider.force_unlock_profile(channel_id, admin_reason=reason)
             elif path == "/channels/disconnect":
                 channel_id = form_value(form, "channel_id").strip()
                 entry = next((item for item in scan_channel_registry(rescan=True) if item.id == channel_id), None)
                 if entry is None:
                     self.send_error(HTTPStatus.NOT_FOUND)
                     return
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                try:
+                    runtime.get_plugin_service("channel.linkedin", "channel_runtime").disconnect(channel_id=channel_id)
+                except Exception:
+                    pass
                 connection = get_channel_connection(channel_id)
                 profile_path = None
                 if connection and connection.local_profile_path:
