@@ -22,7 +22,12 @@ class AutoBrowserTargetResolver:
         return matches[target.index]
 
     def matches(self, observation: dict, target: BrowserTarget) -> list[AutoBrowserElement]:
-        raw_elements = observation.get("elements") or observation.get("interactive_elements") or []
+        raw_elements = (
+            observation.get("elements")
+            or observation.get("interactive_elements")
+            or observation.get("interactables")
+            or []
+        )
         elements = [self._element(item) for item in raw_elements if isinstance(item, dict)]
         if target.require_visible:
             elements = [element for element in elements if element.visible]
@@ -79,14 +84,20 @@ class AutoBrowserTargetResolver:
         return AutoBrowserElement(
             element_id=str(payload.get("element_id") or payload.get("id") or payload.get("ref") or ""),
             role=str(payload.get("role") or ""),
-            name=str(payload.get("name") or payload.get("accessible_name") or payload.get("aria_label") or ""),
+            name=str(
+                payload.get("name")
+                or payload.get("accessible_name")
+                or payload.get("aria_label")
+                or payload.get("label")
+                or ""
+            ),
             text=str(payload.get("text") or payload.get("inner_text") or ""),
             label=str(payload.get("label") or ""),
             test_id=str(payload.get("test_id") or payload.get("data-testid") or attrs.get("data-testid") or ""),
             placeholder=str(payload.get("placeholder") or attrs.get("placeholder") or ""),
             title=str(payload.get("title") or attrs.get("title") or ""),
             alt_text=str(payload.get("alt_text") or attrs.get("alt") or ""),
-            attributes=dict(attrs),
+            attributes={**dict(attrs), "css": str(payload.get("selector_hint") or attrs.get("css") or "")},
             visible=bool(payload.get("visible", True)),
-            enabled=bool(payload.get("enabled", True)),
+            enabled=bool(payload.get("enabled", not bool(payload.get("disabled", False)))),
         )

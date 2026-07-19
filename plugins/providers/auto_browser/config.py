@@ -19,7 +19,7 @@ class AutoBrowserConfig:
     artifact_policy: str = "remote_reference"
     takeover_public_base_url: str = ""
     max_session_seconds: int = 1800
-    expected_server_version: str = "1.4.0"
+    expected_server_version: str = "1.3.1"
 
     @classmethod
     def from_app_config(cls, config: Any) -> AutoBrowserConfig:
@@ -40,7 +40,7 @@ class AutoBrowserConfig:
                 "/"
             ),
             max_session_seconds=int(getattr(config, "auto_browser_max_session_seconds", 1800) or 1800),
-            expected_server_version=str(getattr(config, "auto_browser_expected_server_version", "1.4.0") or "1.4.0"),
+            expected_server_version=str(getattr(config, "auto_browser_expected_server_version", "1.3.1") or "1.3.1"),
         )
 
     def safe_base_url(self) -> str:

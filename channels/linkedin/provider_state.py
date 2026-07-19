@@ -29,3 +29,25 @@ def provider_connection_status(connection: ChannelConnection, provider_id: str) 
     if not isinstance(state, dict):
         return ""
     return str(state.get("status") or "")
+
+
+def set_provider_connection_status(
+    connection: ChannelConnection,
+    *,
+    provider_id: str,
+    status: str,
+    error_code: str = "",
+) -> ChannelConnection:
+    states = dict(connection.provider_connection_state_json or {})
+    current = dict(states.get(provider_id) or {})
+    current.update(
+        {
+            "provider_id": provider_id,
+            "status": status,
+            "last_verified_at": now_iso(),
+            "last_error_code": error_code,
+        }
+    )
+    states[provider_id] = current
+    connection.provider_connection_state_json = states
+    return connection

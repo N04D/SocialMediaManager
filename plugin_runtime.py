@@ -93,9 +93,24 @@ class ApplicationPluginRuntime:
 
             linkedin_connection = get_channel_connection("linkedin")
             account_provider = linkedin_connection.browser_provider_id if linkedin_connection else ""
+            provider_states = linkedin_connection.provider_connection_state_json if linkedin_connection else {}
         except Exception:
             account_provider = ""
-        return {"plugins": plugins, "accounts": {"linkedin": {"browser_provider_id": account_provider}}}
+            provider_states = {}
+        return {
+            "plugins": plugins,
+            "accounts": {
+                "linkedin": {
+                    "browser_provider_id": account_provider,
+                    "provider_connection_states": provider_states,
+                    "active_provider_connection_status": provider_states.get(
+                        account_provider or "provider.browser.legacy", {}
+                    )
+                    if isinstance(provider_states, dict)
+                    else {},
+                }
+            },
+        }
 
 
 _RUNTIME: ApplicationPluginRuntime | None = None

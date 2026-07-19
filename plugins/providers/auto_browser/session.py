@@ -150,6 +150,21 @@ class AutoBrowserSession:
 
     def clear(self, target: BrowserTarget) -> None:
         element = self._resolve(target)
+        selector = str(element.attributes.get("css") or "")
+        if selector:
+            cleared = self.evaluate(
+                "(selector) => {"
+                "const el = document.querySelector(selector);"
+                "if (!el || !('value' in el)) return false;"
+                "el.value = '';"
+                "el.dispatchEvent(new Event('input', {bubbles: true}));"
+                "el.dispatchEvent(new Event('change', {bubbles: true}));"
+                "return true;"
+                "}",
+                selector,
+            )
+            if cleared:
+                return
         self._action("clear", {"element_id": element.element_id, "text": "", "clear_first": True})
 
     def hover(self, target: BrowserTarget) -> None:

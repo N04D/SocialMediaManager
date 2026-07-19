@@ -51,6 +51,9 @@ class ChannelRegistryEntry:
     browser_provider_id: str = ""
     browser_session_status: str = ""
     human_takeover_status: str = ""
+    provider_connection_states: dict[str, Any] = field(default_factory=dict)
+    active_provider_connection_status: str = ""
+    auto_browser_auth_profile: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -79,8 +82,10 @@ class ChannelRegistryEntry:
             "browser_provider_id": self.browser_provider_id,
             "browser_session_status": self.browser_session_status,
             "human_takeover_status": self.human_takeover_status,
+            "provider_connection_states": self.provider_connection_states,
+            "active_provider_connection_status": self.active_provider_connection_status,
+            "auto_browser_auth_profile": self.auto_browser_auth_profile,
         }
-
 
 
 def _load_manifest(path: Path) -> dict[str, Any] | None:
@@ -89,7 +94,6 @@ def _load_manifest(path: Path) -> dict[str, Any] | None:
     except (OSError, json.JSONDecodeError):
         return None
     return loaded if isinstance(loaded, dict) else None
-
 
 
 def _validate_bool_map(name: str, payload: Any, required_keys: list[str]) -> list[str]:
@@ -102,7 +106,6 @@ def _validate_bool_map(name: str, payload: Any, required_keys: list[str]) -> lis
         elif not isinstance(payload[key], bool):
             errors.append(f"{name}.{key} must be a boolean.")
     return errors
-
 
 
 def validate_channel_manifest(manifest: dict[str, Any]) -> list[str]:
@@ -170,7 +173,6 @@ def validate_channel_manifest(manifest: dict[str, Any]) -> list[str]:
     return errors
 
 
-
 def _plugin_health(manifest: dict[str, Any], plugin_dir: Path, errors: list[str]) -> tuple[str, list[str]]:
     if errors:
         return "invalid_manifest", errors
@@ -179,7 +181,9 @@ def _plugin_health(manifest: dict[str, Any], plugin_dir: Path, errors: list[str]
     capabilities = manifest.get("capabilities", {})
     if capabilities.get("canGenerate"):
         required_paths.extend([plugin_dir / "rules.yaml", plugin_dir / "prompts"])
-    if any(capabilities.get(key) for key in ["canPublish", "canFetchMetrics"]) or manifest.get("connection", {}).get("canConnect"):
+    if any(capabilities.get(key) for key in ["canPublish", "canFetchMetrics"]) or manifest.get("connection", {}).get(
+        "canConnect"
+    ):
         worker_index = plugin_dir / "worker" / "index.py"
         if not worker_index.exists():
             return "worker_missing", ["worker/index.py is required for this plugin."]
@@ -189,12 +193,10 @@ def _plugin_health(manifest: dict[str, Any], plugin_dir: Path, errors: list[str]
     return "ready", []
 
 
-
 def _default_connection_status(manifest: dict[str, Any]) -> str:
     if not manifest.get("connection", {}).get("canConnect"):
         return "disabled"
     return "not_configured"
-
 
 
 def _profile_state(entry_id: str) -> dict[str, Any]:
@@ -211,7 +213,6 @@ def _profile_state(entry_id: str) -> dict[str, Any]:
         }
     except Exception:
         return {"busy": False, "owner": "", "lock_path": "", "provider_id": ""}
-
 
 
 def scan_channel_registry(*, rescan: bool = False) -> list[ChannelRegistryEntry]:
@@ -292,13 +293,26 @@ def scan_channel_registry(*, rescan: bool = False) -> list[ChannelRegistryEntry]
             entry.browser_provider_id = str(profile_state.get("provider_id") or "")
             if connection is not None:
                 entry.browser_provider_id = connection.browser_provider_id or entry.browser_provider_id
+                entry.provider_connection_states = dict(connection.provider_connection_state_json or {})
+                active_provider_id = entry.browser_provider_id or "provider.browser.legacy"
+                active_state = entry.provider_connection_states.get(active_provider_id)
+                if isinstance(active_state, dict):
+                    entry.active_provider_connection_status = str(active_state.get("status") or "")
                 diagnostics = connection.last_connect_diagnostics_json or {}
                 entry.browser_session_status = str(diagnostics.get("browser_session_status") or "")
                 entry.human_takeover_status = str(diagnostics.get("human_takeover_status") or "")
+                try:
+                    runtime = get_plugin_runtime()
+                    auto_runtime = runtime.runtimes.get("provider.browser.autobrowser")
+                    if auto_runtime and auto_runtime.status.value == "ready":
+                        provider = auto_runtime.services.get("browser_provider")
+                        if provider is not None and hasattr(provider, "auth_profile_status"):
+                            entry.auto_browser_auth_profile = provider.auth_profile_status(entry.id)
+                except Exception:
+                    entry.auto_browser_auth_profile = {}
         entries.append(entry)
 
     return sorted(entries, key=lambda item: item.manifest.get("name", item.id).lower())
-
 
 
 def get_channel_registry_entry(channel_id: str) -> ChannelRegistryEntry | None:

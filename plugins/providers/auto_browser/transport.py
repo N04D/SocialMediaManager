@@ -69,6 +69,8 @@ class AutoBrowserTransport(Protocol):
 
     def delete_auth_profile(self, profile_name: str) -> dict[str, Any]: ...
 
+    def remote_access(self, remote_session_id: str = "") -> dict[str, Any]: ...
+
 
 @dataclass
 class AutoBrowserHttpTransport:
@@ -134,16 +136,29 @@ class AutoBrowserHttpTransport:
         return self._request(
             "POST",
             f"/sessions/{self._quote(remote_session_id)}/screenshot",
-            {"full_page": bool(full_page)},
+            {"label": "browser-session"},
         )
 
     def evaluate(self, remote_session_id: str, script: str, arg: Any | None = None) -> Any:
+        expression = script
+        stripped = script.strip()
+        if stripped.startswith("()") or stripped.startswith("(") or "=>" in stripped:
+            expression = f"JSON.stringify(({script})({json.dumps(arg)}))"
         result = self._request(
             "POST",
-            f"/sessions/{self._quote(remote_session_id)}/actions/execute",
-            {"script": script, "arg": arg},
+            f"/sessions/{self._quote(remote_session_id)}/cdp/raw",
+            {"method": "Runtime.evaluate", "params": {"expression": expression, "returnByValue": True}},
         )
-        return result.get("result") if isinstance(result, dict) and "result" in result else result
+        if isinstance(result, dict):
+            value = result.get("result", {}).get("value") if isinstance(result.get("result"), dict) else None
+            if isinstance(value, str):
+                try:
+                    return json.loads(value)
+                except json.JSONDecodeError:
+                    return value
+            if value is not None:
+                return value
+        return result
 
     def create_takeover(self, remote_session_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", f"/sessions/{self._quote(remote_session_id)}/takeover", payload)
@@ -164,6 +179,10 @@ class AutoBrowserHttpTransport:
 
     def delete_auth_profile(self, profile_name: str) -> dict[str, Any]:
         return self._request("DELETE", f"/auth-profiles/{self._quote(profile_name)}")
+
+    def remote_access(self, remote_session_id: str = "") -> dict[str, Any]:
+        suffix = f"?session_id={self._quote(remote_session_id)}" if remote_session_id else ""
+        return self._request("GET", f"/remote-access{suffix}")
 
     def _request(
         self,
@@ -208,11 +227,14 @@ class AutoBrowserHttpTransport:
             raise AutoBrowserTimeoutError("Auto Browser request timed out.") from exc
         except urllib.error.URLError as exc:
             raise AutoBrowserConnectionError("Auto Browser controller is unreachable.") from exc
+        except OSError as exc:
+            raise AutoBrowserConnectionError("Auto Browser controller is unreachable.") from exc
         except json.JSONDecodeError as exc:
             raise AutoBrowserResponseError("Auto Browser returned invalid JSON.") from exc
 
     def _raise_http_error(self, exc: urllib.error.HTTPError) -> None:
         status = int(exc.code)
+        retry_after = exc.headers.get("Retry-After", "")
         if status in {401, 403}:
             raise AutoBrowserUnauthorizedError("Auto Browser authentication failed.") from exc
         if status == 404:
@@ -220,7 +242,10 @@ class AutoBrowserHttpTransport:
         if status == 409:
             raise AutoBrowserNotReadyError("Auto Browser is not ready for this operation.") from exc
         if status == 429:
-            raise AutoBrowserRateLimitError("Auto Browser rate limit was reached.") from exc
+            raise AutoBrowserRateLimitError(
+                "Auto Browser rate limit was reached.",
+                details={"retry_after": retry_after} if retry_after else {},
+            ) from exc
         if status >= 500:
             raise AutoBrowserConnectionError("Auto Browser controller returned a server error.") from exc
         raise AutoBrowserResponseError("Auto Browser request failed.", details={"status": status}) from exc

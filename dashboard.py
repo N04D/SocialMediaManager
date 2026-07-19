@@ -2765,6 +2765,40 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if parsed.path == "/api/providers/autobrowser/status":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            provider_runtime = runtime.runtimes.get("provider.browser.autobrowser")
+            payload: dict[str, Any] = {
+                "provider_id": "provider.browser.autobrowser",
+                "registered": provider_runtime is not None,
+            }
+            if provider_runtime is not None:
+                provider = provider_runtime.services.get("browser_provider")
+                reconciliation = {}
+                if provider is not None and hasattr(provider, "reconcile_sessions"):
+                    try:
+                        reconciliation = provider.reconcile_sessions()
+                    except Exception:
+                        reconciliation = {"status": "unavailable"}
+                payload.update(
+                    {
+                        "status": provider_runtime.status.value,
+                        "health": provider_runtime.health,
+                        "reconciliation": {
+                            "status": reconciliation.get("status", ""),
+                            "checked_at": reconciliation.get("checked_at", ""),
+                            "orphaned_remote_count": reconciliation.get("orphaned_remote_count", 0),
+                            "stale_mapping_count": reconciliation.get("stale_mapping_count", 0),
+                        },
+                    }
+                )
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if parsed.path == "/derivatives/export":
             query = parse_qs(parsed.query)
             derivative_id = query.get("derivative_id", [""])[0]
@@ -3263,6 +3297,65 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 connection.browser_provider_id = browser_provider_id
                 connection.updated_at = now_iso()
                 save_channel_connection(connection)
+            elif path == "/channels/forget-browser-login":
+                channel_id = form_value(form, "channel_id").strip()
+                provider_id = form_value(form, "provider_id").strip()
+                reason = form_value(form, "reason", "").strip()
+                confirmation = form_value(form, "confirm_forget_login", "").strip().lower()
+                if provider_id != "provider.browser.autobrowser":
+                    self.send_error(HTTPStatus.BAD_REQUEST, "Only Auto Browser login removal is supported.")
+                    return
+                if confirmation != "forget auto browser login":
+                    self.send_error(HTTPStatus.BAD_REQUEST, "Type 'forget auto browser login' to confirm.")
+                    return
+                if len(reason) < 8:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "A reason of at least 8 characters is required.")
+                    return
+                entry = next((item for item in scan_channel_registry(rescan=True) if item.id == channel_id), None)
+                if entry is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                if (
+                    entry.profile_busy
+                    or entry.worker_current_job_id
+                    or entry.human_takeover_status in {"requested", "active"}
+                ):
+                    self.send_error(
+                        HTTPStatus.CONFLICT, "Cannot forget login while the channel has active browser work."
+                    )
+                    return
+                connection = get_channel_connection(channel_id)
+                if connection is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                try:
+                    provider = runtime.browser_provider(preferred_provider_id=provider_id)
+                    from channels.linkedin.provider_state import (
+                        provider_connection_status,
+                        set_provider_connection_status,
+                    )
+
+                    previous_status = provider_connection_status(connection, provider_id)
+                    result = provider.forget_auth_profile_with_audit(
+                        channel_id,
+                        admin_reason=reason,
+                        previous_status=previous_status,
+                    )
+                    if not result.get("ok"):
+                        self.send_error(HTTPStatus.BAD_GATEWAY, "Auto Browser auth profile could not be deleted.")
+                        return
+                    set_provider_connection_status(
+                        connection, provider_id=provider_id, status="authentication_required"
+                    )
+                    connection.updated_at = now_iso()
+                    if connection.browser_provider_id == provider_id:
+                        connection.status = "needs_login"
+                        connection.last_error = "Auto Browser login was forgotten."
+                    save_channel_connection(connection)
+                except Exception:
+                    self.send_error(HTTPStatus.BAD_GATEWAY, "Auto Browser login could not be forgotten safely.")
+                    return
             elif path == "/channels/disconnect":
                 channel_id = form_value(form, "channel_id").strip()
                 entry = next((item for item in scan_channel_registry(rescan=True) if item.id == channel_id), None)

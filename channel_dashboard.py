@@ -241,6 +241,20 @@ def render_channel_cards(*, return_to: str) -> str:
                 f" · Human takeover: <code>{html.escape(entry.human_takeover_status or 'not_required')}</code></p>"
             )
         actions: list[str] = []
+        auto_profile = entry.auto_browser_auth_profile or {}
+        if auto_profile.get("exists"):
+            actions.append(
+                f'<details class="editor-panel"><summary class="editor-panel-summary">'
+                f'<span class="editor-panel-summary-left"><span>Forget Auto Browser login</span></span></summary>'
+                f'<p class="meta">Removes only the Auto Browser auth profile for this channel. Legacy login, content, posts, and metrics stay untouched.</p>'
+                f'<form method="post" action="/channels/forget-browser-login" class="stacked-form">'
+                f'<input type="hidden" name="channel_id" value="{html.escape(entry.id)}" />'
+                f'<input type="hidden" name="provider_id" value="provider.browser.autobrowser" />'
+                f'<label>Reason <input name="reason" placeholder="Why should this Auto Browser login be removed?" /></label>'
+                f'<label>Confirm <input name="confirm_forget_login" placeholder="forget auto browser login" /></label>'
+                f'<button class="secondary danger" type="submit">Forget Auto Browser login</button>'
+                f"</form></details>"
+            )
         if entry.profile_busy:
             lease_warning = (
                 "Active lease: verify the browser process before unlocking."
@@ -314,6 +328,8 @@ def render_channel_cards(*, return_to: str) -> str:
               <p class="meta">Outputs: <code>{html.escape(outputs)}</code></p>
               <p class="meta">Worker: <code>{html.escape(worker_meta)}</code></p>
               {provider_meta}
+              <p class="meta">Active provider auth: <code>{html.escape(entry.active_provider_connection_status or "unknown")}</code></p>
+              <p class="meta">Auto Browser auth profile: <code>{html.escape(str(bool((entry.auto_browser_auth_profile or {}).get("exists"))).lower())}</code></p>
               {session_meta}
               <p class="meta">Last checked: <code>{html.escape(entry.last_checked_at or "never")}</code></p>
               {profile_meta}

@@ -9,12 +9,25 @@ from src.core.browser import BrowserArtifact
 def artifact_from_remote(
     payload: dict[str, Any], *, provider_id: str, session_id: str, job_id: str = ""
 ) -> BrowserArtifact:
-    remote_id = str(payload.get("artifact_id") or payload.get("id") or payload.get("screenshot_id") or uuid4().hex)
+    remote_reference = str(
+        payload.get("url")
+        or payload.get("path")
+        or payload.get("screenshot_url")
+        or payload.get("screenshot_path")
+        or ""
+    )
+    remote_id = str(
+        payload.get("artifact_id")
+        or payload.get("id")
+        or payload.get("screenshot_id")
+        or remote_reference
+        or uuid4().hex
+    )
     kind = str(payload.get("kind") or payload.get("type") or "screenshot")
     metadata = {
         "provider_id": provider_id,
         "remote_artifact_id": remote_id,
-        "remote_reference": str(payload.get("url") or payload.get("path") or ""),
+        "remote_reference": remote_reference,
         "session_id": session_id,
         "job_id": job_id,
     }

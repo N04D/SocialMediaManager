@@ -24,10 +24,11 @@ from .errors import (
     AutoBrowserConnectionError,
     AutoBrowserError,
     AutoBrowserNotReadyError,
+    AutoBrowserSessionNotFoundError,
     AutoBrowserUnauthorizedError,
     AutoBrowserVersionError,
 )
-from .models import AutoBrowserSessionMapping
+from .models import AutoBrowserReconciliationItem, AutoBrowserSessionMapping
 from .session import AutoBrowserSession
 from .target_resolver import AutoBrowserTargetResolver
 from .transport import AutoBrowserHttpTransport, AutoBrowserTransport
@@ -67,6 +68,7 @@ class AutoBrowserProvider:
         self.sessions: dict[str, AutoBrowserSession] = {}
         self._locks: dict[str, Any] = {}
         self._takeovers: dict[str, dict[str, Any]] = {}
+        self._last_reconciliation: dict[str, Any] = {}
 
     def create_session(self, options: BrowserSessionOptions) -> AutoBrowserSession:
         self._ensure_configured()
@@ -83,6 +85,15 @@ class AutoBrowserProvider:
         profile_name = self.auth_profile_name(options.profile_id)
         purpose = str(options.metadata.get("purpose") or "")
         job_id = str(options.metadata.get("job_id") or "")
+        ownership = self._ownership_metadata(options.profile_id, local_session_id, purpose=purpose, job_id=job_id)
+        profile_exists = False
+        try:
+            self.transport.get_auth_profile(profile_name)
+            profile_exists = True
+        except AutoBrowserSessionNotFoundError:
+            profile_exists = False
+        except AutoBrowserError:
+            profile_exists = False
         try:
             if options.exclusive:
                 lock = self.lock_manager.acquire(
@@ -93,20 +104,13 @@ class AutoBrowserProvider:
                     metadata={"purpose": purpose, "job_id": job_id},
                 )
                 self._locks[local_session_id] = lock
-            remote = self.transport.create_session(
-                {
-                    "name": local_session_id,
-                    "start_url": options.start_url or None,
-                    "auth_profile": profile_name,
-                    "memory_profile": False,
-                    "metadata": {
-                        "provider_id": PROVIDER_ID,
-                        "profile_id": options.profile_id,
-                        "purpose": purpose,
-                        "job_id": job_id,
-                    },
-                }
-            )
+            remote_payload = {
+                "name": local_session_id,
+                "start_url": options.start_url or None,
+            }
+            if profile_exists:
+                remote_payload["auth_profile"] = profile_name
+            remote = self.transport.create_session(remote_payload)
             remote_session_id = str(remote.get("session_id") or remote.get("id") or "")
             if not remote_session_id:
                 raise AutoBrowserError("Auto Browser did not return a session id.")
@@ -121,6 +125,9 @@ class AutoBrowserProvider:
                 created_at=channel_store.now_iso(),
                 updated_at=channel_store.now_iso(),
                 last_remote_status=str(remote.get("status") or ""),
+                application_id=ownership["application_id"],
+                workspace_hash=ownership["workspace_hash"],
+                channel_account_hash=ownership["channel_account_hash"],
             )
             self._save_mapping(mapping)
             session = AutoBrowserSession(
@@ -222,7 +229,10 @@ class AutoBrowserProvider:
                 "degraded", exc.code, ["Auto Browser health check failed."], compatibility="unreachable"
             )
         version = str(info.get("version") or info.get("server_version") or "")
-        if self.config.expected_server_version and version and version != self.config.expected_server_version:
+        compatible_versions = {self.config.expected_server_version}
+        if self.config.expected_server_version in {"1.3.1", "1.4.0"}:
+            compatible_versions.update({"1.3.1", "1.4.0"})
+        if self.config.expected_server_version and version and version not in compatible_versions:
             return self._health(
                 "error",
                 "auto_browser.incompatible_version",
@@ -244,6 +254,7 @@ class AutoBrowserProvider:
             "compatibility": "compatible" if status == "ready" else "compatible_with_warnings",
             "controller": self.config.safe_base_url(),
             "tested_server_version": "1.4.0",
+            "tested_api_version": "1.3.1",
             "server_version": version,
             "transport": "rest",
             "health_status": str(health.get("status") or "ok"),
@@ -252,6 +263,12 @@ class AutoBrowserProvider:
             "optional_operations_missing": missing,
             "messages": missing,
             "default_priority": 50,
+            "reconciliation": self._safe_reconciliation_summary(),
+            "auth_profile_capability": "available",
+            "takeover_capability": "available" if "takeover" not in missing else "missing",
+            "artifact_capability": "available" if "screenshots" not in missing else "missing",
+            "upload_capability": "available" if "uploads" not in missing else "missing",
+            "evaluation_capability": "available" if "evaluation" not in missing else "missing",
         }
 
     def request_human_takeover(self, request: HumanTakeoverRequest) -> dict[str, Any]:
@@ -291,6 +308,157 @@ class AutoBrowserProvider:
 
     def forget_auth_profile(self, profile_id: str) -> dict[str, Any]:
         return self.transport.delete_auth_profile(self.auth_profile_name(profile_id))
+
+    def auth_profile_status(self, profile_id: str) -> dict[str, Any]:
+        profile_name = self.auth_profile_name(profile_id)
+        try:
+            payload = self.transport.get_auth_profile(profile_name)
+        except AutoBrowserError as exc:
+            if exc.code == "auto_browser.session_not_found":
+                return {"exists": False, "provider_id": PROVIDER_ID, "auth_profile_reference": profile_name}
+            return {
+                "exists": False,
+                "provider_id": PROVIDER_ID,
+                "auth_profile_reference": profile_name,
+                "error_code": exc.code,
+            }
+        return {
+            "exists": True,
+            "provider_id": PROVIDER_ID,
+            "auth_profile_reference": profile_name,
+            "created_at": str(payload.get("created_at") or ""),
+            "last_used_at": str(payload.get("last_used_at") or ""),
+            "status": str(payload.get("status") or "available"),
+        }
+
+    def forget_auth_profile_with_audit(
+        self,
+        profile_id: str,
+        *,
+        admin_reason: str,
+        actor: str = "local-dashboard",
+        previous_status: str = "",
+    ) -> dict[str, Any]:
+        if len(admin_reason.strip()) < 8:
+            raise ValueError("forget login requires an explicit reason of at least 8 characters.")
+        profile_name = self.auth_profile_name(profile_id)
+        audit = {
+            "timestamp": channel_store.now_iso(),
+            "actor": actor,
+            "channel_account_id": profile_id,
+            "provider_id": PROVIDER_ID,
+            "auth_profile_reference": profile_name,
+            "previous_status": previous_status,
+            "reason": admin_reason.strip(),
+            "remote_delete_result": "not_attempted",
+            "local_status_update": "not_attempted",
+            "error_code": "",
+        }
+        try:
+            delete_result = self.forget_auth_profile(profile_id)
+            audit["remote_delete_result"] = str(delete_result.get("status") or delete_result.get("deleted") or "ok")
+            audit["local_status_update"] = "authentication_required"
+            result = {
+                "ok": True,
+                "auth_profile_reference": profile_name,
+                "delete_result": audit["remote_delete_result"],
+            }
+        except AutoBrowserError as exc:
+            audit["remote_delete_result"] = "failed"
+            audit["error_code"] = exc.code
+            result = {"ok": False, "auth_profile_reference": profile_name, "error_code": exc.code}
+        self._append_audit("auto_browser_forget_login_audit.jsonl", audit)
+        return result
+
+    def reconcile_sessions(self) -> dict[str, Any]:
+        mappings = self._load_mappings()
+        try:
+            remote_sessions = self.transport.list_sessions()
+        except AutoBrowserError as exc:
+            summary = {
+                "status": "unavailable",
+                "error_code": exc.code,
+                "items": [],
+                "orphaned_remote_count": 0,
+                "stale_mapping_count": len(mappings),
+                "checked_at": channel_store.now_iso(),
+            }
+            self._last_reconciliation = summary
+            return summary
+        remote_by_id = {
+            str(item.get("session_id") or item.get("id") or ""): item
+            for item in remote_sessions
+            if isinstance(item, dict) and str(item.get("session_id") or item.get("id") or "")
+        }
+        items: list[AutoBrowserReconciliationItem] = []
+        mapped_remote_ids: set[str] = set()
+        for local_id, mapping in mappings.items():
+            remote_id = str(mapping.get("remote_session_id") or "")
+            mapped_remote_ids.add(remote_id)
+            profile_id = str(mapping.get("profile_id") or "")
+            if remote_id in remote_by_id:
+                items.append(
+                    AutoBrowserReconciliationItem(
+                        kind="mapping_remote_match",
+                        local_session_id=local_id,
+                        remote_session_id=remote_id,
+                        profile_id=profile_id,
+                        status="active",
+                        safe_to_cleanup=False,
+                        message="Local mapping and remote session both exist.",
+                    )
+                )
+            else:
+                items.append(
+                    AutoBrowserReconciliationItem(
+                        kind="stale_mapping",
+                        local_session_id=local_id,
+                        remote_session_id=remote_id,
+                        profile_id=profile_id,
+                        status="remote_missing",
+                        safe_to_cleanup=True,
+                        message="Local mapping exists but remote session is missing.",
+                    )
+                )
+        for remote_id, remote in remote_by_id.items():
+            if remote_id in mapped_remote_ids:
+                continue
+            if self._owns_remote_session(remote):
+                items.append(
+                    AutoBrowserReconciliationItem(
+                        kind="orphaned_remote_session",
+                        remote_session_id=remote_id,
+                        status=str(remote.get("status") or "unknown"),
+                        safe_to_cleanup=False,
+                        message="Remote session appears owned by this app but has no local mapping.",
+                    )
+                )
+        stale = [item for item in items if item.kind == "stale_mapping"]
+        orphaned = [item for item in items if item.kind == "orphaned_remote_session"]
+        summary = {
+            "status": "consistent" if not stale and not orphaned else "inconsistent_state",
+            "checked_at": channel_store.now_iso(),
+            "items": [item.__dict__ for item in items],
+            "orphaned_remote_count": len(orphaned),
+            "stale_mapping_count": len(stale),
+        }
+        self._last_reconciliation = summary
+        return summary
+
+    def cleanup_stale_mapping(self, local_session_id: str, *, admin_reason: str) -> dict[str, Any]:
+        if len(admin_reason.strip()) < 8:
+            raise ValueError("cleanup requires an explicit reason of at least 8 characters.")
+        mappings = self._load_mappings()
+        mapping = mappings.get(local_session_id)
+        if not mapping:
+            return {"ok": False, "status": "missing"}
+        remote_id = str(mapping.get("remote_session_id") or "")
+        try:
+            self.transport.get_session(remote_id)
+        except Exception:
+            self._close_local_session(local_session_id)
+            return {"ok": True, "status": "stale_mapping_removed"}
+        return {"ok": False, "status": "remote_session_still_exists"}
 
     def force_unlock_profile(
         self, profile_id: str, *, admin_reason: str, actor: str = "local-dashboard"
@@ -341,6 +509,7 @@ class AutoBrowserProvider:
             "supported_operations": sorted(REQUIRED_OPERATIONS),
             "optional_operations_missing": [],
             "default_priority": 50,
+            "reconciliation": self._last_reconciliation or {"status": "not_checked"},
         }
 
     @staticmethod
@@ -376,3 +545,40 @@ class AutoBrowserProvider:
         if session_id in mappings:
             mappings.pop(session_id, None)
             self._write_mappings(mappings)
+
+    def _ownership_metadata(
+        self, profile_id: str, local_session_id: str, *, purpose: str, job_id: str
+    ) -> dict[str, str]:
+        workspace_hash = hashlib.sha256(str(Path.cwd()).encode()).hexdigest()[:16]
+        channel_hash = hashlib.sha256(profile_id.encode()).hexdigest()[:16]
+        return {
+            "application_id": "social-media-manager",
+            "provider_id": PROVIDER_ID,
+            "workspace_hash": workspace_hash,
+            "channel_account_hash": channel_hash,
+            "local_session_id": local_session_id,
+            "purpose": purpose,
+            "job_id": job_id,
+        }
+
+    def _owns_remote_session(self, remote: dict[str, Any]) -> bool:
+        metadata = remote.get("metadata") if isinstance(remote.get("metadata"), dict) else {}
+        return metadata.get("application_id") == "social-media-manager" and metadata.get("provider_id") == PROVIDER_ID
+
+    def _safe_reconciliation_summary(self) -> dict[str, Any]:
+        try:
+            summary = self.reconcile_sessions()
+        except Exception:
+            return {"status": "not_checked"}
+        return {
+            "status": summary.get("status", "unknown"),
+            "checked_at": summary.get("checked_at", ""),
+            "orphaned_remote_count": summary.get("orphaned_remote_count", 0),
+            "stale_mapping_count": summary.get("stale_mapping_count", 0),
+        }
+
+    def _append_audit(self, filename: str, payload: dict[str, Any]) -> None:
+        path = channel_store.STUDIO_DATA_DIR / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, sort_keys=True) + "\n")

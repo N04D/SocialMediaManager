@@ -35,6 +35,21 @@ class AutoBrowserSessionMapping:
     updated_at: str = ""
     last_remote_status: str = ""
     artifact_references: list[dict[str, Any]] = field(default_factory=list)
+    application_id: str = "social-media-manager"
+    workspace_hash: str = ""
+    channel_account_hash: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class AutoBrowserReconciliationItem:
+    kind: str
+    local_session_id: str = ""
+    remote_session_id: str = ""
+    profile_id: str = ""
+    status: str = ""
+    safe_to_cleanup: bool = False
+    message: str = ""
+    details: dict[str, Any] = field(default_factory=dict)
