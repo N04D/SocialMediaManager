@@ -155,24 +155,34 @@ class Phase3LockAndBridgeTests(unittest.TestCase):
         )
         self.addCleanup(held.release)
         with self.assertRaises(BrowserProfileBusyError):
-            with provider.acquire_legacy_execution_session(
-                profile_id="linkedin", purpose="linkedin.publish", job_id="publish-1"
-            ):
-                pass
+            provider.create_session(
+                BrowserSessionOptions(
+                    profile_id="linkedin",
+                    exclusive=True,
+                    metadata={"purpose": "linkedin.publish", "job_id": "publish-1"},
+                )
+            )
 
     def test_lock_metadata_contains_purpose_and_job_id(self) -> None:
         provider = LegacyBrowserProvider(
             config=self.config,
             open_session=lambda *a, **k: (FakePlaywright(), None, FakeContext(), FakePage(), True, "profile"),
         )
+        session = None
         try:
-            with provider.acquire_legacy_execution_session(
-                profile_id="linkedin", purpose="linkedin.metrics", job_id="metric-1"
-            ):
-                raw = json.loads(provider.lock_manager.lock_path("linkedin").read_text(encoding="utf-8"))
-                self.assertEqual(raw["purpose"], "linkedin.metrics")
-                self.assertEqual(raw["job_id"], "metric-1")
+            session = provider.create_session(
+                BrowserSessionOptions(
+                    profile_id="linkedin",
+                    exclusive=True,
+                    metadata={"purpose": "linkedin.metrics", "job_id": "metric-1"},
+                )
+            )
+            raw = json.loads(provider.lock_manager.lock_path("linkedin").read_text(encoding="utf-8"))
+            self.assertEqual(raw["purpose"], "linkedin.metrics")
+            self.assertEqual(raw["job_id"], "metric-1")
         finally:
+            if session is not None:
+                session.close()
             self.assertFalse(provider.profile_status("linkedin").busy)
 
     def test_active_flows_do_not_call_old_lock_helper(self) -> None:
@@ -201,6 +211,9 @@ class Phase3HealthAndForceUnlockTests(unittest.TestCase):
         self.assertNotIn("secret-profile", json.dumps(payload))
 
     def test_force_unlock_requires_reason_and_confirmation(self) -> None:
+        import sys
+
+        sys.modules.pop("pipeline", None)
         from dashboard import validate_force_unlock_confirmation
 
         ok, message = validate_force_unlock_confirmation("short", "yes")

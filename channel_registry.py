@@ -5,10 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from plugin_runtime import get_plugin_runtime
-
 from channel_store import ensure_channel_connection, get_channel_connection, worker_status_from_heartbeat
-
+from plugin_runtime import get_plugin_runtime
 
 ROOT_DIR = Path(__file__).resolve().parent
 CHANNELS_DIR = ROOT_DIR / "channels"
@@ -293,6 +291,7 @@ def scan_channel_registry(*, rescan: bool = False) -> list[ChannelRegistryEntry]
             entry.profile_lock_path = str(profile_state.get("lock_path") or "")
             entry.browser_provider_id = str(profile_state.get("provider_id") or "")
             if connection is not None:
+                entry.browser_provider_id = connection.browser_provider_id or entry.browser_provider_id
                 diagnostics = connection.last_connect_diagnostics_json or {}
                 entry.browser_session_status = str(diagnostics.get("browser_session_status") or "")
                 entry.human_takeover_status = str(diagnostics.get("human_takeover_status") or "")

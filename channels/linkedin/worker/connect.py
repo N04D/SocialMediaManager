@@ -8,7 +8,7 @@ from channel_store import (
     now_iso,
     update_channel_connection,
 )
-from pipeline import AppConfig
+from channels.linkedin.provider_config import preferred_browser_provider_id
 from plugin_runtime import get_plugin_runtime
 from src.core.browser import (
     BrowserProfileBusyError,
@@ -19,13 +19,12 @@ from src.core.browser import (
 )
 from src.core.plugins import PluginCapabilityError, PluginDependencyError
 
-from .browser import persistent_profile_path
 from .runtime import save_channel_worker_heartbeat, worker_id_for_channel
 from .session import inspect_linkedin_auth_state_session, wait_for_manual_linkedin_login_session
 
 
 def _finalize_connect_state(
-    config: AppConfig,
+    config,
     *,
     channel_id: str,
     status: str,
@@ -40,14 +39,14 @@ def _finalize_connect_state(
             channel_id=channel_id,
             mode="playwright_local",
             status=status,
-            local_profile_path=str(persistent_profile_path(config)),
+            local_profile_path=str(getattr(config, "linkedin_user_data_dir", "")),
             created_at=current_time,
         )
         connection.mode = "playwright_local"
         connection.status = status
         connection.last_checked_at = current_time
         connection.updated_at = current_time
-        connection.local_profile_path = str(persistent_profile_path(config))
+        connection.local_profile_path = str(getattr(config, "linkedin_user_data_dir", ""))
         connection.capabilities_snapshot_json = {
             "canConnect": True,
             "canPublish": True,
@@ -67,7 +66,7 @@ def _finalize_connect_state(
 
 
 def _preserve_connected_or_error(
-    config: AppConfig,
+    config,
     *,
     channel_id: str,
     diagnostics: dict,
@@ -82,14 +81,14 @@ def _preserve_connected_or_error(
             channel_id=channel_id,
             mode="playwright_local",
             status=status,
-            local_profile_path=str(persistent_profile_path(config)),
+            local_profile_path=str(getattr(config, "linkedin_user_data_dir", "")),
             created_at=current_time,
         )
         connection.mode = "playwright_local"
         connection.status = status
         connection.last_checked_at = current_time
         connection.updated_at = current_time
-        connection.local_profile_path = str(persistent_profile_path(config))
+        connection.local_profile_path = str(getattr(config, "linkedin_user_data_dir", ""))
         connection.last_error = last_error
         connection.last_connect_diagnostics_json = dict(diagnostics)
         connection.active_job_id = ""
@@ -160,7 +159,7 @@ def safe_error_message(error: Exception) -> str:
 
 
 def run_connect_with_runtime(
-    config: AppConfig,
+    config,
     app_runtime,
     *,
     channel_id: str = "linkedin",
@@ -222,7 +221,9 @@ def run_connect_with_runtime(
     )
 
     try:
-        provider_runtime = app_runtime.resolve_provider("browser.session")
+        provider_runtime = app_runtime.resolve_provider(
+            "browser.session", preferred_provider_id=preferred_browser_provider_id(config, channel_id=channel_id)
+        )
         browser_provider = provider_runtime.services["browser_provider"]
         diagnostics["browser_provider_id"] = provider_runtime.manifest.id
         profile_id = channel_id
@@ -406,7 +407,7 @@ def run_connect_with_runtime(
 
 
 def run_connect_action(
-    config: AppConfig,
+    config,
     *,
     channel_id: str = "linkedin",
     action_id: str = "",

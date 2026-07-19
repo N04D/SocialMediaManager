@@ -56,11 +56,34 @@ class BrowserTarget:
     text: str = ""
     label: str = ""
     test_id: str = ""
+    placeholder: str = ""
+    title: str = ""
+    alt_text: str = ""
+    stable_attribute: str = ""
+    stable_attribute_value: str = ""
     css: str = ""
     xpath: str = ""
+    exact: bool = False
+    index: int = 0
+    timeout_millis: int = 0
+    require_visible: bool = False
 
     def __post_init__(self) -> None:
-        if not any([self.role, self.accessible_name, self.text, self.label, self.test_id, self.css, self.xpath]):
+        if not any(
+            [
+                self.role,
+                self.accessible_name,
+                self.text,
+                self.label,
+                self.test_id,
+                self.placeholder,
+                self.title,
+                self.alt_text,
+                self.stable_attribute,
+                self.css,
+                self.xpath,
+            ]
+        ):
             raise ValueError("BrowserTarget needs at least one locator strategy.")
 
 

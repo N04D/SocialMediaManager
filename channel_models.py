@@ -23,6 +23,7 @@ class ChannelConnection:
     active_worker_id: str = ""
     active_claimed_at: str = ""
     last_connect_diagnostics_json: dict[str, Any] = field(default_factory=dict)
+    browser_provider_id: str = ""
 
 
 @dataclass

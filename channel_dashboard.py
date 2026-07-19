@@ -195,7 +195,14 @@ def render_channel_cards(*, return_to: str) -> str:
         profile_meta = ""
         if entry.profile_busy:
             profile_meta = f'<p class="meta"><strong>Profile busy:</strong> {html.escape(entry.profile_lock_owner or "another process is using the persistent profile")}</p>'
-        provider_meta = f'<p class="meta">Browser provider: <code>{html.escape(entry.browser_provider_id or "not resolved")}</code></p>'
+        provider_meta = (
+            f'<p class="meta">Browser provider: <code>{html.escape(entry.browser_provider_id or "default resolver")}</code></p>'
+            f'<form method="post" action="/channels/browser-provider" class="inline-form">'
+            f'<input type="hidden" name="channel_id" value="{html.escape(entry.id)}" />'
+            f'<input type="hidden" name="return_to" value="{html.escape(return_to)}" />'
+            f'<input name="browser_provider_id" value="{html.escape(entry.browser_provider_id)}" placeholder="provider.browser.legacy or blank for default" />'
+            f'<button class="secondary" type="submit">Set provider</button></form>'
+        )
         session_meta = ""
         if entry.browser_session_status or entry.human_takeover_status:
             session_meta = (

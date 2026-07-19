@@ -2970,6 +2970,30 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 runtime = get_plugin_runtime(self.config, reset=True, strict=False)
                 provider = runtime.browser_provider()
                 provider.force_unlock_profile(channel_id, admin_reason=reason)
+            elif path == "/channels/browser-provider":
+                channel_id = form_value(form, "channel_id").strip()
+                browser_provider_id = form_value(form, "browser_provider_id", "").strip()
+                entry = next((item for item in scan_channel_registry(rescan=True) if item.id == channel_id), None)
+                if entry is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                if browser_provider_id:
+                    try:
+                        runtime.resolve_provider("browser.session", preferred_provider_id=browser_provider_id)
+                    except Exception:
+                        self.send_error(HTTPStatus.BAD_REQUEST, "Requested browser provider is not available.")
+                        return
+                connection = get_channel_connection(channel_id) or ensure_channel_connection(
+                    channel_id,
+                    mode=entry.mode or str(entry.manifest.get("mode") or ""),
+                    status=entry.connection_status or "not_configured",
+                    local_profile_path=str(self.config.linkedin_user_data_dir.resolve()) if channel_id == "linkedin" else "",
+                    capabilities_snapshot_json=dict(entry.manifest.get("capabilities") or {}),
+                )
+                connection.browser_provider_id = browser_provider_id
+                connection.updated_at = now_iso()
+                save_channel_connection(connection)
             elif path == "/channels/disconnect":
                 channel_id = form_value(form, "channel_id").strip()
                 entry = next((item for item in scan_channel_registry(rescan=True) if item.id == channel_id), None)

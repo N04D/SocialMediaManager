@@ -3,9 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from src.core.browser import BrowserProfileBusyError, BrowserProviderError
+from src.core.browser import BrowserProfileBusyError, BrowserProviderError, BrowserSessionOptions
 from src.core.plugins import PluginCapabilityError
 from src.core.plugins.manifest import PluginManifest, PluginStatus
+
+from .provider_config import preferred_browser_provider_id
 
 
 class LinkedInChannelRuntimeError(RuntimeError):
@@ -33,9 +35,9 @@ class LinkedInChannelRuntime:
                 {"plugin_id": self.manifest.id, "status": getattr(runtime, "status", "missing")},
             )
 
-    def browser_provider(self):
+    def browser_provider(self, *, channel_id: str = "linkedin"):
         self._ensure_ready()
-        preferred_provider_id = str(getattr(self.config, "linkedin_browser_provider_id", "") or "")
+        preferred_provider_id = preferred_browser_provider_id(self.config, channel_id=channel_id)
         try:
             return self.app_runtime.browser_provider(preferred_provider_id=preferred_provider_id)
         except PluginCapabilityError as exc:
@@ -112,20 +114,58 @@ class LinkedInChannelRuntime:
     def scrape_posts(
         self, *, channel_id: str = "linkedin", worker_id: str = "", started_at: str = ""
     ) -> list[dict[str, Any]]:
-        provider = self.browser_provider()
+        provider = self.browser_provider(channel_id=channel_id)
+        session = None
         try:
-            with provider.acquire_legacy_execution_session(
-                profile_id=channel_id,
-                purpose="linkedin.scrape_posts",
-                job_id=started_at or worker_id,
-                headless=True,
-            ) as session:
-                session.navigate(str(getattr(self.config, "linkedin_feed_url", "https://www.linkedin.com/feed/")))
+            session = provider.create_session(
+                BrowserSessionOptions(
+                    profile_id=channel_id,
+                    headless=True,
+                    exclusive=True,
+                    metadata={
+                        "purpose": "linkedin.scrape_posts",
+                        "job_id": started_at or worker_id,
+                        "channel_id": channel_id,
+                    },
+                )
+            )
+            session.navigate(str(getattr(self.config, "linkedin_feed_url", "https://www.linkedin.com/feed/")))
+            extracted = session.evaluate(
+                """
+                () => Array.from(document.querySelectorAll("[data-urn*='activity'], article, .feed-shared-update-v2"))
+                  .slice(0, 25)
+                  .map((node) => {
+                    const text = (node.innerText || "").trim();
+                    const link = Array.from(node.querySelectorAll("a[href]"))
+                      .map((anchor) => anchor.href)
+                      .find((href) => href.includes("/feed/update/") || href.includes("/posts/")) || "";
+                    return {text, url: link};
+                  })
+                  .filter((item) => item.text || item.url)
+                """
+            )
+            if not isinstance(extracted, list):
+                extracted = []
+            seen: set[str] = set()
+            posts: list[dict[str, Any]] = []
+            for item in extracted:
+                if not isinstance(item, dict):
+                    continue
+                key = str(item.get("url") or item.get("text") or "")
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                posts.append({"url": str(item.get("url") or ""), "text": str(item.get("text") or "")[:500]})
+            if not posts:
                 return [{"url": session.current_url(), "title": session.title()}]
+            return posts
         except BrowserProfileBusyError as exc:
             raise LinkedInChannelRuntimeError(exc.code, exc.user_message, exc.details) from exc
         except BrowserProviderError as exc:
             raise LinkedInChannelRuntimeError(exc.code, exc.user_message, exc.details) from exc
+        finally:
+            if session is not None:
+                session.close()
 
     def health_check(self) -> dict[str, Any]:
         provider_id = ""

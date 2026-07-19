@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from plugin_runtime import ApplicationPluginRuntime
 from plugins.providers.legacy_browser import LegacyBrowserProvider
+from src.core.browser import BrowserSessionOptions
 from src.core.plugins.manifest import PluginManifest, PluginStatus
 from src.core.plugins.runtime import PluginRuntime, ProviderResolver
 
@@ -183,11 +184,19 @@ class LinkedInConnectTests(unittest.TestCase):
             "current_url_changes": [],
             "authentication_marker": "",
         }
-        session_module.attach_navigation_observer(page, diagnostics)
-        session_module.navigate_linkedin_once(page, self.config.linkedin_feed_url, diagnostics=diagnostics)
-        logged_in, reason = session_module.wait_for_manual_linkedin_login(
-            page, diagnostics=diagnostics, timeout_seconds=5, poll_millis=1
+        provider = LegacyBrowserProvider(
+            config=self.config,
+            open_session=lambda *args, **kwargs: (FakePlaywright(), None, FakeContext(), page, True, "profile"),
         )
+        browser_session = provider.create_session(BrowserSessionOptions(profile_id="linkedin", exclusive=True))
+        logged_in, reason = session_module.is_linkedin_logged_in_session(
+            browser_session, self.config.linkedin_feed_url, diagnostics=diagnostics
+        )
+        if not logged_in:
+            logged_in, reason = session_module.wait_for_manual_linkedin_login_session(
+                browser_session, diagnostics=diagnostics, timeout_seconds=5, poll_millis=1
+            )
+        browser_session.close()
         self.assertTrue(logged_in)
         self.assertEqual(reason, "")
         self.assertEqual(page.goto_count, 1)

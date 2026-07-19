@@ -16,13 +16,12 @@ from channel_store import (
     save_metric_snapshot,
     update_channel_connection,
 )
-from pipeline import AppConfig
+from channels.linkedin.provider_config import preferred_browser_provider_id
 from plugin_runtime import get_plugin_runtime
-from src.core.browser import BrowserProfileBusyError, BrowserProviderError
+from src.core.browser import BrowserProfileBusyError, BrowserProviderError, BrowserSessionOptions
 
-from .browser import capture_worker_screenshot
 from .runtime import save_channel_worker_heartbeat, worker_id_for_channel
-from .session import is_linkedin_logged_in
+from .session import is_linkedin_logged_in_session
 from .urls import LinkedInUrlError, normalize_linkedin_post_url
 
 _METRIC_PATTERNS = {
@@ -36,8 +35,7 @@ _METRIC_PATTERNS = {
 }
 
 
-
-def _update_connection_state(config: AppConfig, *, channel_id: str, status: str, last_error: str = "") -> ChannelConnection:
+def _update_connection_state(config: Any, *, channel_id: str, status: str, last_error: str = "") -> ChannelConnection:
     current_time = now_iso()
 
     def mutate(existing: ChannelConnection | None) -> ChannelConnection:
@@ -59,7 +57,6 @@ def _update_connection_state(config: AppConfig, *, channel_id: str, status: str,
         return connection
 
     return update_channel_connection(channel_id, mutate)
-
 
 
 def parse_compact_number(raw: str) -> int | None:
@@ -103,9 +100,8 @@ def parse_compact_number(raw: str) -> int | None:
     return int(numeric * multiplier)
 
 
-
-def _collect_visible_strings(page) -> list[str]:
-    payload = page.evaluate(
+def _collect_visible_strings(browser_session) -> list[str]:
+    payload = browser_session.evaluate(
         """
         () => Array.from(document.querySelectorAll('a, button, span, div'))
           .map((node) => {
@@ -122,9 +118,8 @@ def _collect_visible_strings(page) -> list[str]:
     return [str(item) for item in payload if str(item).strip()]
 
 
-
-def extract_visible_linkedin_metrics(page) -> dict[str, Any]:
-    visible_strings = _collect_visible_strings(page)
+def extract_visible_linkedin_metrics(browser_session) -> dict[str, Any]:
+    visible_strings = _collect_visible_strings(browser_session)
     joined = "\n".join(visible_strings)
     parsed: dict[str, int | None] = {
         "impressions": None,
@@ -150,15 +145,15 @@ def extract_visible_linkedin_metrics(page) -> dict[str, Any]:
     }
 
 
-
 def _delta(current: int | None, previous: int | None) -> int | None:
     if current is None or previous is None:
         return None
     return current - previous
 
 
-
-def _record_log(job: MetricJob, *, status: str, step: str, worker_id: str, error_code: str = "", error_message: str = "") -> None:
+def _record_log(
+    job: MetricJob, *, status: str, step: str, worker_id: str, error_code: str = "", error_message: str = ""
+) -> None:
     append_channel_job_log(
         ChannelJobLog(
             id=generate_id("log"),
@@ -178,7 +173,6 @@ def _record_log(job: MetricJob, *, status: str, step: str, worker_id: str, error
     )
 
 
-
 def _set_profile_busy(job: MetricJob, message: str) -> MetricJob:
     job.status = "queued"
     job.updated_at = now_iso()
@@ -191,9 +185,15 @@ def _set_profile_busy(job: MetricJob, message: str) -> MetricJob:
     return save_metric_job(job)
 
 
+def _capture_session_screenshot(browser_session) -> str:
+    artifact = browser_session.screenshot(full_page=True)
+    if artifact.path:
+        return str(artifact.path)
+    return artifact.id
+
 
 def run_metric_job_with_runtime(
-    config: AppConfig,
+    config: Any,
     app_runtime,
     job_id: str,
     *,
@@ -231,97 +231,36 @@ def run_metric_job_with_runtime(
         job.lease_expires_at = ""
         job.heartbeat_at = ""
         save_metric_job(job)
-        _record_log(job, status=job.status, step="validate_url", worker_id=resolved_worker_id, error_code=job.error_code, error_message=job.error_message)
+        _record_log(
+            job,
+            status=job.status,
+            step="validate_url",
+            worker_id=resolved_worker_id,
+            error_code=job.error_code,
+            error_message=job.error_message,
+        )
         return job
 
     try:
-        provider = app_runtime.browser_provider(preferred_provider_id=str(getattr(config, "linkedin_browser_provider_id", "") or ""))
-        with provider.acquire_legacy_execution_session(
-            profile_id=job.channel_id,
-            purpose="linkedin.metrics",
-            job_id=job.id,
-            headless=True,
-        ) as browser_session:
-            page = browser_session.page
-            session_label = browser_session.session_label
-            try:
-                logged_in, reason = is_linkedin_logged_in(page, config.linkedin_feed_url)
-                if not logged_in:
-                    _update_connection_state(config, channel_id=job.channel_id, status="needs_login", last_error=reason)
-                    job.status = "needs_login"
-                    job.error_code = "needs_login"
-                    job.error_message = reason
-                    job.finished_at = now_iso()
-                    job.updated_at = now_iso()
-                    job.claimed_by = ""
-                    job.claimed_at = ""
-                    job.lease_expires_at = ""
-                    job.heartbeat_at = ""
-                    save_metric_job(job)
-                    save_channel_worker_heartbeat(
-                        job.channel_id,
-                        status="error",
-                        current_job_id=job.id,
-                        current_job_type="metrics",
-                        last_error=reason,
-                        worker_id=resolved_worker_id,
-                        started_at=started_at,
-                    )
-                    _record_log(job, status=job.status, step="needs_login", worker_id=resolved_worker_id, error_code=job.error_code, error_message=job.error_message)
-                    return job
-
-                _update_connection_state(config, channel_id=job.channel_id, status="connected")
-                page.goto(trusted_url, wait_until="domcontentloaded")
-                page.bring_to_front()
-                page.wait_for_timeout(2500)
-                extraction = extract_visible_linkedin_metrics(page)
-                job.screenshot_path = capture_worker_screenshot(
-                    page,
-                    channel_id=job.channel_id,
-                    job_type="metrics",
-                    job_id=job.id,
-                    step="snapshot",
-                )
-                parsed = extraction.get("parsed", {})
-                previous = latest_metric_snapshot_for_post(post.id)
-                captured_at = now_iso()
-                seconds_since_previous_snapshot = None
-                if previous is not None:
-                    try:
-                        current_dt = datetime.fromisoformat(captured_at)
-                        previous_dt = datetime.fromisoformat(previous.captured_at)
-                        seconds_since_previous_snapshot = int((current_dt - previous_dt).total_seconds())
-                    except Exception:
-                        seconds_since_previous_snapshot = None
-                snapshot = PostMetricSnapshot(
-                    id=generate_id("snapshot"),
-                    published_post_id=post.id,
-                    channel_id=post.channel_id,
-                    captured_at=captured_at,
-                    impressions=parsed.get("impressions"),
-                    views=parsed.get("views"),
-                    reactions=parsed.get("reactions"),
-                    comments=parsed.get("comments"),
-                    reposts=parsed.get("reposts"),
-                    shares=parsed.get("shares"),
-                    clicks=parsed.get("clicks"),
-                    raw_metrics_json={
-                        "session_label": session_label,
-                        "source_url": trusted_url,
-                        "visible_strings": extraction.get("visible_strings", []),
-                        "raw_matches": extraction.get("raw_matches", {}),
-                    },
-                    screenshot_path=job.screenshot_path,
-                    created_at=captured_at,
-                    delta_views=_delta(parsed.get("views"), previous.views if previous else None),
-                    delta_impressions=_delta(parsed.get("impressions"), previous.impressions if previous else None),
-                    delta_reactions=_delta(parsed.get("reactions"), previous.reactions if previous else None),
-                    delta_comments=_delta(parsed.get("comments"), previous.comments if previous else None),
-                    delta_reposts=_delta(parsed.get("reposts"), previous.reposts if previous else None),
-                    seconds_since_previous_snapshot=seconds_since_previous_snapshot,
-                )
-                save_metric_snapshot(snapshot)
-                job.status = "success"
+        provider = app_runtime.browser_provider(
+            preferred_provider_id=preferred_browser_provider_id(config, channel_id=job.channel_id)
+        )
+        browser_session = provider.create_session(
+            BrowserSessionOptions(
+                profile_id=job.channel_id,
+                headless=True,
+                exclusive=True,
+                metadata={"purpose": "linkedin.metrics", "job_id": job.id, "channel_id": job.channel_id},
+            )
+        )
+        session_label = str(getattr(browser_session, "session_label", browser_session.session_id))
+        try:
+            logged_in, reason = is_linkedin_logged_in_session(browser_session, config.linkedin_feed_url)
+            if not logged_in:
+                _update_connection_state(config, channel_id=job.channel_id, status="needs_login", last_error=reason)
+                job.status = "needs_login"
+                job.error_code = "needs_login"
+                job.error_message = reason
                 job.finished_at = now_iso()
                 job.updated_at = now_iso()
                 job.claimed_by = ""
@@ -331,14 +270,85 @@ def run_metric_job_with_runtime(
                 save_metric_job(job)
                 save_channel_worker_heartbeat(
                     job.channel_id,
-                    status="idle",
+                    status="error",
+                    current_job_id=job.id,
+                    current_job_type="metrics",
+                    last_error=reason,
                     worker_id=resolved_worker_id,
                     started_at=started_at,
                 )
-                _record_log(job, status=job.status, step="metrics_captured", worker_id=resolved_worker_id)
+                _record_log(
+                    job,
+                    status=job.status,
+                    step="needs_login",
+                    worker_id=resolved_worker_id,
+                    error_code=job.error_code,
+                    error_message=job.error_message,
+                )
                 return job
-            finally:
-                pass
+
+            _update_connection_state(config, channel_id=job.channel_id, status="connected")
+            browser_session.navigate(trusted_url)
+            browser_session.wait_for_timeout(2500)
+            extraction = extract_visible_linkedin_metrics(browser_session)
+            job.screenshot_path = _capture_session_screenshot(browser_session)
+            parsed = extraction.get("parsed", {})
+            previous = latest_metric_snapshot_for_post(post.id)
+            captured_at = now_iso()
+            seconds_since_previous_snapshot = None
+            if previous is not None:
+                try:
+                    current_dt = datetime.fromisoformat(captured_at)
+                    previous_dt = datetime.fromisoformat(previous.captured_at)
+                    seconds_since_previous_snapshot = int((current_dt - previous_dt).total_seconds())
+                except Exception:
+                    seconds_since_previous_snapshot = None
+            snapshot = PostMetricSnapshot(
+                id=generate_id("snapshot"),
+                published_post_id=post.id,
+                channel_id=post.channel_id,
+                captured_at=captured_at,
+                impressions=parsed.get("impressions"),
+                views=parsed.get("views"),
+                reactions=parsed.get("reactions"),
+                comments=parsed.get("comments"),
+                reposts=parsed.get("reposts"),
+                shares=parsed.get("shares"),
+                clicks=parsed.get("clicks"),
+                raw_metrics_json={
+                    "session_label": session_label,
+                    "source_url": trusted_url,
+                    "visible_strings": extraction.get("visible_strings", []),
+                    "raw_matches": extraction.get("raw_matches", {}),
+                },
+                screenshot_path=job.screenshot_path,
+                created_at=captured_at,
+                delta_views=_delta(parsed.get("views"), previous.views if previous else None),
+                delta_impressions=_delta(parsed.get("impressions"), previous.impressions if previous else None),
+                delta_reactions=_delta(parsed.get("reactions"), previous.reactions if previous else None),
+                delta_comments=_delta(parsed.get("comments"), previous.comments if previous else None),
+                delta_reposts=_delta(parsed.get("reposts"), previous.reposts if previous else None),
+                seconds_since_previous_snapshot=seconds_since_previous_snapshot,
+            )
+            save_metric_snapshot(snapshot)
+            job.status = "success"
+            job.finished_at = now_iso()
+            job.updated_at = now_iso()
+            job.claimed_by = ""
+            job.claimed_at = ""
+            job.lease_expires_at = ""
+            job.heartbeat_at = ""
+            save_metric_job(job)
+            save_channel_worker_heartbeat(
+                job.channel_id,
+                status="idle",
+                worker_id=resolved_worker_id,
+                started_at=started_at,
+            )
+            _record_log(job, status=job.status, step="metrics_captured", worker_id=resolved_worker_id)
+            return job
+        finally:
+            browser_session.close()
     except BrowserProfileBusyError as exc:
         job = _set_profile_busy(job, exc.user_message)
         save_channel_worker_heartbeat(
@@ -350,7 +360,14 @@ def run_metric_job_with_runtime(
             worker_id=resolved_worker_id,
             started_at=started_at,
         )
-        _record_log(job, status=job.status, step="profile_busy", worker_id=resolved_worker_id, error_code=job.error_code, error_message=job.error_message)
+        _record_log(
+            job,
+            status=job.status,
+            step="profile_busy",
+            worker_id=resolved_worker_id,
+            error_code=job.error_code,
+            error_message=job.error_message,
+        )
         return job
     except BrowserProviderError as exc:
         job.status = "failed"
@@ -372,7 +389,14 @@ def run_metric_job_with_runtime(
             worker_id=resolved_worker_id,
             started_at=started_at,
         )
-        _record_log(job, status=job.status, step="metrics_error", worker_id=resolved_worker_id, error_code=job.error_code, error_message=job.error_message)
+        _record_log(
+            job,
+            status=job.status,
+            step="metrics_error",
+            worker_id=resolved_worker_id,
+            error_code=job.error_code,
+            error_message=job.error_message,
+        )
         return job
     except Exception as exc:
         job.status = "failed"
@@ -394,12 +418,19 @@ def run_metric_job_with_runtime(
             worker_id=resolved_worker_id,
             started_at=started_at,
         )
-        _record_log(job, status=job.status, step="metrics_error", worker_id=resolved_worker_id, error_code=job.error_code, error_message=job.error_message)
+        _record_log(
+            job,
+            status=job.status,
+            step="metrics_error",
+            worker_id=resolved_worker_id,
+            error_code=job.error_code,
+            error_message=job.error_message,
+        )
         raise
 
 
 def run_metric_job(
-    config: AppConfig,
+    config: Any,
     job_id: str,
     *,
     worker_id: str = "",

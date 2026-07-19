@@ -77,12 +77,23 @@ class ApplicationPluginRuntime:
                     "capabilities": list(plugin_runtime.manifest.capabilities),
                     "dependencies": dependencies,
                     "selected_provider": plugin_runtime.health.get("browser_provider", ""),
+                    "provider_contract_version": "browser-session-v1"
+                    if plugin_runtime.manifest.type.value == "provider"
+                    else "",
+                    "optional_operations_missing": plugin_runtime.health.get("optional_operations_missing", []),
                     "health": plugin_runtime.health,
                     "last_error_code": plugin_runtime.health.get("code", ""),
                     "degraded_reason": "; ".join(plugin_runtime.health.get("messages", []) or []),
                 }
             )
-        return {"plugins": plugins}
+        try:
+            from channel_store import get_channel_connection
+
+            linkedin_connection = get_channel_connection("linkedin")
+            account_provider = linkedin_connection.browser_provider_id if linkedin_connection else ""
+        except Exception:
+            account_provider = ""
+        return {"plugins": plugins, "accounts": {"linkedin": {"browser_provider_id": account_provider}}}
 
 
 _RUNTIME: ApplicationPluginRuntime | None = None
