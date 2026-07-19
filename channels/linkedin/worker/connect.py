@@ -9,16 +9,23 @@ from channel_store import (
     update_channel_connection,
 )
 from pipeline import AppConfig
+from plugin_runtime import get_plugin_runtime
+from src.core.browser import (
+    BrowserProfileBusyError,
+    BrowserProviderError,
+    BrowserSessionOptions,
+    BrowserUnavailableError,
+    HumanTakeoverRequest,
+)
+from src.core.plugins import PluginCapabilityError, PluginDependencyError
 
-from .browser import ProfileBusyError, RemoteBrowserUnavailableError, linkedin_profile_lock, open_local_linkedin_session, persistent_profile_path
+from .browser import persistent_profile_path
 from .runtime import save_channel_worker_heartbeat, worker_id_for_channel
 from .session import (
     attach_navigation_observer,
     inspect_linkedin_auth_state,
-    navigate_linkedin_once,
     wait_for_manual_linkedin_login,
 )
-
 
 
 def _finalize_connect_state(
@@ -63,7 +70,6 @@ def _finalize_connect_state(
     return update_channel_connection(channel_id, mutate)
 
 
-
 def _preserve_connected_or_error(
     config: AppConfig,
     *,
@@ -99,7 +105,6 @@ def _preserve_connected_or_error(
     return update_channel_connection(channel_id, mutate)
 
 
-
 def _write_connect_log(
     *,
     channel_id: str,
@@ -129,6 +134,33 @@ def _write_connect_log(
         )
     )
 
+
+def normalize_connection_status(status: str) -> str:
+    mapping = {
+        "not_configured": "disconnected",
+        "needs_login": "authentication_required",
+        "connecting": "connecting",
+        "connected": "connected",
+        "error": "error",
+        "disabled": "disconnected",
+    }
+    return mapping.get(status, status)
+
+
+def browser_error_to_connection_status(error: Exception) -> str:
+    if isinstance(error, BrowserProfileBusyError):
+        return "error"
+    if isinstance(error, BrowserUnavailableError):
+        return "authentication_required"
+    if isinstance(error, (PluginCapabilityError, PluginDependencyError)):
+        return "error"
+    return "error"
+
+
+def safe_error_message(error: Exception) -> str:
+    if isinstance(error, (BrowserProviderError, PluginCapabilityError, PluginDependencyError)):
+        return error.user_message
+    return str(error) or "Unexpected LinkedIn Connect error."
 
 
 def run_connect_action(
@@ -193,76 +225,105 @@ def run_connect_action(
     )
 
     try:
-        with linkedin_profile_lock(channel_id, owner=f"{resolved_worker_id}:connect"):
-            playwright, browser, context, page, owns_session, session_label = open_local_linkedin_session(
-                config,
-                headed_default=True,
-                allow_remote_debugging=True,
-                require_remote_debugging=True,
+        runtime = get_plugin_runtime(config, reset=True, strict=True)
+        provider_runtime = runtime.resolve_provider("browser.session")
+        browser_provider = provider_runtime.services["browser_provider"]
+        diagnostics["browser_provider_id"] = provider_runtime.manifest.id
+        profile_id = channel_id
+        profile_status = browser_provider.profile_status(profile_id)
+        diagnostics["profile_busy"] = profile_status.busy
+        diagnostics["profile_lock_owner"] = profile_status.owner
+        browser_session = browser_provider.create_session(
+            BrowserSessionOptions(
+                profile_id=profile_id,
+                headless=False,
+                exclusive=True,
+                start_url="",
+                metadata={"owner": f"{resolved_worker_id}:connect", "channel_id": channel_id},
             )
-            diagnostics["browser_launch_count"] = 1
-            attach_navigation_observer(page, diagnostics)
-            try:
-                navigate_linkedin_once(page, config.linkedin_feed_url, diagnostics=diagnostics)
-                result = inspect_linkedin_auth_state(page, diagnostics=diagnostics)
-                if not result["authenticated"]:
-                    logged_in, reason = wait_for_manual_linkedin_login(page, diagnostics=diagnostics)
-                    if not logged_in:
-                        connection = _finalize_connect_state(
-                            config,
-                            channel_id=channel_id,
-                            status="needs_login",
-                            diagnostics=diagnostics,
-                            last_error=reason,
-                        )
-                        save_channel_worker_heartbeat(
-                            channel_id,
-                            status="error",
-                            current_job_id=resolved_action_id,
-                            current_job_type="connect",
-                            last_error=reason,
-                            worker_id=resolved_worker_id,
-                            started_at=started_at,
-                        )
-                        _write_connect_log(
-                            channel_id=channel_id,
-                            action_id=resolved_action_id,
-                            worker_id=resolved_worker_id,
-                            status="needs_login",
-                            last_step="manual_login_timeout",
-                            diagnostics=diagnostics,
-                            started_at=started_at,
-                            error_code="needs_login",
-                            error_message=reason,
-                        )
-                        return connection
-                connection = _finalize_connect_state(
-                    config,
-                    channel_id=channel_id,
-                    status="connected",
-                    diagnostics=diagnostics,
+        )
+        diagnostics["browser_launch_count"] = 1
+        diagnostics["browser_session_id"] = browser_session.session_id
+        diagnostics["browser_session_status"] = "active"
+        page = getattr(browser_session, "page", None)
+        if page is None:
+            raise BrowserUnavailableError(
+                "browser_session.page_unavailable",
+                "Browser session did not expose a page for LinkedIn authentication checks.",
+            )
+        attach_navigation_observer(page, diagnostics)
+        try:
+            diagnostics["requested_navigation_count"] = int(diagnostics.get("requested_navigation_count", 0)) + 1
+            browser_session.navigate(config.linkedin_feed_url)
+            result = inspect_linkedin_auth_state(page, diagnostics=diagnostics)
+            if not result["authenticated"]:
+                takeover = browser_provider.request_human_takeover(
+                    HumanTakeoverRequest(
+                        session_id=browser_session.session_id,
+                        reason="LinkedIn authentication is required.",
+                        timeout_seconds=600,
+                        metadata={"channel_id": channel_id, "action_id": resolved_action_id},
+                    )
                 )
-                save_channel_worker_heartbeat(
-                    channel_id,
-                    status="idle",
-                    worker_id=resolved_worker_id,
-                    started_at=started_at,
-                )
-                _write_connect_log(
-                    channel_id=channel_id,
-                    action_id=resolved_action_id,
-                    worker_id=resolved_worker_id,
-                    status="success",
-                    last_step="authenticated",
-                    diagnostics=diagnostics,
-                    started_at=started_at,
-                )
-                return connection
-            finally:
-                if owns_session:
-                    context.close()
-                playwright.stop()
-    except ProfileBusyError as exc:
+                diagnostics["human_takeover_status"] = takeover.get("status", "requested")
+                diagnostics["human_takeover_reference"] = takeover.get("takeover_reference", "")
+                logged_in, reason = wait_for_manual_linkedin_login(page, diagnostics=diagnostics)
+                if not logged_in:
+                    diagnostics["human_takeover_status"] = "expired"
+                    connection = _finalize_connect_state(
+                        config,
+                        channel_id=channel_id,
+                        status="needs_login",
+                        diagnostics=diagnostics,
+                        last_error=reason,
+                    )
+                    save_channel_worker_heartbeat(
+                        channel_id,
+                        status="error",
+                        current_job_id=resolved_action_id,
+                        current_job_type="connect",
+                        last_error=reason,
+                        worker_id=resolved_worker_id,
+                        started_at=started_at,
+                    )
+                    _write_connect_log(
+                        channel_id=channel_id,
+                        action_id=resolved_action_id,
+                        worker_id=resolved_worker_id,
+                        status="needs_login",
+                        last_step="human_takeover_expired",
+                        diagnostics=diagnostics,
+                        started_at=started_at,
+                        error_code="authentication_required",
+                        error_message=reason,
+                    )
+                    return connection
+                diagnostics["human_takeover_status"] = "completed"
+            connection = _finalize_connect_state(
+                config,
+                channel_id=channel_id,
+                status="connected",
+                diagnostics=diagnostics,
+            )
+            save_channel_worker_heartbeat(
+                channel_id,
+                status="idle",
+                worker_id=resolved_worker_id,
+                started_at=started_at,
+            )
+            _write_connect_log(
+                channel_id=channel_id,
+                action_id=resolved_action_id,
+                worker_id=resolved_worker_id,
+                status="success",
+                last_step="authenticated",
+                diagnostics=diagnostics,
+                started_at=started_at,
+            )
+            return connection
+        finally:
+            browser_session.close()
+    except BrowserProfileBusyError as exc:
         connection = _preserve_connected_or_error(
             config,
             channel_id=channel_id,
@@ -274,7 +335,7 @@ def run_connect_action(
             status="error",
             current_job_id=resolved_action_id,
             current_job_type="connect",
-            last_error=str(exc),
+            last_error=safe_error_message(exc),
             worker_id=resolved_worker_id,
             started_at=started_at,
         )
@@ -287,23 +348,24 @@ def run_connect_action(
             diagnostics=diagnostics,
             started_at=started_at,
             error_code="profile_busy",
-            error_message=str(exc),
+            error_message=safe_error_message(exc),
         )
         return connection
-    except RemoteBrowserUnavailableError as exc:
+    except (BrowserUnavailableError, PluginCapabilityError, PluginDependencyError) as exc:
+        status = browser_error_to_connection_status(exc)
         connection = _finalize_connect_state(
             config,
             channel_id=channel_id,
-            status="needs_login",
+            status="needs_login" if status == "authentication_required" else status,
             diagnostics=diagnostics,
-            last_error=str(exc),
+            last_error=safe_error_message(exc),
         )
         save_channel_worker_heartbeat(
             channel_id,
             status="error",
             current_job_id=resolved_action_id,
             current_job_type="connect",
-            last_error=str(exc),
+            last_error=safe_error_message(exc),
             worker_id=resolved_worker_id,
             started_at=started_at,
         )
@@ -311,12 +373,12 @@ def run_connect_action(
             channel_id=channel_id,
             action_id=resolved_action_id,
             worker_id=resolved_worker_id,
-            status="needs_login",
-            last_step="remote_browser_unavailable",
+            status="needs_login" if status == "authentication_required" else "failed",
+            last_step="browser_provider",
             diagnostics=diagnostics,
             started_at=started_at,
-            error_code="remote_browser_unavailable",
-            error_message=str(exc),
+            error_code=getattr(exc, "code", "provider_unavailable"),
+            error_message=safe_error_message(exc),
         )
         return connection
     except Exception as exc:

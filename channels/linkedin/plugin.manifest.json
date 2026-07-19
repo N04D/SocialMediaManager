@@ -1,0 +1,26 @@
+{
+  "id": "channel.linkedin",
+  "name": "LinkedIn",
+  "version": "0.1.0",
+  "plugin_api_version": 1,
+  "type": "channel",
+  "entrypoint": "channels.linkedin",
+  "status": "ready",
+  "capabilities": [
+    "channel.connect",
+    "channel.disconnect",
+    "channel.connection_status",
+    "channel.publish.text",
+    "channel.publish.image",
+    "channel.read.posts",
+    "channel.read.metrics"
+  ],
+  "dependencies": [
+    {"capability": "browser.session", "min_version": "0.1.0"},
+    {"capability": "browser.auth_profile", "min_version": "0.1.0"},
+    {"capability": "browser.navigation", "min_version": "0.1.0"},
+    {"capability": "browser.interaction", "min_version": "0.1.0"},
+    {"capability": "browser.human_takeover", "min_version": "0.1.0"}
+  ],
+  "config_schema": {}
+}

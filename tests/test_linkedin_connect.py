@@ -8,6 +8,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from plugin_runtime import ApplicationPluginRuntime
+from plugins.providers.legacy_browser import LegacyBrowserProvider
+from src.core.plugins.manifest import PluginManifest, PluginStatus
+from src.core.plugins.runtime import PluginRuntime, ProviderResolver
+
 pipeline_stub = types.ModuleType('pipeline')
 
 
@@ -110,6 +115,38 @@ class FakePlaywright:
 
     def stop(self) -> None:
         self.stopped = True
+
+
+def fake_plugin_runtime_for_session(config, open_session):
+    provider_manifest = PluginManifest.from_dict({
+        "id": "provider.browser.legacy",
+        "name": "Legacy Browser Provider",
+        "version": "0.1.0",
+        "plugin_api_version": 1,
+        "type": "provider",
+        "entrypoint": "plugins.providers.legacy_browser.provider",
+        "status": "ready",
+        "capabilities": [
+            "browser.session",
+            "browser.auth_profile",
+            "browser.navigation",
+            "browser.interaction",
+            "browser.human_takeover",
+        ],
+        "dependencies": [],
+        "config_schema": {},
+    })
+    provider = LegacyBrowserProvider(config=config, open_session=open_session)
+    runtime = ApplicationPluginRuntime()
+    runtime.registry.register(provider_manifest)
+    runtime.runtimes[provider_manifest.id] = PluginRuntime(
+        manifest=provider_manifest,
+        instance=provider,
+        status=PluginStatus.READY,
+        services={"browser_provider": provider},
+    )
+    runtime.resolver = ProviderResolver(runtime.registry, runtime.runtimes)
+    return runtime
 
 
 class LinkedInConnectTests(unittest.TestCase):
@@ -217,11 +254,11 @@ class LinkedInConnectTests(unittest.TestCase):
         page = FakePage(login_url='https://www.linkedin.com/login', feed_url=self.config.linkedin_feed_url)
         playwright = FakePlaywright()
         context = FakeContext()
-        with patch.object(connect_module, 'open_local_linkedin_session', return_value=(playwright, None, context, page, True, 'persistent profile')):
-            with patch.object(connect_module, 'navigate_linkedin_once', side_effect=lambda *args, **kwargs: None):
-                with patch.object(connect_module, 'inspect_linkedin_auth_state', return_value={'authenticated': False, 'reason': 'login', 'marker': 'login_url', 'current_url': page.login_url}):
-                    with patch.object(connect_module, 'wait_for_manual_linkedin_login', return_value=(True, '')):
-                        result = connect_module.run_connect_action(self.config, channel_id='linkedin', action_id=connection.active_job_id, worker_id='worker-a', started_at='2026-06-20T08:00:00+02:00')
+        runtime = fake_plugin_runtime_for_session(self.config, lambda *args, **kwargs: (playwright, None, context, page, True, 'persistent profile'))
+        with patch.object(connect_module, 'get_plugin_runtime', return_value=runtime):
+            with patch.object(connect_module, 'inspect_linkedin_auth_state', return_value={'authenticated': False, 'reason': 'login', 'marker': 'login_url', 'current_url': page.login_url}):
+                with patch.object(connect_module, 'wait_for_manual_linkedin_login', return_value=(True, '')):
+                    result = connect_module.run_connect_action(self.config, channel_id='linkedin', action_id=connection.active_job_id, worker_id='worker-a', started_at='2026-06-20T08:00:00+02:00')
         self.assertIsNotNone(result)
         stored = get_channel_connection('linkedin')
         self.assertEqual(stored.status, 'connected')
@@ -239,11 +276,11 @@ class LinkedInConnectTests(unittest.TestCase):
         page = FakePage(login_url='https://www.linkedin.com/login', feed_url=self.config.linkedin_feed_url)
         playwright = FakePlaywright()
         context = FakeContext()
-        with patch.object(connect_module, 'open_local_linkedin_session', return_value=(playwright, None, context, page, True, 'persistent profile')):
-            with patch.object(connect_module, 'navigate_linkedin_once', side_effect=lambda *args, **kwargs: None):
-                with patch.object(connect_module, 'inspect_linkedin_auth_state', return_value={'authenticated': False, 'reason': 'login', 'marker': 'login_url', 'current_url': page.login_url}):
-                    with patch.object(connect_module, 'wait_for_manual_linkedin_login', return_value=(False, 'Timed out waiting for manual login.')):
-                        result = connect_module.run_connect_action(self.config, channel_id='linkedin', action_id=connection.active_job_id, worker_id='worker-a', started_at='2026-06-20T08:00:00+02:00')
+        runtime = fake_plugin_runtime_for_session(self.config, lambda *args, **kwargs: (playwright, None, context, page, True, 'persistent profile'))
+        with patch.object(connect_module, 'get_plugin_runtime', return_value=runtime):
+            with patch.object(connect_module, 'inspect_linkedin_auth_state', return_value={'authenticated': False, 'reason': 'login', 'marker': 'login_url', 'current_url': page.login_url}):
+                with patch.object(connect_module, 'wait_for_manual_linkedin_login', return_value=(False, 'Timed out waiting for manual login.')):
+                    result = connect_module.run_connect_action(self.config, channel_id='linkedin', action_id=connection.active_job_id, worker_id='worker-a', started_at='2026-06-20T08:00:00+02:00')
         self.assertIsNotNone(result)
         stored = get_channel_connection('linkedin')
         self.assertEqual(stored.status, 'needs_login')
@@ -259,10 +296,10 @@ class LinkedInConnectTests(unittest.TestCase):
         page = FakePage(login_url='https://www.linkedin.com/login', feed_url=self.config.linkedin_feed_url)
         playwright = FakePlaywright()
         context = FakeContext()
-        with patch.object(connect_module, 'open_local_linkedin_session', return_value=(playwright, None, context, page, True, 'persistent profile')):
-            with patch.object(connect_module, 'navigate_linkedin_once', side_effect=lambda *args, **kwargs: None):
-                with patch.object(connect_module, 'inspect_linkedin_auth_state', return_value={'authenticated': True, 'reason': '', 'marker': 'feed_url', 'current_url': page.feed_url}):
-                    result = connect_module.run_connect_action(self.config, channel_id='linkedin', action_id=connection.active_job_id, worker_id='worker-a', started_at='2026-06-20T08:00:00+02:00')
+        runtime = fake_plugin_runtime_for_session(self.config, lambda *args, **kwargs: (playwright, None, context, page, True, 'persistent profile'))
+        with patch.object(connect_module, 'get_plugin_runtime', return_value=runtime):
+            with patch.object(connect_module, 'inspect_linkedin_auth_state', return_value={'authenticated': True, 'reason': '', 'marker': 'feed_url', 'current_url': page.feed_url}):
+                result = connect_module.run_connect_action(self.config, channel_id='linkedin', action_id=connection.active_job_id, worker_id='worker-a', started_at='2026-06-20T08:00:00+02:00')
         self.assertIsNotNone(result)
         lock_path = Path(self._tmp.name) / 'studio_data' / 'locks' / 'linkedin.profile.lock'
         with open(lock_path, 'a+', encoding='utf-8') as handle:

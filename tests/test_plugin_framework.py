@@ -27,6 +27,7 @@ from plugins.providers.legacy_browser import LegacyBrowserProvider
 from channels.linkedin.worker import browser as linkedin_browser_module
 from src.core.browser import (
     BrowserProfileBusyError,
+    FileBackedBrowserProfileLockManager,
     BrowserProviderError,
     BrowserSessionOptions,
     BrowserTarget,
@@ -208,17 +209,18 @@ class LegacyBrowserProviderTests(unittest.TestCase):
         def open_session(*args, **kwargs):
             return playwright, None, context, FakePage(), True, "persistent profile"
 
-        provider = LegacyBrowserProvider(config=object(), open_session=open_session)
-        session = provider.create_session(BrowserSessionOptions(profile_id="linkedin", start_url="https://linkedin.test"))
-        self.assertEqual(session.snapshot().url, "https://linkedin.test")
-        session.close()
-        self.assertTrue(context.closed)
-        self.assertTrue(playwright.stopped)
-        self.assertIsNone(provider.get_session(session.session_id))
-
-    def test_legacy_provider_profile_status_uses_existing_linkedin_lock_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(linkedin_browser_module, "profile_lock_state") as state:
-                state.return_value = {"busy": False, "owner": "", "lock_path": str(Path(tmp) / "lock")}
-                provider = LegacyBrowserProvider(config=object())
-                self.assertTrue(provider.profile_status("linkedin").available)
+            lock_manager = FileBackedBrowserProfileLockManager(Path(tmp))
+            provider = LegacyBrowserProvider(config=object(), open_session=open_session, lock_manager=lock_manager)
+            session = provider.create_session(BrowserSessionOptions(profile_id="linkedin", start_url="https://linkedin.test"))
+            self.assertEqual(session.snapshot().url, "https://linkedin.test")
+            session.close()
+            self.assertTrue(context.closed)
+            self.assertTrue(playwright.stopped)
+            self.assertIsNone(provider.get_session(session.session_id))
+
+    def test_legacy_provider_profile_status_uses_provider_lock_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            lock_manager = FileBackedBrowserProfileLockManager(Path(tmp))
+            provider = LegacyBrowserProvider(config=object(), lock_manager=lock_manager)
+            self.assertTrue(provider.profile_status("linkedin").available)

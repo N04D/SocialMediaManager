@@ -7,7 +7,6 @@ from typing import Any
 from .dependencies import PluginDependency
 from .errors import PluginValidationError
 
-
 SUPPORTED_PLUGIN_API_VERSION = 1
 
 
@@ -42,7 +41,7 @@ class PluginManifest:
     status: PluginStatus = PluginStatus.DISCOVERED
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "PluginManifest":
+    def from_dict(cls, payload: dict[str, Any]) -> PluginManifest:
         if not isinstance(payload, dict):
             raise PluginValidationError(
                 "plugin_manifest.invalid_type",
@@ -65,7 +64,9 @@ class PluginManifest:
             errors.append(f"type must be one of {[item.value for item in PluginType]}.")
 
         capabilities = payload.get("capabilities", [])
-        if not isinstance(capabilities, list) or not all(isinstance(item, str) and item.strip() for item in capabilities):
+        if not isinstance(capabilities, list) or not all(
+            isinstance(item, str) and item.strip() for item in capabilities
+        ):
             errors.append("capabilities must be a list of non-empty strings.")
 
         raw_dependencies = payload.get("dependencies", [])
@@ -112,6 +113,7 @@ class PluginManifest:
             capabilities=tuple(str(item) for item in capabilities),
             dependencies=tuple(dependencies),
             config_schema=dict(config_schema),
+            status=PluginStatus(str(payload.get("status") or PluginStatus.DISCOVERED.value)),
         )
 
     def validate(self, *, supported_api_version: int = SUPPORTED_PLUGIN_API_VERSION) -> None:

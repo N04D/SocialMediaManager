@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import importlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from plugin_runtime import get_plugin_runtime
 
 from channel_store import ensure_channel_connection, get_channel_connection, worker_status_from_heartbeat
 
@@ -49,6 +50,9 @@ class ChannelRegistryEntry:
     profile_busy: bool = False
     profile_lock_owner: str = ""
     profile_lock_path: str = ""
+    browser_provider_id: str = ""
+    browser_session_status: str = ""
+    human_takeover_status: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -74,6 +78,9 @@ class ChannelRegistryEntry:
             "profile_busy": self.profile_busy,
             "profile_lock_owner": self.profile_lock_owner,
             "profile_lock_path": self.profile_lock_path,
+            "browser_provider_id": self.browser_provider_id,
+            "browser_session_status": self.browser_session_status,
+            "human_takeover_status": self.human_takeover_status,
         }
 
 
@@ -194,16 +201,18 @@ def _default_connection_status(manifest: dict[str, Any]) -> str:
 
 def _profile_state(entry_id: str) -> dict[str, Any]:
     try:
-        module = importlib.import_module(f"channels.{entry_id}.worker.browser")
+        runtime = get_plugin_runtime()
+        provider_runtime = runtime.resolve_provider("browser.session")
+        provider = provider_runtime.services["browser_provider"]
+        status = provider.profile_status(entry_id)
+        return {
+            "busy": status.busy,
+            "owner": status.owner,
+            "lock_path": status.lock_path,
+            "provider_id": provider_runtime.manifest.id,
+        }
     except Exception:
-        return {"busy": False, "owner": "", "lock_path": ""}
-    state_fn = getattr(module, "profile_lock_state", None)
-    if not callable(state_fn):
-        return {"busy": False, "owner": "", "lock_path": ""}
-    try:
-        return dict(state_fn(entry_id))
-    except Exception:
-        return {"busy": False, "owner": "", "lock_path": ""}
+        return {"busy": False, "owner": "", "lock_path": "", "provider_id": ""}
 
 
 
@@ -282,6 +291,11 @@ def scan_channel_registry(*, rescan: bool = False) -> list[ChannelRegistryEntry]
             entry.profile_busy = bool(profile_state.get("busy"))
             entry.profile_lock_owner = str(profile_state.get("owner") or "")
             entry.profile_lock_path = str(profile_state.get("lock_path") or "")
+            entry.browser_provider_id = str(profile_state.get("provider_id") or "")
+            if connection is not None:
+                diagnostics = connection.last_connect_diagnostics_json or {}
+                entry.browser_session_status = str(diagnostics.get("browser_session_status") or "")
+                entry.human_takeover_status = str(diagnostics.get("human_takeover_status") or "")
         entries.append(entry)
 
     return sorted(entries, key=lambda item: item.manifest.get("name", item.id).lower())

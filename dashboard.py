@@ -70,6 +70,7 @@ from content_store import (
     slugify,
 )
 from pipeline import CONFIG_PATH, AppConfig, Article, build_prompt, ensure_runtime_dirs, fetch_article, load_config, run_local_ai
+from plugin_runtime import get_plugin_runtime
 from timing import compute_article_schedule_time
 from scheduler import append_schedule, build_schedule_record, cache_preview, ensure_outbox_dir, get_schedule_record, load_launch_status, load_preview, load_schedule, load_worker_runs, queue_summary, reset_failed_schedule_records, save_launch_status, update_schedule_record, worker_run_summary
 from studio_models import ContentItem
@@ -2911,6 +2912,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "check_session",
                     log_name=f"{channel_id}-session-check.log",
                 )
+            elif path == "/channels/force-unlock":
+                channel_id = form_value(form, "channel_id").strip()
+                reason = form_value(form, "reason", "Manual admin force unlock from dashboard.").strip()
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                provider = runtime.browser_provider()
+                provider.force_unlock_profile(channel_id, admin_reason=reason or "Manual admin force unlock from dashboard.")
             elif path == "/channels/disconnect":
                 channel_id = form_value(form, "channel_id").strip()
                 entry = next((item for item in scan_channel_registry(rescan=True) if item.id == channel_id), None)
@@ -3091,6 +3098,7 @@ def main() -> int:
     ensure_runtime_dirs(config)
     ensure_outbox_dir()
     ensure_channel_store_dirs()
+    get_plugin_runtime(config, reset=True, strict=True)
 
     DashboardHandler.config = config
     DashboardHandler.config_path = args.config

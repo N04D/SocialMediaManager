@@ -8,7 +8,12 @@ from .errors import (
     BrowserUnavailableError,
     HumanTakeoverRequiredError,
 )
-from .locks import BrowserProfileLock, BrowserProfileLockManager, BrowserProfileLease
+from .locks import (
+    BrowserProfileLease,
+    BrowserProfileLock,
+    BrowserProfileLockManager,
+    FileBackedBrowserProfileLockManager,
+)
 from .models import (
     BrowserArtifact,
     BrowserProfileStatus,
@@ -17,6 +22,7 @@ from .models import (
     BrowserSnapshot,
     BrowserTarget,
     HumanTakeoverRequest,
+    HumanTakeoverStatus,
 )
 from .provider import BrowserProvider
 from .session import BrowserSession
@@ -30,6 +36,7 @@ __all__ = [
     "BrowserProfileLease",
     "BrowserProfileLock",
     "BrowserProfileLockManager",
+    "FileBackedBrowserProfileLockManager",
     "BrowserProfileStatus",
     "BrowserProvider",
     "BrowserProviderError",
@@ -41,5 +48,6 @@ __all__ = [
     "BrowserTarget",
     "BrowserUnavailableError",
     "HumanTakeoverRequest",
+    "HumanTakeoverStatus",
     "HumanTakeoverRequiredError",
 ]

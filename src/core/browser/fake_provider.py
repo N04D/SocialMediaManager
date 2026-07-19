@@ -31,7 +31,7 @@ class InMemoryBrowserSession:
         *,
         session_id: str,
         options: BrowserSessionOptions,
-        provider: "InMemoryBrowserProvider",
+        provider: InMemoryBrowserProvider,
         profile_lock: BrowserProfileLock | None,
     ) -> None:
         self._session_id = session_id

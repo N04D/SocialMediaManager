@@ -9,10 +9,23 @@ from typing import Any
 class BrowserSessionStatus(StrEnum):
     STARTING = "starting"
     READY = "ready"
+    ACTIVE = "active"
     DEGRADED = "degraded"
+    CLOSING = "closing"
     CLOSED = "closed"
+    FAILED = "failed"
     ERROR = "error"
     HUMAN_TAKEOVER = "human_takeover"
+
+
+class HumanTakeoverStatus(StrEnum):
+    NOT_REQUIRED = "not_required"
+    REQUESTED = "requested"
+    AVAILABLE = "available"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    EXPIRED = "expired"
+    FAILED = "failed"
 
 
 @dataclass(frozen=True)

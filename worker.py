@@ -19,6 +19,7 @@ from channel_store import (
     save_worker_heartbeat,
 )
 from pipeline import AppConfig, cleanup_media, download_images_from_urls, ensure_runtime_dirs, load_config, stage_linkedin_post
+from plugin_runtime import get_plugin_runtime
 from scheduler import append_worker_run, load_schedule, next_due_record, update_schedule_record
 
 
@@ -329,6 +330,7 @@ def main() -> int:
     config = load_config(args.config)
     ensure_runtime_dirs(config)
     ensure_channel_store_dirs()
+    get_plugin_runtime(config, reset=True, strict=True)
     heartbeat_seconds = DEFAULT_CHANNEL_WORKER_HEARTBEAT_SECONDS
     lease_seconds = max(DEFAULT_CHANNEL_JOB_LEASE_SECONDS, heartbeat_seconds + 1)
     poll_seconds = max(args.interval, 1)

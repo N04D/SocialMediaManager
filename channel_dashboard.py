@@ -195,7 +195,22 @@ def render_channel_cards(*, return_to: str) -> str:
         profile_meta = ""
         if entry.profile_busy:
             profile_meta = f'<p class="meta"><strong>Profile busy:</strong> {html.escape(entry.profile_lock_owner or "another process is using the persistent profile")}</p>'
+        provider_meta = f'<p class="meta">Browser provider: <code>{html.escape(entry.browser_provider_id or "not resolved")}</code></p>'
+        session_meta = ""
+        if entry.browser_session_status or entry.human_takeover_status:
+            session_meta = (
+                f'<p class="meta">Browser session: <code>{html.escape(entry.browser_session_status or "unknown")}</code>'
+                f' · Human takeover: <code>{html.escape(entry.human_takeover_status or "not_required")}</code></p>'
+            )
         actions: list[str] = []
+        if entry.profile_busy:
+            actions.append(
+                f'<form method="post" action="/channels/force-unlock" class="inline-form">'
+                f'<input type="hidden" name="channel_id" value="{html.escape(entry.id)}" />'
+                f'<input type="hidden" name="return_to" value="{html.escape(return_to)}" />'
+                f'<input type="hidden" name="reason" value="Manual admin force unlock from channel dashboard." />'
+                f'<button class="secondary" type="submit">Force unlock profile</button></form>'
+            )
         if entry.connection_status == "not_configured":
             actions.append(
                 f'<form method="post" action="/channels/connect" class="inline-form">'
@@ -254,6 +269,8 @@ def render_channel_cards(*, return_to: str) -> str:
               <p class="meta">Version: <code>{html.escape(manifest.get("version", ""))}</code> · Mode: <code>{html.escape(entry.mode)}</code></p>
               <p class="meta">Outputs: <code>{html.escape(outputs)}</code></p>
               <p class="meta">Worker: <code>{html.escape(worker_meta)}</code></p>
+              {provider_meta}
+              {session_meta}
               <p class="meta">Last checked: <code>{html.escape(entry.last_checked_at or 'never')}</code></p>
               {profile_meta}
               {error_markup}
