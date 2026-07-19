@@ -50,7 +50,15 @@ class ProviderResolver:
         ]
         if preferred_provider_id:
             candidates = [runtime for runtime in candidates if runtime.manifest.id == preferred_provider_id]
-        candidates = sorted(candidates, key=lambda runtime: runtime.manifest.id)
+        candidates = sorted(
+            candidates,
+            key=lambda runtime: (
+                runtime.health.get("default_priority", 1000)
+                if isinstance(runtime.health.get("default_priority", 1000), int)
+                else 1000,
+                runtime.manifest.id,
+            ),
+        )
         if not candidates:
             raise PluginCapabilityError(
                 "plugin_capability.provider_unavailable",

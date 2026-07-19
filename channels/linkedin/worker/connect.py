@@ -9,6 +9,7 @@ from channel_store import (
     update_channel_connection,
 )
 from channels.linkedin.provider_config import preferred_browser_provider_id
+from channels.linkedin.provider_state import record_provider_connection_state
 from plugin_runtime import get_plugin_runtime
 from src.core.browser import (
     BrowserProfileBusyError,
@@ -294,12 +295,30 @@ def run_connect_with_runtime(
                     )
                     return connection
                 diagnostics["human_takeover_status"] = "completed"
+                save_auth_profile = getattr(browser_provider, "save_auth_profile_for_session", None)
+                if callable(save_auth_profile):
+                    try:
+                        profile_result = save_auth_profile(browser_session.session_id)
+                        diagnostics["auth_profile_reference"] = str(
+                            profile_result.get("profile_name") or profile_result.get("name") or ""
+                        )
+                    except Exception:
+                        diagnostics["auth_profile_reference"] = ""
             connection = _finalize_connect_state(
                 config,
                 channel_id=channel_id,
                 status="connected",
                 diagnostics=diagnostics,
             )
+            record_provider_connection_state(
+                connection,
+                provider_id=str(diagnostics.get("browser_provider_id") or ""),
+                status="connected",
+                auth_profile_reference=str(diagnostics.get("auth_profile_reference") or ""),
+            )
+            from channel_store import save_channel_connection
+
+            save_channel_connection(connection)
             save_channel_worker_heartbeat(
                 channel_id,
                 status="idle",

@@ -1,0 +1,26 @@
+{
+  "id": "provider.browser.autobrowser",
+  "name": "Auto Browser",
+  "version": "0.1.0",
+  "plugin_api_version": 1,
+  "type": "provider",
+  "entrypoint": "plugins.providers.auto_browser.provider",
+  "capabilities": [
+    "browser.session",
+    "browser.auth_profile",
+    "browser.navigation",
+    "browser.interaction",
+    "browser.human_takeover",
+    "browser.screenshot",
+    "browser.artifact"
+  ],
+  "dependencies": [],
+  "config_schema": {
+    "browser_provider_contract_version": "browser-session-v1",
+    "tested_auto_browser_server_version": "1.4.0",
+    "tested_auto_browser_commit": "a7414a4",
+    "tested_python_client_version": "1.4.0",
+    "transport": "rest",
+    "required": ["enabled", "base_url", "operator_id"]
+  }
+}

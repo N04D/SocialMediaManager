@@ -47,7 +47,9 @@ def _capability_list(entry: ChannelRegistryEntry) -> str:
         ("canReadComments", "Comments"),
         ("requiresApproval", "Approval required"),
     ]:
-        items.append(f"<li><strong>{html.escape(label)}</strong>: {html.escape(str(bool(capabilities.get(key))).lower())}</li>")
+        items.append(
+            f"<li><strong>{html.escape(label)}</strong>: {html.escape(str(bool(capabilities.get(key))).lower())}</li>"
+        )
     return "".join(items)
 
 
@@ -58,8 +60,8 @@ def _artifact_link(path_value: str, label: str) -> str:
 
 
 def _verification_state(label: str, state: str, detail: str = "") -> str:
-    detail_markup = f' <span class="meta">{html.escape(detail)}</span>' if detail else ''
-    return f'<li><strong>{html.escape(label)}:</strong> <code>{html.escape(state)}</code>{detail_markup}</li>'
+    detail_markup = f' <span class="meta">{html.escape(detail)}</span>' if detail else ""
+    return f"<li><strong>{html.escape(label)}:</strong> <code>{html.escape(state)}</code>{detail_markup}</li>"
 
 
 def render_channel_verification_panel(channel_id: str, *, return_to: str) -> str:
@@ -99,23 +101,41 @@ def render_channel_verification_panel(channel_id: str, *, return_to: str) -> str
         ),
         _verification_state(
             "Connection verified",
-            "PASS" if entry.connection_status == "connected" and bool(entry.last_checked_at) else ("FAIL" if entry.connection_status == "needs_login" else "NOT TESTED"),
+            "PASS"
+            if entry.connection_status == "connected" and bool(entry.last_checked_at)
+            else ("FAIL" if entry.connection_status == "needs_login" else "NOT TESTED"),
             entry.last_checked_at or entry.last_error,
         ),
-        _verification_state("Approved derivative available", "PASS" if approved else "NOT TESTED", approved.id if approved else ""),
+        _verification_state(
+            "Approved derivative available", "PASS" if approved else "NOT TESTED", approved.id if approved else ""
+        ),
         _verification_state(
             "Dry-run completed",
-            "PASS" if dry_run_job and dry_run_job.status == "success" else ("MANUAL ACTION REQUIRED" if dry_run_job and dry_run_job.status not in {"queued", "running"} else "NOT TESTED"),
+            "PASS"
+            if dry_run_job and dry_run_job.status == "success"
+            else (
+                "MANUAL ACTION REQUIRED"
+                if dry_run_job and dry_run_job.status not in {"queued", "running"}
+                else "NOT TESTED"
+            ),
             dry_run_job.last_step if dry_run_job else "",
         ),
         _verification_state(
             "Live publish completed",
-            "PASS" if live_job and live_job.status == "success" else ("MANUAL ACTION REQUIRED" if live_job and live_job.status == "manual_verification_required" else "NOT TESTED"),
+            "PASS"
+            if live_job and live_job.status == "success"
+            else (
+                "MANUAL ACTION REQUIRED"
+                if live_job and live_job.status == "manual_verification_required"
+                else "NOT TESTED"
+            ),
             live_job.last_step if live_job else "",
         ),
         _verification_state(
             "Published URL known",
-            "PASS" if published_post and published_post.external_url else ("MANUAL ACTION REQUIRED" if published_post else "NOT TESTED"),
+            "PASS"
+            if published_post and published_post.external_url
+            else ("MANUAL ACTION REQUIRED" if published_post else "NOT TESTED"),
             published_post.external_url if published_post else "",
         ),
         _verification_state(
@@ -159,7 +179,9 @@ def render_channel_verification_panel(channel_id: str, *, return_to: str) -> str
     if latest_screenshot:
         actions.append(_artifact_link(latest_screenshot, "Open latest screenshot"))
     if latest_log:
-        actions.append(f'<a class="button secondary" href="/channel-job-log?channel_id={html.escape(channel_id)}" target="_blank" rel="noreferrer">Open latest job log</a>')
+        actions.append(
+            f'<a class="button secondary" href="/channel-job-log?channel_id={html.escape(channel_id)}" target="_blank" rel="noreferrer">Open latest job log</a>'
+        )
 
     return f"""
     <section class="card">
@@ -169,8 +191,8 @@ def render_channel_verification_panel(channel_id: str, *, return_to: str) -> str
           <p class="meta">Actual persisted status for the current LinkedIn vertical slice. Untested steps stay explicitly unverified.</p>
         </div>
       </div>
-      <ul>{''.join(checks)}</ul>
-      <div class="actions">{''.join(actions) or '<p class="meta">No direct verification actions available yet.</p>'}</div>
+      <ul>{"".join(checks)}</ul>
+      <div class="actions">{"".join(actions) or '<p class="meta">No direct verification actions available yet.</p>'}</div>
     </section>
     """
 
@@ -186,7 +208,10 @@ def render_channel_cards(*, return_to: str) -> str:
             if entry.last_error
             else ""
         )
-        health_markup = "".join(f"<li>{html.escape(message)}</li>" for message in entry.errors) or "<li>No plugin issues reported.</li>"
+        health_markup = (
+            "".join(f"<li>{html.escape(message)}</li>" for message in entry.errors)
+            or "<li>No plugin issues reported.</li>"
+        )
         worker_meta = f"{entry.worker_status} · last seen {entry.worker_last_seen_at or 'never'}"
         if entry.worker_current_job_type:
             worker_meta += f" · job {entry.worker_current_job_type}"
@@ -200,14 +225,20 @@ def render_channel_cards(*, return_to: str) -> str:
             f'<form method="post" action="/channels/browser-provider" class="inline-form">'
             f'<input type="hidden" name="channel_id" value="{html.escape(entry.id)}" />'
             f'<input type="hidden" name="return_to" value="{html.escape(return_to)}" />'
-            f'<input name="browser_provider_id" value="{html.escape(entry.browser_provider_id)}" placeholder="provider.browser.legacy or blank for default" />'
+            f'<input name="browser_provider_id" list="browser-provider-options" value="{html.escape(entry.browser_provider_id)}" placeholder="blank for default legacy provider" />'
+            '<datalist id="browser-provider-options">'
+            '<option value="">Default: Legacy Browser</option>'
+            '<option value="provider.browser.legacy">Legacy Browser</option>'
+            '<option value="provider.browser.autobrowser">Auto Browser</option>'
+            "</datalist>"
             f'<button class="secondary" type="submit">Set provider</button></form>'
+            '<p class="meta">Auto Browser usually needs one manual reconnect before this account can reuse that provider profile.</p>'
         )
         session_meta = ""
         if entry.browser_session_status or entry.human_takeover_status:
             session_meta = (
                 f'<p class="meta">Browser session: <code>{html.escape(entry.browser_session_status or "unknown")}</code>'
-                f' · Human takeover: <code>{html.escape(entry.human_takeover_status or "not_required")}</code></p>'
+                f" · Human takeover: <code>{html.escape(entry.human_takeover_status or 'not_required')}</code></p>"
             )
         actions: list[str] = []
         if entry.profile_busy:
@@ -284,10 +315,10 @@ def render_channel_cards(*, return_to: str) -> str:
               <p class="meta">Worker: <code>{html.escape(worker_meta)}</code></p>
               {provider_meta}
               {session_meta}
-              <p class="meta">Last checked: <code>{html.escape(entry.last_checked_at or 'never')}</code></p>
+              <p class="meta">Last checked: <code>{html.escape(entry.last_checked_at or "never")}</code></p>
               {profile_meta}
               {error_markup}
-              <div class="actions">{''.join(actions)}</div>
+              <div class="actions">{"".join(actions)}</div>
               <details class="editor-panel">
                 <summary class="editor-panel-summary">
                   <span class="editor-panel-summary-left"><span>Capabilities</span></span>
@@ -310,7 +341,9 @@ def render_channel_cards(*, return_to: str) -> str:
             """
         )
     if not cards:
-        cards.append('<section class="card"><h2>Channels</h2><p class="meta">No channel plugins were discovered.</p></section>')
+        cards.append(
+            '<section class="card"><h2>Channels</h2><p class="meta">No channel plugins were discovered.</p></section>'
+        )
     cards.insert(
         0,
         f'<section class="card compact-card"><div class="card-heading"><div><h2>Channels</h2><p class="meta">Manifest-driven plugin registry with local connection and worker status.</p></div><form method="post" action="/channels/rescan" class="inline-form"><input type="hidden" name="return_to" value="{html.escape(return_to)}" /><button class="secondary" type="submit">Rescan plugins</button></form></div></section>',
@@ -328,9 +361,9 @@ def _render_validation(validation: dict[str, Any]) -> str:
         return '<p class="meta">Validation: no channel rule issues recorded.</p>'
     rows = []
     for error in errors:
-        rows.append(f'<li><strong>Error:</strong> {html.escape(str(error))}</li>')
+        rows.append(f"<li><strong>Error:</strong> {html.escape(str(error))}</li>")
     for warning in warnings:
-        rows.append(f'<li><strong>Warning:</strong> {html.escape(str(warning))}</li>')
+        rows.append(f"<li><strong>Warning:</strong> {html.escape(str(warning))}</li>")
     return f"<ul>{''.join(rows)}</ul>"
 
 
@@ -354,7 +387,7 @@ def _render_snapshot_history(derivative_id: str) -> str:
             "</tr>"
         )
     return (
-        '<table><thead><tr><th>Captured</th><th>Impressions</th><th>Views</th><th>Reactions</th><th>Comments</th><th>Reposts</th></tr></thead>'
+        "<table><thead><tr><th>Captured</th><th>Impressions</th><th>Views</th><th>Reactions</th><th>Comments</th><th>Reposts</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table>"
     )
 
@@ -364,7 +397,9 @@ def _render_job_logs(channel_id: str, derivative_id: str) -> str:
     post = find_published_post_for_derivative(derivative_id)
     metric_job_ids = {job.id for job in list_metric_jobs(published_post_id=post.id)} if post else set()
     relevant_ids = publish_job_ids | metric_job_ids
-    logs = [record for record in list_channel_job_logs(channel_id=channel_id, limit=20) if record.job_id in relevant_ids]
+    logs = [
+        record for record in list_channel_job_logs(channel_id=channel_id, limit=20) if record.job_id in relevant_ids
+    ]
     if not logs:
         return '<p class="meta">No job logs recorded for this derivative yet.</p>'
     rows = []
@@ -387,15 +422,15 @@ def render_document_performance_panel(source_item: ContentItem) -> str:
     <section class="card">
       <h2>LinkedIn Performance</h2>
       <div class="summary-metrics">
-        <div class="summary-pill static"><strong>{html.escape(str(summary.get('derivative_count', 0)))}</strong><span>Derivatives</span></div>
-        <div class="summary-pill static"><strong>{html.escape(str(summary.get('published_count', 0)))}</strong><span>Published</span></div>
-        <div class="summary-pill static"><strong>{html.escape(str(summary.get('impressions')) if summary.get('impressions') is not None else 'unknown')}</strong><span>Impressions</span></div>
-        <div class="summary-pill static"><strong>{html.escape(str(summary.get('views')) if summary.get('views') is not None else 'unknown')}</strong><span>Views</span></div>
-        <div class="summary-pill static"><strong>{html.escape(str(summary.get('reactions')) if summary.get('reactions') is not None else 'unknown')}</strong><span>Reactions</span></div>
-        <div class="summary-pill static"><strong>{html.escape(str(summary.get('comments')) if summary.get('comments') is not None else 'unknown')}</strong><span>Comments</span></div>
-        <div class="summary-pill static"><strong>{html.escape(str(summary.get('reposts')) if summary.get('reposts') is not None else 'unknown')}</strong><span>Reposts</span></div>
+        <div class="summary-pill static"><strong>{html.escape(str(summary.get("derivative_count", 0)))}</strong><span>Derivatives</span></div>
+        <div class="summary-pill static"><strong>{html.escape(str(summary.get("published_count", 0)))}</strong><span>Published</span></div>
+        <div class="summary-pill static"><strong>{html.escape(str(summary.get("impressions")) if summary.get("impressions") is not None else "unknown")}</strong><span>Impressions</span></div>
+        <div class="summary-pill static"><strong>{html.escape(str(summary.get("views")) if summary.get("views") is not None else "unknown")}</strong><span>Views</span></div>
+        <div class="summary-pill static"><strong>{html.escape(str(summary.get("reactions")) if summary.get("reactions") is not None else "unknown")}</strong><span>Reactions</span></div>
+        <div class="summary-pill static"><strong>{html.escape(str(summary.get("comments")) if summary.get("comments") is not None else "unknown")}</strong><span>Comments</span></div>
+        <div class="summary-pill static"><strong>{html.escape(str(summary.get("reposts")) if summary.get("reposts") is not None else "unknown")}</strong><span>Reposts</span></div>
       </div>
-      <p class="meta">Latest snapshot: <code>{html.escape(summary.get('latest_snapshot_at') or 'never')}</code></p>
+      <p class="meta">Latest snapshot: <code>{html.escape(summary.get("latest_snapshot_at") or "never")}</code></p>
       <p class="meta">Engagement rate: <code>{engagement_markup}</code></p>
     </section>
     """
@@ -433,7 +468,9 @@ def render_derivatives_panel(source_item: ContentItem, *, return_to: str) -> str
             validation = derivative.generation_metadata_json.get("validation", {})
         post = find_published_post_for_derivative(derivative.id)
         latest_snapshot = latest_metric_snapshot_for_derivative(derivative.id)
-        latest_publish_job = next((job for job in list_publish_jobs(channel_id=derivative.channel_id, derivative_id=derivative.id)), None)
+        latest_publish_job = next(
+            (job for job in list_publish_jobs(channel_id=derivative.channel_id, derivative_id=derivative.id)), None
+        )
         worker_warning = ""
         if entry.worker_status == "offline":
             worker_warning = '<p class="meta"><strong>Worker offline:</strong> live or metric jobs will stay queued until the worker runs.</p>'
@@ -443,13 +480,13 @@ def render_derivatives_panel(source_item: ContentItem, *, return_to: str) -> str
             rate_markup = f"{rate * 100:.2f}% of {denominator}" if rate is not None else "n/a"
             latest_metrics_markup = (
                 f'<p class="meta">Latest metrics: impressions <code>{html.escape(str(latest_snapshot.impressions) if latest_snapshot.impressions is not None else "unknown")}</code>, '
-                f'views <code>{html.escape(str(latest_snapshot.views) if latest_snapshot.views is not None else "unknown")}</code>, '
-                f'reactions <code>{html.escape(str(latest_snapshot.reactions) if latest_snapshot.reactions is not None else "unknown")}</code>, '
-                f'comments <code>{html.escape(str(latest_snapshot.comments) if latest_snapshot.comments is not None else "unknown")}</code>, '
-                f'reposts <code>{html.escape(str(latest_snapshot.reposts) if latest_snapshot.reposts is not None else "unknown")}</code>, '
-                f'captured <code>{html.escape(latest_snapshot.captured_at)}</code>, engagement <code>{html.escape(rate_markup)}</code>.</p>'
+                f"views <code>{html.escape(str(latest_snapshot.views) if latest_snapshot.views is not None else 'unknown')}</code>, "
+                f"reactions <code>{html.escape(str(latest_snapshot.reactions) if latest_snapshot.reactions is not None else 'unknown')}</code>, "
+                f"comments <code>{html.escape(str(latest_snapshot.comments) if latest_snapshot.comments is not None else 'unknown')}</code>, "
+                f"reposts <code>{html.escape(str(latest_snapshot.reposts) if latest_snapshot.reposts is not None else 'unknown')}</code>, "
+                f"captured <code>{html.escape(latest_snapshot.captured_at)}</code>, engagement <code>{html.escape(rate_markup)}</code>.</p>"
             )
-        publish_details = ''
+        publish_details = ""
         if latest_publish_job is not None:
             publish_details = f'<p class="meta">Latest publish job: <code>{html.escape(latest_publish_job.run_mode)}</code> · <code>{html.escape(latest_publish_job.status)}</code> · step <code>{html.escape(latest_publish_job.last_step or "queued")}</code></p>'
         elif derivative.status == "approved":
@@ -470,7 +507,7 @@ def render_derivatives_panel(source_item: ContentItem, *, return_to: str) -> str
                 f'<input type="hidden" name="run_mode" value="live" />'
                 f'<input type="hidden" name="return_to" value="{html.escape(return_to)}" />'
                 f'<button type="submit">Live publish</button></form>'
-                f'</div>'
+                f"</div>"
             )
         export_actions = (
             f'<div class="actions">'
@@ -478,7 +515,7 @@ def render_derivatives_panel(source_item: ContentItem, *, return_to: str) -> str
             f'<a class="button secondary" href="/derivatives/export?derivative_id={html.escape(derivative.id)}&format=markdown">Export Markdown</a>'
             f'<a class="button secondary" href="/derivatives/export?derivative_id={html.escape(derivative.id)}&format=text">Export plain text</a>'
             f'<a class="button secondary" href="https://www.linkedin.com/feed/" target="_blank" rel="noreferrer">Open LinkedIn manually</a>'
-            f'</div>'
+            f"</div>"
         )
         manual_url_form = (
             f'<form method="post" action="/derivatives/attach-url">'
@@ -502,7 +539,9 @@ def render_derivatives_panel(source_item: ContentItem, *, return_to: str) -> str
             if post and post.external_url
             else ""
         )
-        screenshot_link = _artifact_link(latest_publish_job.screenshot_path if latest_publish_job else '', 'Open latest screenshot')
+        screenshot_link = _artifact_link(
+            latest_publish_job.screenshot_path if latest_publish_job else "", "Open latest screenshot"
+        )
         derivative_cards.append(
             f"""
             <section class="card">
@@ -552,11 +591,14 @@ def render_derivatives_panel(source_item: ContentItem, *, return_to: str) -> str
         )
 
     if not derivative_cards:
-        derivative_cards.append('<section class="card"><p class="meta">No channel derivatives generated for this document yet.</p></section>')
+        derivative_cards.append(
+            '<section class="card"><p class="meta">No channel derivatives generated for this document yet.</p></section>'
+        )
 
-    actions_markup = "".join(generate_actions) or '<p class="meta">No plugins currently support derivative generation.</p>'
+    actions_markup = (
+        "".join(generate_actions) or '<p class="meta">No plugins currently support derivative generation.</p>'
+    )
     return (
         '<section class="card"><div class="card-heading"><div><h2>Channel Derivatives</h2><p class="meta">Generate, review, approve, publish, and track per-channel outputs from the canonical Markdown source.</p></div></div>'
-        f'<div class="actions">{actions_markup}</div></section>'
-        + "".join(derivative_cards)
+        f'<div class="actions">{actions_markup}</div></section>' + "".join(derivative_cards)
     )

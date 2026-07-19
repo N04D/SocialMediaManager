@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from channels.linkedin.runtime import LinkedInChannelRuntime
+from plugins.providers.auto_browser import AutoBrowserProvider
 from plugins.providers.legacy_browser import LegacyBrowserProvider
 from src.core.plugins import PluginContext, PluginDependencyError, PluginRegistry, PluginValidationError
 from src.core.plugins.manifest import PluginManifest, PluginStatus
@@ -15,6 +16,7 @@ from src.core.plugins.runtime import PluginRuntime, ProviderResolver
 ROOT_DIR = Path(__file__).resolve().parent
 LINKEDIN_PLUGIN_MANIFEST = ROOT_DIR / "channels" / "linkedin" / "plugin.manifest.json"
 LEGACY_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "legacy_browser" / "plugin.manifest.json"
+AUTO_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "auto_browser" / "plugin.manifest.json"
 
 
 @dataclass
@@ -116,7 +118,7 @@ def load_plugin_manifest(path: Path) -> PluginManifest:
 def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginRuntime:
     runtime = ApplicationPluginRuntime()
     startup_errors: list[str] = []
-    for path in [LEGACY_BROWSER_MANIFEST, LINKEDIN_PLUGIN_MANIFEST]:
+    for path in [LEGACY_BROWSER_MANIFEST, AUTO_BROWSER_MANIFEST, LINKEDIN_PLUGIN_MANIFEST]:
         try:
             manifest = runtime.registry.register(load_plugin_manifest(path))
             runtime.runtimes[manifest.id] = PluginRuntime(manifest=manifest, status=PluginStatus.INSTALLED)
@@ -133,7 +135,28 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
         legacy.instance = provider
         legacy.register_service("browser_provider", provider)
         legacy.health = health
+        legacy.health["default_priority"] = (
+            5 if getattr(config, "browser_provider_default_id", "") == "provider.browser.legacy" else 10
+        )
         legacy.status = PluginStatus.READY if health.get("status") == "ready" else PluginStatus.DEGRADED
+
+    auto_browser = runtime.runtimes.get("provider.browser.autobrowser")
+    if auto_browser is not None:
+        provider = AutoBrowserProvider(config=config)
+        health = provider.health_check()
+        auto_browser.instance = provider
+        auto_browser.register_service("browser_provider", provider)
+        auto_browser.health = health
+        if getattr(config, "browser_provider_default_id", "") == "provider.browser.autobrowser":
+            auto_browser.health["default_priority"] = 5
+        if health.get("status") == "ready":
+            auto_browser.status = PluginStatus.READY
+        elif health.get("status") == "disabled":
+            auto_browser.status = PluginStatus.DISABLED
+        elif health.get("compatibility") == "incompatible":
+            auto_browser.status = PluginStatus.INCOMPATIBLE
+        else:
+            auto_browser.status = PluginStatus.DEGRADED
 
     linkedin = runtime.runtimes.get("channel.linkedin")
     if linkedin is not None:
@@ -145,8 +168,9 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
             startup_errors.append(exc.user_message)
         else:
             provider_ready = False
+            provider_runtime = None
             try:
-                runtime.resolve_provider("browser.session")
+                provider_runtime = runtime.resolve_provider("browser.session")
                 provider_ready = True
             except Exception as exc:
                 startup_errors.append(str(exc))
@@ -154,7 +178,9 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
             linkedin.health = {
                 "status": "ready" if provider_ready else "error",
                 "dependencies_resolved": provider_ready,
-                "browser_provider": "provider.browser.legacy" if provider_ready else "",
+                "browser_provider": provider_runtime.manifest.id
+                if provider_ready and provider_runtime is not None
+                else "",
             }
             if provider_ready:
                 channel_service = LinkedInChannelRuntime(

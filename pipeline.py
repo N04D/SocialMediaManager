@@ -41,6 +41,19 @@ DEFAULT_CONFIG = {
     "linkedin_user_data_dir": "./linkedin_session",
     "linkedin_remote_debugging_url": "",
     "linkedin_browser_provider_id": "",
+    "browser_provider_default_id": "provider.browser.legacy",
+    "auto_browser_enabled": False,
+    "auto_browser_base_url": "",
+    "auto_browser_bearer_token_env": "AUTO_BROWSER_BEARER_TOKEN",
+    "auto_browser_operator_id": "social-media-manager",
+    "auto_browser_request_timeout": 15,
+    "auto_browser_readiness_timeout": 5,
+    "auto_browser_verify_tls": True,
+    "auto_browser_auth_profile_prefix": "smm",
+    "auto_browser_artifact_policy": "remote_reference",
+    "auto_browser_takeover_public_base_url": "",
+    "auto_browser_max_session_seconds": 1800,
+    "auto_browser_expected_server_version": "1.4.0",
     "media_dir": "./tmp_media",
     "ai_cli_command": "auto",
     "ai_cli_args": [],
@@ -102,6 +115,19 @@ class AppConfig:
     linkedin_user_data_dir: Path
     linkedin_remote_debugging_url: str
     linkedin_browser_provider_id: str
+    browser_provider_default_id: str
+    auto_browser_enabled: bool
+    auto_browser_base_url: str
+    auto_browser_bearer_token_env: str
+    auto_browser_operator_id: str
+    auto_browser_request_timeout: int
+    auto_browser_readiness_timeout: int
+    auto_browser_verify_tls: bool
+    auto_browser_auth_profile_prefix: str
+    auto_browser_artifact_policy: str
+    auto_browser_takeover_public_base_url: str
+    auto_browser_max_session_seconds: int
+    auto_browser_expected_server_version: str
     media_dir: Path
     ai_cli_command: str
     ai_cli_args: list[str] = field(default_factory=list)
@@ -136,8 +162,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Substack to LinkedIn pipeline")
     parser.add_argument("--config", default=str(CONFIG_PATH), help="Path to config.json")
     parser.add_argument("--dry-run", action="store_true", help="Print output without opening LinkedIn")
-    parser.add_argument("--open-linkedin", action="store_true", help="Open LinkedIn feed in the configured browser session and exit")
-    parser.add_argument("--open-article-editor", action="store_true", help="Open the LinkedIn article editor in the configured browser session and exit")
+    parser.add_argument(
+        "--open-linkedin", action="store_true", help="Open LinkedIn feed in the configured browser session and exit"
+    )
+    parser.add_argument(
+        "--open-article-editor",
+        action="store_true",
+        help="Open the LinkedIn article editor in the configured browser session and exit",
+    )
     parser.add_argument(
         "--article-body-only",
         action="store_true",
@@ -191,6 +223,19 @@ def load_config(config_path: str) -> AppConfig:
         linkedin_user_data_dir=ROOT_DIR / str(raw["linkedin_user_data_dir"]),
         linkedin_remote_debugging_url=str(raw.get("linkedin_remote_debugging_url", "")),
         linkedin_browser_provider_id=str(raw.get("linkedin_browser_provider_id", "")),
+        browser_provider_default_id=str(raw.get("browser_provider_default_id", "provider.browser.legacy")),
+        auto_browser_enabled=bool(raw.get("auto_browser_enabled", False)),
+        auto_browser_base_url=str(raw.get("auto_browser_base_url", "")),
+        auto_browser_bearer_token_env=str(raw.get("auto_browser_bearer_token_env", "AUTO_BROWSER_BEARER_TOKEN")),
+        auto_browser_operator_id=str(raw.get("auto_browser_operator_id", "social-media-manager")),
+        auto_browser_request_timeout=int(raw.get("auto_browser_request_timeout", 15)),
+        auto_browser_readiness_timeout=int(raw.get("auto_browser_readiness_timeout", 5)),
+        auto_browser_verify_tls=bool(raw.get("auto_browser_verify_tls", True)),
+        auto_browser_auth_profile_prefix=str(raw.get("auto_browser_auth_profile_prefix", "smm")),
+        auto_browser_artifact_policy=str(raw.get("auto_browser_artifact_policy", "remote_reference")),
+        auto_browser_takeover_public_base_url=str(raw.get("auto_browser_takeover_public_base_url", "")),
+        auto_browser_max_session_seconds=int(raw.get("auto_browser_max_session_seconds", 1800)),
+        auto_browser_expected_server_version=str(raw.get("auto_browser_expected_server_version", "1.4.0")),
         media_dir=ROOT_DIR / str(raw["media_dir"]),
         ai_cli_command=str(raw["ai_cli_command"]),
         ai_cli_args=[str(item) for item in ai_args],
@@ -218,6 +263,23 @@ def ensure_runtime_dirs(config: AppConfig) -> None:
     config.media_dir.mkdir(parents=True, exist_ok=True)
     config.content_dir.mkdir(parents=True, exist_ok=True)
     config.substack_import_dir.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_legacy_pipeline_linkedin_allowed(config: AppConfig) -> None:
+    configured_provider = str(getattr(config, "linkedin_browser_provider_id", "") or "")
+    try:
+        from channel_store import get_channel_connection
+
+        connection = get_channel_connection("linkedin")
+        if connection is not None and connection.browser_provider_id:
+            configured_provider = connection.browser_provider_id
+    except Exception:
+        configured_provider = str(getattr(config, "linkedin_browser_provider_id", "") or "")
+    if configured_provider == "provider.browser.autobrowser":
+        raise RuntimeError(
+            "The legacy/manual pipeline LinkedIn article or staging flow does not support Auto Browser. "
+            "Use the LinkedIn channel runtime for provider-managed operations."
+        )
 
 
 def fetch_article(feed_url: str, delay_index: int) -> Article:
@@ -599,13 +661,15 @@ def open_linkedin_post_composer(page) -> None:
     candidates = []
     for pattern in POST_BUTTON_PATTERNS:
         candidates.append(page.get_by_role("button", name=re.compile(pattern, re.IGNORECASE)).first)
-    candidates.extend([
-        page.locator("button:has-text('Start a post')").first,
-        page.locator("button:has-text('Bijdrage starten')").first,
-        page.locator("button[aria-label*='Start a post']").first,
-        page.locator("button[aria-label*='Bijdrage starten']").first,
-        page.locator(".share-box-feed-entry__top-bar button").first,
-    ])
+    candidates.extend(
+        [
+            page.locator("button:has-text('Start a post')").first,
+            page.locator("button:has-text('Bijdrage starten')").first,
+            page.locator("button[aria-label*='Start a post']").first,
+            page.locator("button[aria-label*='Bijdrage starten']").first,
+            page.locator(".share-box-feed-entry__top-bar button").first,
+        ]
+    )
     for candidate in candidates:
         try:
             candidate.wait_for(state="visible", timeout=6000)
@@ -715,7 +779,9 @@ def find_article_teaser_editor(page):
         page.locator("div[role='textbox'][aria-label*='Text editor for creating content']").first,
         page.locator("div[role='textbox'][aria-label*='Tell your network']").first,
         page.locator("[contenteditable='true'][data-placeholder*='Tell your network']").first,
-        page.locator("[contenteditable='true'][data-placeholder*='Tell your network what your article is about']").first,
+        page.locator(
+            "[contenteditable='true'][data-placeholder*='Tell your network what your article is about']"
+        ).first,
         page.get_by_role("textbox", name=re.compile("Text editor for creating content", re.IGNORECASE)).first,
         page.get_by_role("textbox", name=re.compile("Tell your network", re.IGNORECASE)).first,
     ]
@@ -1061,7 +1127,9 @@ def dismiss_linkedin_discard_dialog(page) -> bool:
     raise RuntimeError("Could not dismiss the LinkedIn discard draft dialog.")
 
 
-def click_linkedin_button_with_retry(page, candidates, description: str, timeout_seconds: int = 30, retries: int = 3) -> bool:
+def click_linkedin_button_with_retry(
+    page, candidates, description: str, timeout_seconds: int = 30, retries: int = 3
+) -> bool:
     dismiss_linkedin_cookie_banner(page)
     dismiss_linkedin_article_saving_warning(page)
     dismiss_linkedin_discard_dialog(page)
@@ -1142,7 +1210,9 @@ def select_publish_as_page(page, page_name: str) -> None:
         return
 
     radio_candidates = [
-        page.locator(".article-editor-entity-selector__title--group button[role='radio']").filter(has_text=page_pattern).first,
+        page.locator(".article-editor-entity-selector__title--group button[role='radio']")
+        .filter(has_text=page_pattern)
+        .first,
         page.locator(".article-editor-actor-toggle__dropdown button[role='radio']").filter(has_text=page_pattern).first,
         page.get_by_role("radio", name=page_pattern).first,
     ]
@@ -1197,7 +1267,9 @@ def upload_article_cover_image(page, image_path: Path | None) -> bool:
                 continue
 
     try:
-        upload_button = page.locator("button[aria-label='Upload from computer'], div.media-editor-file-selector__upload-media-button").first
+        upload_button = page.locator(
+            "button[aria-label='Upload from computer'], div.media-editor-file-selector__upload-media-button"
+        ).first
         upload_button.wait_for(state="visible", timeout=10000)
         try:
             upload_button.scroll_into_view_if_needed(timeout=3000)
@@ -1440,7 +1512,9 @@ def schedule_linkedin_article_post(page, publish_time: datetime, teaser: str = "
             teaser_editor = find_article_teaser_editor(page)
             type_into_contenteditable(page, teaser_editor, teaser)
             rendered_teaser = teaser_editor.inner_text().strip()
-            print(f"Tell your network teaser inserted in final schedule modal ({len(rendered_teaser)} chars visible in editor).")
+            print(
+                f"Tell your network teaser inserted in final schedule modal ({len(rendered_teaser)} chars visible in editor)."
+            )
         except Exception as exc:
             print(f"Could not fill the Tell your network teaser in the final schedule modal automatically: {exc}")
 
@@ -1556,6 +1630,7 @@ def open_linkedin_session(config: AppConfig):
 
 
 def stage_linkedin_post_impl(config: AppConfig, teaser: str, image_paths: list[Path], interactive: bool = True) -> None:
+    ensure_legacy_pipeline_linkedin_allowed(config)
     playwright, browser, context, page, owns_session, session_label = open_linkedin_session(config)
     try:
         print(f"Using {session_label}.")
@@ -1601,6 +1676,7 @@ def stage_linkedin_article_impl(
     interactive: bool = True,
     body_only: bool = False,
 ) -> None:
+    ensure_legacy_pipeline_linkedin_allowed(config)
     playwright, browser, context, page, owns_session, session_label = open_linkedin_session(config)
     close_article_tab_on_exit = False
     try:
@@ -1699,7 +1775,9 @@ def stage_linkedin_article_impl(
         if body_only:
             print("Body-only mode enabled; stopping before teaser and scheduling.")
             if interactive:
-                print("\nLinkedIn article body staged. Review it in the browser, then press Enter to close the session.")
+                print(
+                    "\nLinkedIn article body staged. Review it in the browser, then press Enter to close the session."
+                )
                 input()
             else:
                 page.wait_for_timeout(7000)
@@ -1726,7 +1804,9 @@ def stage_linkedin_article_impl(
                 page.locator("button:has-text('Individual article')").first,
                 page.locator("button:has-text('Al-Batin')").first,
             ]
-            if not linkedin_article_schedule_dialog_visible(page) and not click_linkedin_button_with_retry(page, next_candidates, "article launch button", timeout_seconds=20, retries=3):
+            if not linkedin_article_schedule_dialog_visible(page) and not click_linkedin_button_with_retry(
+                page, next_candidates, "article launch button", timeout_seconds=20, retries=3
+            ):
                 raise RuntimeError("Could not click the LinkedIn article launch button.")
             dismiss_linkedin_article_saving_warning(page)
         except Exception as exc:
@@ -1816,6 +1896,7 @@ def stage_linkedin_post(
 
 
 def open_linkedin_feed(config: AppConfig) -> None:
+    ensure_legacy_pipeline_linkedin_allowed(config)
     playwright, browser, context, page, owns_session, session_label = open_linkedin_session(config)
     try:
         print(f"Using {session_label}.")
@@ -1825,7 +1906,9 @@ def open_linkedin_feed(config: AppConfig) -> None:
         page.wait_for_timeout(int(config.linkedin_wait_after_open_seconds * 1000))
         print("LinkedIn feed is open. You can log in or continue from here.")
         if not config.linkedin_remote_debugging_url:
-            print("This opened in the local persistent profile. If you want to use the dashboard browser, set linkedin_remote_debugging_url.")
+            print(
+                "This opened in the local persistent profile. If you want to use the dashboard browser, set linkedin_remote_debugging_url."
+            )
     finally:
         if owns_session:
             context.close()
@@ -1833,6 +1916,7 @@ def open_linkedin_feed(config: AppConfig) -> None:
 
 
 def open_linkedin_article_editor(config: AppConfig) -> None:
+    ensure_legacy_pipeline_linkedin_allowed(config)
     playwright, browser, context, page, owns_session, session_label = open_linkedin_session(config)
     try:
         print(f"Using {session_label}.")
@@ -1851,7 +1935,9 @@ def open_linkedin_article_editor(config: AppConfig) -> None:
             pass
         print("Article editor opened.")
         if not config.linkedin_remote_debugging_url:
-            print("This opened in the local persistent profile. If you want to use the dashboard browser, set linkedin_remote_debugging_url.")
+            print(
+                "This opened in the local persistent profile. If you want to use the dashboard browser, set linkedin_remote_debugging_url."
+            )
     finally:
         if owns_session:
             context.close()

@@ -127,28 +127,125 @@ SIDEBAR_ITEMS = [
 ]
 
 EDITOR_TOOLBAR_BUTTONS = [
-    ("bold", "Bold", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h5.2c2.6 0 4.3 1.4 4.3 3.7 0 1.5-.8 2.7-2.2 3.2 1.8.4 3 1.8 3 3.8 0 2.6-1.9 4.3-5 4.3H8V5zm3 2.4v3.4h2.1c1 0 1.6-.6 1.6-1.7S14.1 7.4 13 7.4H11zm0 5.7v4h2.6c1.2 0 1.9-.7 1.9-1.9s-.7-2-1.9-2H11z"/></svg>'),
-    ("italic", "Italic", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5v2h2.2l-3.4 10H6v2h8v-2h-2.2l3.4-10H18V5z"/></svg>'),
-    ("underline", "Underline", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v7a5 5 0 0 0 10 0V4h-2v7a3 3 0 0 1-6 0V4H7zm-1 15h12v2H6z"/></svg>'),
-    ("h2", "Heading 2", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2v5h5V6h2v12h-2v-5H6v5H4zM17 9.5c0-1.4 1.1-2.5 2.5-2.5S22 8.1 22 9.5c0 1-.5 1.8-1.3 2.4l-1.9 1.4h3.2V15h-6v-1.3l3.3-2.6c.5-.4.7-.8.7-1.3 0-.6-.4-1-.9-1s-.9.4-.9 1V10h-1.8v-.5z"/></svg>'),
-    ("h3", "Heading 3", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2v5h5V6h2v12h-2v-5H6v5H4zM18.4 10.2H17V8.7h4.7v1.1l-1.8 1.7c1 .2 1.7 1 1.7 2.1 0 1.5-1.2 2.5-3 2.5-1.9 0-3-.9-3.1-2.5h1.7c.1.6.5 1 1.3 1 .7 0 1.2-.4 1.2-1.1 0-.7-.5-1.1-1.3-1.1h-.9v-1.3z"/></svg>'),
-    ("bulletList", "Bullet list", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11v2H9zm0 5h11v2H9zm0 5h11v2H9zM5 7a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0 5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0 5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/></svg>'),
-    ("orderedList", "Ordered list", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6h10v2H10zm0 5h10v2H10zm0 5h10v2H10zM4 5h1v5H3V8h1zm-1 8h2.2c.4 0 .8.4.8.8 0 .2-.1.4-.3.6L4 16h2v2H2.4v-1.2l2-1.9H3v-2z"/></svg>'),
-    ("blockquote", "Blockquote", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6h5v5H9.6c0 1.7 1 3 2.7 3.8L11 17c-2.7-1-4-3.1-4-6.3V6zm8 0h5v5h-2.4c0 1.7 1 3 2.7 3.8L19 17c-2.7-1-4-3.1-4-6.3V6z"/></svg>'),
-    ("codeBlock", "Code block", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8.5 16.5-4.5-4.5 4.5-4.5 1.4 1.4L6.8 12l3.1 3.1zm7 0-1.4-1.4 3.1-3.1-3.1-3.1 1.4-1.4 4.5 4.5zm-4.6 2.1-1.9-.5 4-14 1.9.5z"/></svg>'),
-    ("horizontalRule", "Horizontal rule", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v2H4z"/></svg>'),
-    ("link", "Link", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 13.4a1 1 0 0 0 1.4 1.4l4.2-4.2a3 3 0 0 0-4.2-4.2L9.8 8.6a1 1 0 1 0 1.4 1.4l2.2-2.2a1 1 0 1 1 1.4 1.4zm2.8-2.8a1 1 0 0 0-1.4-1.4L7.8 13.4a3 3 0 1 0 4.2 4.2l2.2-2.2a1 1 0 0 0-1.4-1.4l-2.2 2.2a1 1 0 0 1-1.4-1.4z"/></svg>'),
-    ("image-upload", "Upload image", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm0 2v8.2l3.3-3.3a1 1 0 0 1 1.4 0l2 2L15.8 10a1 1 0 0 1 1.4 0L19 11.8V7H5zm14 10v-2.4l-2.5-2.5-4.1 4.1-3-3L5 17h14zM9 8.5A1.5 1.5 0 1 1 6 8.5a1.5 1.5 0 0 1 3 0z"/></svg>'),
+    (
+        "bold",
+        "Bold",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h5.2c2.6 0 4.3 1.4 4.3 3.7 0 1.5-.8 2.7-2.2 3.2 1.8.4 3 1.8 3 3.8 0 2.6-1.9 4.3-5 4.3H8V5zm3 2.4v3.4h2.1c1 0 1.6-.6 1.6-1.7S14.1 7.4 13 7.4H11zm0 5.7v4h2.6c1.2 0 1.9-.7 1.9-1.9s-.7-2-1.9-2H11z"/></svg>',
+    ),
+    (
+        "italic",
+        "Italic",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5v2h2.2l-3.4 10H6v2h8v-2h-2.2l3.4-10H18V5z"/></svg>',
+    ),
+    (
+        "underline",
+        "Underline",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v7a5 5 0 0 0 10 0V4h-2v7a3 3 0 0 1-6 0V4H7zm-1 15h12v2H6z"/></svg>',
+    ),
+    (
+        "h2",
+        "Heading 2",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2v5h5V6h2v12h-2v-5H6v5H4zM17 9.5c0-1.4 1.1-2.5 2.5-2.5S22 8.1 22 9.5c0 1-.5 1.8-1.3 2.4l-1.9 1.4h3.2V15h-6v-1.3l3.3-2.6c.5-.4.7-.8.7-1.3 0-.6-.4-1-.9-1s-.9.4-.9 1V10h-1.8v-.5z"/></svg>',
+    ),
+    (
+        "h3",
+        "Heading 3",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2v5h5V6h2v12h-2v-5H6v5H4zM18.4 10.2H17V8.7h4.7v1.1l-1.8 1.7c1 .2 1.7 1 1.7 2.1 0 1.5-1.2 2.5-3 2.5-1.9 0-3-.9-3.1-2.5h1.7c.1.6.5 1 1.3 1 .7 0 1.2-.4 1.2-1.1 0-.7-.5-1.1-1.3-1.1h-.9v-1.3z"/></svg>',
+    ),
+    (
+        "bulletList",
+        "Bullet list",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11v2H9zm0 5h11v2H9zm0 5h11v2H9zM5 7a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0 5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0 5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/></svg>',
+    ),
+    (
+        "orderedList",
+        "Ordered list",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6h10v2H10zm0 5h10v2H10zm0 5h10v2H10zM4 5h1v5H3V8h1zm-1 8h2.2c.4 0 .8.4.8.8 0 .2-.1.4-.3.6L4 16h2v2H2.4v-1.2l2-1.9H3v-2z"/></svg>',
+    ),
+    (
+        "blockquote",
+        "Blockquote",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6h5v5H9.6c0 1.7 1 3 2.7 3.8L11 17c-2.7-1-4-3.1-4-6.3V6zm8 0h5v5h-2.4c0 1.7 1 3 2.7 3.8L19 17c-2.7-1-4-3.1-4-6.3V6z"/></svg>',
+    ),
+    (
+        "codeBlock",
+        "Code block",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8.5 16.5-4.5-4.5 4.5-4.5 1.4 1.4L6.8 12l3.1 3.1zm7 0-1.4-1.4 3.1-3.1-3.1-3.1 1.4-1.4 4.5 4.5zm-4.6 2.1-1.9-.5 4-14 1.9.5z"/></svg>',
+    ),
+    (
+        "horizontalRule",
+        "Horizontal rule",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v2H4z"/></svg>',
+    ),
+    (
+        "link",
+        "Link",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 13.4a1 1 0 0 0 1.4 1.4l4.2-4.2a3 3 0 0 0-4.2-4.2L9.8 8.6a1 1 0 1 0 1.4 1.4l2.2-2.2a1 1 0 1 1 1.4 1.4zm2.8-2.8a1 1 0 0 0-1.4-1.4L7.8 13.4a3 3 0 1 0 4.2 4.2l2.2-2.2a1 1 0 0 0-1.4-1.4l-2.2 2.2a1 1 0 0 1-1.4-1.4z"/></svg>',
+    ),
+    (
+        "image-upload",
+        "Upload image",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm0 2v8.2l3.3-3.3a1 1 0 0 1 1.4 0l2 2L15.8 10a1 1 0 0 1 1.4 0L19 11.8V7H5zm14 10v-2.4l-2.5-2.5-4.1 4.1-3-3L5 17h14zM9 8.5A1.5 1.5 0 1 1 6 8.5a1.5 1.5 0 0 1 3 0z"/></svg>',
+    ),
 ]
 
 EDITOR_ACTION_BUTTONS = [
-    ("editor-new-draft", "New draft", "secondary", "link", ROUTE_EDITOR, '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>'),
-    ("editor-toggle-preview", "Preview mode", "secondary", "button", "", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c5.5 0 9.3 4.2 10.6 6-1.3 1.8-5.1 6-10.6 6S2.7 12.8 1.4 11C2.7 9.2 6.5 5 12 5zm0 2C8.3 7 5.3 9.5 3.8 11 5.3 12.5 8.3 15 12 15s6.7-2.5 8.2-4C18.7 9.5 15.7 7 12 7zm0 1.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z"/></svg>'),
-    ("editor-toggle-focus", "Focus mode", "secondary", "button", "", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5v2H6v3H4zm10-5h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm13 0h2v5h-5v-2h3v-3z"/></svg>'),
-    ("editor-export-markdown", "Export Markdown", "secondary", "button", "", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5V4zm9 1.5V9h3.5L14 5.5zM8 12v4H6v-4h2zm1 4 1.6-4h1.6l1.6 4h-1.7l-.2-.7h-1.4l-.2.7H9zm2.1-1.9h.8l-.4-1.3-.4 1.3zm3.1-2.1h1.7l1 1.6 1-1.6h1.7l-1.8 2.8 1.9 3h-1.7l-1.1-1.7-1.1 1.7h-1.7l1.9-3-1.8-2.8z"/></svg>'),
-    ("editor-export-html", "Export HTML", "secondary", "button", "", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5V4zm9 1.5V9h3.5L14 5.5zM8.4 15.8 6 13.4l2.4-2.4 1.1 1.1-1.3 1.3 1.3 1.3-1.1 1.1zm3.2 1.2h-1.4l2.2-8h1.4l-2.2 8zm3-1.2-1.1-1.1 1.3-1.3-1.3-1.3 1.1-1.1 2.4 2.4-2.4 2.4z"/></svg>'),
-    ("", "Save draft", "", "submit", "", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5V4zm2 2v12h10V8.5L15.5 7H15v3H9V6H7zm4 0v2h2V6h-2zm1 10.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>'),
-    ("", "Save and queue", "secondary", "submit", "/editor/schedule", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h12v2H6V5zm0 6h8v2H6v-2zm0 6h8v2H6v-2zm10-5 5 4-5 4v-3h-3v-2h3v-3z"/></svg>'),
+    (
+        "editor-new-draft",
+        "New draft",
+        "secondary",
+        "link",
+        ROUTE_EDITOR,
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>',
+    ),
+    (
+        "editor-toggle-preview",
+        "Preview mode",
+        "secondary",
+        "button",
+        "",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c5.5 0 9.3 4.2 10.6 6-1.3 1.8-5.1 6-10.6 6S2.7 12.8 1.4 11C2.7 9.2 6.5 5 12 5zm0 2C8.3 7 5.3 9.5 3.8 11 5.3 12.5 8.3 15 12 15s6.7-2.5 8.2-4C18.7 9.5 15.7 7 12 7zm0 1.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z"/></svg>',
+    ),
+    (
+        "editor-toggle-focus",
+        "Focus mode",
+        "secondary",
+        "button",
+        "",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5v2H6v3H4zm10-5h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm13 0h2v5h-5v-2h3v-3z"/></svg>',
+    ),
+    (
+        "editor-export-markdown",
+        "Export Markdown",
+        "secondary",
+        "button",
+        "",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5V4zm9 1.5V9h3.5L14 5.5zM8 12v4H6v-4h2zm1 4 1.6-4h1.6l1.6 4h-1.7l-.2-.7h-1.4l-.2.7H9zm2.1-1.9h.8l-.4-1.3-.4 1.3zm3.1-2.1h1.7l1 1.6 1-1.6h1.7l-1.8 2.8 1.9 3h-1.7l-1.1-1.7-1.1 1.7h-1.7l1.9-3-1.8-2.8z"/></svg>',
+    ),
+    (
+        "editor-export-html",
+        "Export HTML",
+        "secondary",
+        "button",
+        "",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5V4zm9 1.5V9h3.5L14 5.5zM8.4 15.8 6 13.4l2.4-2.4 1.1 1.1-1.3 1.3 1.3 1.3-1.1 1.1zm3.2 1.2h-1.4l2.2-8h1.4l-2.2 8zm3-1.2-1.1-1.1 1.3-1.3-1.3-1.3 1.1-1.1 2.4 2.4-2.4 2.4z"/></svg>',
+    ),
+    (
+        "",
+        "Save draft",
+        "",
+        "submit",
+        "",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5V4zm2 2v12h10V8.5L15.5 7H15v3H9V6H7zm4 0v2h2V6h-2zm1 10.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>',
+    ),
+    (
+        "",
+        "Save and queue",
+        "secondary",
+        "submit",
+        "/editor/schedule",
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h12v2H6V5zm0 6h8v2H6v-2zm0 6h8v2H6v-2zm10-5 5 4-5 4v-3h-3v-2h3v-3z"/></svg>',
+    ),
 ]
 
 
@@ -216,9 +313,9 @@ def public_asset_url(content_dir: Path, asset_path: str) -> str:
     content_raw = str(content_dir).replace("\\", "/").lstrip("./")
     prefix = f"{content_raw.rstrip('/')}/"
     if raw.startswith(prefix):
-        raw = raw[len(prefix):]
+        raw = raw[len(prefix) :]
     if raw.startswith("content/drafts/"):
-        raw = raw[len("content/drafts/"):]
+        raw = raw[len("content/drafts/") :]
     return f"/content-files/{raw}" if raw else ""
 
 
@@ -387,7 +484,13 @@ def append_queue(record: dict[str, Any]) -> None:
     append_schedule(record)
 
 
-def build_editor_item_from_request(form: dict[str, list[str]], existing: ContentItem | None = None, *, forced_status: str | None = None, fallback_channels: list[str] | None = None) -> ContentItem:
+def build_editor_item_from_request(
+    form: dict[str, list[str]],
+    existing: ContentItem | None = None,
+    *,
+    forced_status: str | None = None,
+    fallback_channels: list[str] | None = None,
+) -> ContentItem:
     channels = form_values(form, "channels")
     if not channels and fallback_channels:
         channels = fallback_channels
@@ -500,7 +603,7 @@ def render_sidebar_icon(name: str, fallback: str) -> str:
     svg = icons.get(name)
     if svg:
         return svg
-    return f"<span class=\"sidebar-fallback\">{html.escape(fallback)}</span>"
+    return f'<span class="sidebar-fallback">{html.escape(fallback)}</span>'
 
 
 def queue_item_url(record_id: str, route: str) -> str:
@@ -581,7 +684,9 @@ def open_article_editor_process(config_path: str) -> None:
         }
     )
     with log_path.open("a", encoding="utf-8") as log_file:
-        log_file.write(f"\n[{datetime.now().isoformat(timespec='seconds')}] Opening and filling LinkedIn article draft\n")
+        log_file.write(
+            f"\n[{datetime.now().isoformat(timespec='seconds')}] Opening and filling LinkedIn article draft\n"
+        )
         log_file.flush()
         process = subprocess.Popen(
             [sys.executable, str(ROOT_DIR / "pipeline.py"), "--config", config_path, "--save-draft"],
@@ -619,9 +724,7 @@ def spawn_worker_process(config_path: str, *worker_args: str, log_name: str = "c
     log_path = ROOT_DIR / "outbox" / log_name
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf-8") as log_file:
-        log_file.write(
-            f"\n[{datetime.now().isoformat(timespec='seconds')}] Starting worker: {' '.join(worker_args)}\n"
-        )
+        log_file.write(f"\n[{datetime.now().isoformat(timespec='seconds')}] Starting worker: {' '.join(worker_args)}\n")
         log_file.flush()
         process = subprocess.Popen(
             [sys.executable, str(ROOT_DIR / "worker.py"), "--config", config_path, *worker_args],
@@ -643,12 +746,7 @@ def render_placeholder_card(title: str, message: str) -> str:
 
 
 def escape_js_template(value: str) -> str:
-    return (
-        value.replace("\\", "\\\\")
-        .replace("`", "\\`")
-        .replace("${", "\\${")
-        .replace("</", "<\\/")
-    )
+    return value.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${").replace("</", "<\\/")
 
 
 def make_empty_content_item() -> ContentItem:
@@ -669,6 +767,7 @@ def make_empty_content_item() -> ContentItem:
         updated_at="",
         published_at="",
     )
+
 
 def select_content_item_for_route(
     content_dir: Path,
@@ -706,7 +805,7 @@ def render_editor_list(items: list[ContentItem], active_identifier: str | None) 
             f"</div>"
         )
     if not rows:
-        rows.append("<p class=\"meta\">No local drafts yet. Create your first content item here.</p>")
+        rows.append('<p class="meta">No local drafts yet. Create your first content item here.</p>')
     return "".join(rows)
 
 
@@ -750,29 +849,36 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
     preview_html = editor_html_seed or render_markdown_html(selected_item.markdown_body)
     editor_json_seed = json.dumps(selected_item.editor_json or {}, ensure_ascii=False)
     cover_preview_url = public_asset_url(config.content_dir, selected_item.cover_image_path)
-    revisions = list_content_revisions(config.content_dir, selected_item.id or selected_item.slug, limit=10) if selected_item.id or selected_item.slug else []
+    revisions = (
+        list_content_revisions(config.content_dir, selected_item.id or selected_item.slug, limit=10)
+        if selected_item.id or selected_item.slug
+        else []
+    )
     cover_preview_markup = (
         f'<img src="{html.escape(cover_preview_url)}" alt="Cover preview" class="cover-preview-image" />'
         if cover_preview_url
         else '<div class="cover-preview-empty">No cover selected yet.</div>'
     )
-    revision_items = "".join(
-        f"""
+    revision_items = (
+        "".join(
+            f"""
         <li class="revision-item">
           <div class="revision-copy">
-            <strong>{html.escape(str(revision.get('saved_at') or revision.get('id') or 'Unknown revision'))}</strong>
-            <span class="meta">{html.escape(render_revision_reason(str(revision.get('reason') or 'manual')))}</span>
+            <strong>{html.escape(str(revision.get("saved_at") or revision.get("id") or "Unknown revision"))}</strong>
+            <span class="meta">{html.escape(render_revision_reason(str(revision.get("reason") or "manual")))}</span>
           </div>
           <form method="post" action="/editor/restore-revision" class="revision-form">
-            <input type="hidden" name="return_to" value="{html.escape(f'{ROUTE_EDITOR}?content={selected_item.id or selected_item.slug}')}" />
+            <input type="hidden" name="return_to" value="{html.escape(f"{ROUTE_EDITOR}?content={selected_item.id or selected_item.slug}")}" />
             <input type="hidden" name="content_id" value="{html.escape(selected_item.id or selected_item.slug)}" />
-            <input type="hidden" name="revision_id" value="{html.escape(str(revision.get('id') or ''))}" />
+            <input type="hidden" name="revision_id" value="{html.escape(str(revision.get("id") or ""))}" />
             <button type="submit" class="editor-panel-button subtle">Restore</button>
           </form>
         </li>
         """
-        for revision in revisions
-    ) or '<li class="revision-empty meta">No revisions yet. They start appearing after edits and restores.</li>'
+            for revision in revisions
+        )
+        or '<li class="revision-empty meta">No revisions yet. They start appearing after edits and restores.</li>'
+    )
     return f"""
       <div class=\"editor-main\">
         <section class=\"card\">
@@ -780,10 +886,18 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
               <input type=\"hidden\" name=\"return_to\" value=\"{html.escape(ROUTE_EDITOR)}\" />
               <input type=\"hidden\" name=\"content_id\" value=\"{html.escape(selected_item.id)}\" />
               <input type=\"hidden\" name=\"previous_slug\" value=\"{html.escape(selected_item.slug)}\" />
-              <input type=\"hidden\" name=\"editor_json\" id=\"editor-json-input\" value=\"{html.escape(editor_json_seed)}\" />
-              <input type=\"hidden\" name=\"markdown_body\" id=\"editor-markdown-input\" value=\"{html.escape(selected_item.markdown_body)}\" />
-              <input type=\"hidden\" name=\"html_body\" id=\"editor-html-input\" value=\"{html.escape(editor_html_seed)}\" />
-              <input type=\"hidden\" name=\"cover_image_path\" id=\"editor-cover-image-input\" value=\"{html.escape(selected_item.cover_image_path)}\" />
+              <input type=\"hidden\" name=\"editor_json\" id=\"editor-json-input\" value=\"{
+        html.escape(editor_json_seed)
+    }\" />
+              <input type=\"hidden\" name=\"markdown_body\" id=\"editor-markdown-input\" value=\"{
+        html.escape(selected_item.markdown_body)
+    }\" />
+              <input type=\"hidden\" name=\"html_body\" id=\"editor-html-input\" value=\"{
+        html.escape(editor_html_seed)
+    }\" />
+              <input type=\"hidden\" name=\"cover_image_path\" id=\"editor-cover-image-input\" value=\"{
+        html.escape(selected_item.cover_image_path)
+    }\" />
               <input type=\"file\" id=\"editor-image-upload\" accept=\"image/*\" hidden />
 
               <div class=\"writer-shell\">
@@ -794,8 +908,12 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
                         <div class=\"editor-toolbar\" id=\"editor-toolbar\">{render_editor_toolbar()}</div>
                         <div class=\"editor-writing-surface\">
                           <div class=\"editor-primary-fields editor-primary-fields-inline\">
-                            <input id=\"editor-title\" class=\"editor-title-input\" name=\"title\" value=\"{html.escape(selected_item.title)}\" placeholder=\"Title\" />
-                            <textarea id=\"editor-subtitle\" class=\"editor-subtitle-input\" name=\"subtitle\" placeholder=\"Subtitle or dek\">{html.escape(selected_item.subtitle)}</textarea>
+                            <input id=\"editor-title\" class=\"editor-title-input\" name=\"title\" value=\"{
+        html.escape(selected_item.title)
+    }\" placeholder=\"Title\" />
+                            <textarea id=\"editor-subtitle\" class=\"editor-subtitle-input\" name=\"subtitle\" placeholder=\"Subtitle or dek\">{
+        html.escape(selected_item.subtitle)
+    }</textarea>
                           </div>
                           <div class=\"editor-drop-hint\" id=\"editor-drop-hint\">Drop images here to add them to the draft</div>
                           <div id=\"tiptap-editor\" class=\"tiptap-editor\"></div>
@@ -815,7 +933,19 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
                         <div id=\"editor-preview\" class=\"markdown-preview\">{preview_html}</div>
                         <section class=\"card preview-meta-card\">
                           <h3>Frontmatter Preview</h3>
-                          <pre id=\"frontmatter-preview\" class=\"frontmatter-preview\">---\ntitle: {html.escape(selected_item.title)}\nsubtitle: {html.escape(selected_item.subtitle)}\nstatus: {html.escape(selected_item.status)}\nchannels: [{html.escape(', '.join(selected_item.channels))}]\ntags: [{html.escape(', '.join(selected_item.tags))}]\ncreated_at: {html.escape(selected_item.created_at)}\nupdated_at: {html.escape(selected_item.updated_at)}\npublished_at: {html.escape(selected_item.published_at)}\nlinkedin_post_urn: {html.escape(selected_item.linkedin_post_urn)}\ninstagram_media_id: {html.escape(selected_item.instagram_media_id)}\nsubstack_post_id: {html.escape(selected_item.substack_post_id)}\nx_post_id: {html.escape(selected_item.x_post_id)}\n---</pre>
+                          <pre id=\"frontmatter-preview\" class=\"frontmatter-preview\">---\ntitle: {
+        html.escape(selected_item.title)
+    }\nsubtitle: {html.escape(selected_item.subtitle)}\nstatus: {html.escape(selected_item.status)}\nchannels: [{
+        html.escape(", ".join(selected_item.channels))
+    }]\ntags: [{html.escape(", ".join(selected_item.tags))}]\ncreated_at: {
+        html.escape(selected_item.created_at)
+    }\nupdated_at: {html.escape(selected_item.updated_at)}\npublished_at: {
+        html.escape(selected_item.published_at)
+    }\nlinkedin_post_urn: {html.escape(selected_item.linkedin_post_urn)}\ninstagram_media_id: {
+        html.escape(selected_item.instagram_media_id)
+    }\nsubstack_post_id: {html.escape(selected_item.substack_post_id)}\nx_post_id: {
+        html.escape(selected_item.x_post_id)
+    }\n---</pre>
                         </section>
                       </div>
                     </div>
@@ -825,52 +955,76 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
                     <div class=\"editor-rail-sticky\">
                       <details class=\"editor-panel\">
                         <summary class=\"editor-panel-summary\">
-                          <span class=\"editor-panel-summary-left\"><span class=\"editor-panel-icon\">{render_editor_panel_icon('metadata')}</span><span>Metadata</span></span>
+                          <span class=\"editor-panel-summary-left\"><span class=\"editor-panel-icon\">{
+        render_editor_panel_icon("metadata")
+    }</span><span>Metadata</span></span>
                           <span class=\"editor-panel-chevron\" aria-hidden=\"true\"></span>
                         </summary>
                         <div class=\"editor-panel-body editor-side-fields\">
                           <label for=\"editor-slug\">Slug</label>
-                          <input id=\"editor-slug\" name=\"slug\" value=\"{html.escape(selected_item.slug)}\" placeholder=\"auto-generated-from-title\" />
+                          <input id=\"editor-slug\" name=\"slug\" value=\"{
+        html.escape(selected_item.slug)
+    }\" placeholder=\"auto-generated-from-title\" />
                           <label for=\"editor-status\">Status</label>
                           <select id=\"editor-status\" name=\"status\">
-                            <option value=\"draft\" {'selected' if selected_item.status == 'draft' else ''}>Draft</option>
-                            <option value=\"scheduled\" {'selected' if selected_item.status == 'scheduled' else ''}>Scheduled</option>
+                            <option value=\"draft\" {
+        "selected" if selected_item.status == "draft" else ""
+    }>Draft</option>
+                            <option value=\"scheduled\" {
+        "selected" if selected_item.status == "scheduled" else ""
+    }>Scheduled</option>
                           </select>
                           <label for=\"editor-tags\">Tags</label>
-                          <input id=\"editor-tags\" name=\"tags\" value=\"{html.escape(', '.join(selected_item.tags))}\" placeholder=\"essay, theology, psychology\" />
+                          <input id=\"editor-tags\" name=\"tags\" value=\"{
+        html.escape(", ".join(selected_item.tags))
+    }\" placeholder=\"essay, theology, psychology\" />
                           <label for=\"editor-categories\">Categories</label>
-                          <input id=\"editor-categories\" name=\"categories\" value=\"{html.escape(', '.join(selected_item.categories))}\" placeholder=\"LinkedIn, Longform\" />
+                          <input id=\"editor-categories\" name=\"categories\" value=\"{
+        html.escape(", ".join(selected_item.categories))
+    }\" placeholder=\"LinkedIn, Longform\" />
                           <label for=\"editor-published-at\">Published at</label>
-                          <input id=\"editor-published-at\" name=\"published_at\" value=\"{html.escape(selected_item.published_at)}\" placeholder=\"2026-06-09T15:00:00+02:00\" />
+                          <input id=\"editor-published-at\" name=\"published_at\" value=\"{
+        html.escape(selected_item.published_at)
+    }\" placeholder=\"2026-06-09T15:00:00+02:00\" />
                         </div>
                       </details>
 
                       <details class=\"editor-panel\">
                         <summary class=\"editor-panel-summary\">
-                          <span class=\"editor-panel-summary-left\"><span class=\"editor-panel-icon\">{render_editor_panel_icon('channels')}</span><span>Channels</span></span>
+                          <span class=\"editor-panel-summary-left\"><span class=\"editor-panel-icon\">{
+        render_editor_panel_icon("channels")
+    }</span><span>Channels</span></span>
                           <span class=\"editor-panel-chevron\" aria-hidden=\"true\"></span>
                         </summary>
                         <div class=\"editor-panel-body\">
-                          <div class=\"checkbox-grid checkbox-grid-rail\">{render_channel_checkbox_grid(selected_channels)}</div>
+                          <div class=\"checkbox-grid checkbox-grid-rail\">{
+        render_channel_checkbox_grid(selected_channels)
+    }</div>
                         </div>
                       </details>
 
                       <details class=\"editor-panel\">
                         <summary class=\"editor-panel-summary\">
-                          <span class=\"editor-panel-summary-left\"><span class=\"editor-panel-icon\">{render_editor_panel_icon('media')}</span><span>Media</span></span>
+                          <span class=\"editor-panel-summary-left\"><span class=\"editor-panel-icon\">{
+        render_editor_panel_icon("media")
+    }</span><span>Media</span></span>
                           <span class=\"editor-panel-chevron\" aria-hidden=\"true\"></span>
                         </summary>
                         <div class=\"editor-panel-body\">
                           <p class=\"meta\">The first image you upload becomes the cover automatically.</p>
                           <div id=\"editor-cover-preview\" class=\"cover-preview\">{cover_preview_markup}</div>
                           <label for=\"editor-cover-image-path\">Cover image path</label>
-                          <input id=\"editor-cover-image-path\" value=\"{html.escape(selected_item.cover_image_path)}\" placeholder=\"Auto-filled from first uploaded image\" readonly />
+                          <input id=\"editor-cover-image-path\" value=\"{
+        html.escape(selected_item.cover_image_path)
+    }\" placeholder=\"Auto-filled from first uploaded image\" readonly />
                         </div>
                       </details>
 
                       <details class=\"editor-panel\">
                         <summary class=\"editor-panel-summary\">
-                          <span class=\"editor-panel-summary-left\"><span class=\"editor-panel-icon\">{render_editor_panel_icon('revisions')}</span><span>Revisions</span></span>
+                          <span class=\"editor-panel-summary-left\"><span class=\"editor-panel-icon\">{
+        render_editor_panel_icon("revisions")
+    }</span><span>Revisions</span></span>
                           <span class=\"editor-panel-chevron\" aria-hidden=\"true\"></span>
                         </summary>
                         <div class=\"editor-panel-body\">
@@ -880,7 +1034,9 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
 
                       <details class=\"editor-panel\">
                         <summary class=\"editor-panel-summary\">
-                          <span class=\"editor-panel-summary-left\"><span class=\"editor-panel-icon\">{render_editor_panel_icon('ai')}</span><span>AI prompt</span></span>
+                          <span class=\"editor-panel-summary-left\"><span class=\"editor-panel-icon\">{
+        render_editor_panel_icon("ai")
+    }</span><span>AI prompt</span></span>
                           <span class=\"editor-panel-chevron\" aria-hidden=\"true\"></span>
                         </summary>
                         <div class=\"editor-panel-body ai-chat-panel\">
@@ -899,30 +1055,39 @@ def render_editor_page(config: AppConfig, content_items: list[ContentItem], sele
             </form>
         </section>
         {render_document_performance_panel(selected_item)}
-        {render_derivatives_panel(selected_item, return_to=f'{ROUTE_EDITOR}?content={selected_item.id or selected_item.slug}')}
+        {
+        render_derivatives_panel(
+            selected_item, return_to=f"{ROUTE_EDITOR}?content={selected_item.id or selected_item.slug}"
+        )
+    }
       </div>
       <script>
-        window.__studioEditorSeed = {json.dumps({
-            "id": selected_item.id,
-            "title": selected_item.title,
-            "subtitle": selected_item.subtitle,
-            "slug": selected_item.slug,
-            "status": selected_item.status,
-            "channels": selected_item.channels,
-            "tags": selected_item.tags,
-            "categories": selected_item.categories,
-            "published_at": selected_item.published_at,
-            "markdown_body": selected_item.markdown_body,
-            "html_body": editor_html_seed,
-            "editor_json": selected_item.editor_json,
-            "cover_image_path": selected_item.cover_image_path,
-            "created_at": selected_item.created_at,
-            "linkedin_post_urn": selected_item.linkedin_post_urn,
-            "instagram_media_id": selected_item.instagram_media_id,
-            "substack_post_id": selected_item.substack_post_id,
-            "x_post_id": selected_item.x_post_id,
-            "updated_at": selected_item.updated_at,
-        }, ensure_ascii=False)};
+        window.__studioEditorSeed = {
+        json.dumps(
+            {
+                "id": selected_item.id,
+                "title": selected_item.title,
+                "subtitle": selected_item.subtitle,
+                "slug": selected_item.slug,
+                "status": selected_item.status,
+                "channels": selected_item.channels,
+                "tags": selected_item.tags,
+                "categories": selected_item.categories,
+                "published_at": selected_item.published_at,
+                "markdown_body": selected_item.markdown_body,
+                "html_body": editor_html_seed,
+                "editor_json": selected_item.editor_json,
+                "cover_image_path": selected_item.cover_image_path,
+                "created_at": selected_item.created_at,
+                "linkedin_post_urn": selected_item.linkedin_post_urn,
+                "instagram_media_id": selected_item.instagram_media_id,
+                "substack_post_id": selected_item.substack_post_id,
+                "x_post_id": selected_item.x_post_id,
+                "updated_at": selected_item.updated_at,
+            },
+            ensure_ascii=False,
+        )
+    };
       </script>
       <script type=\"module\" src=\"/assets/editor-app.js\"></script>
     """
@@ -941,10 +1106,13 @@ def render_record_detail(record: dict[str, Any] | None, return_to: str) -> str:
     if not isinstance(image_sources, list):
         image_sources = []
 
-    image_rows = "".join(
-        f"<li><a href=\"{html.escape(str(source))}\" target=\"_blank\" rel=\"noreferrer\">{html.escape(str(source))}</a></li>"
-        for source in image_sources
-    ) or "<li>No image sources stored.</li>"
+    image_rows = (
+        "".join(
+            f'<li><a href="{html.escape(str(source))}" target="_blank" rel="noreferrer">{html.escape(str(source))}</a></li>'
+            for source in image_sources
+        )
+        or "<li>No image sources stored.</li>"
+    )
 
     result = record.get("result") or "No result yet."
     processed_at = record.get("processed_at") or "Not processed yet."
@@ -954,7 +1122,7 @@ def render_record_detail(record: dict[str, Any] | None, return_to: str) -> str:
     if str(record.get("status", "")) == "failed":
         retry_button = f"""
           <form method="post" action="/retry">
-            <input type="hidden" name="id" value="{html.escape(str(record.get('id', '')))}" />
+            <input type="hidden" name="id" value="{html.escape(str(record.get("id", "")))}" />
             <input type="hidden" name="return_to" value="{html.escape(return_to)}" />
             <div class="actions">
               <button type="submit">Retry failed item</button>
@@ -965,19 +1133,19 @@ def render_record_detail(record: dict[str, Any] | None, return_to: str) -> str:
     return f"""
         <section class="card">
           <h2>Queue Detail</h2>
-          <p><strong>{html.escape(str(record.get('article_title', 'Untitled')))}</strong></p>
-          <p class="meta">Platform: <code>{html.escape(str(record.get('platform', '')))}</code></p>
-          <p class="meta">Content type: <code>{html.escape(str(record.get('content_type', 'post')))}</code></p>
+          <p><strong>{html.escape(str(record.get("article_title", "Untitled")))}</strong></p>
+          <p class="meta">Platform: <code>{html.escape(str(record.get("platform", "")))}</code></p>
+          <p class="meta">Content type: <code>{html.escape(str(record.get("content_type", "post")))}</code></p>
           <p class="meta">Route: <code>{html.escape(route)}</code></p>
-          <p class="meta">Status: {render_status_badge(str(record.get('status', 'queued')))}</p>
-          <p class="meta">Scheduled for: <code>{html.escape(str(record.get('scheduled_for', '')))}</code></p>
-          <p class="meta">Source published at: <code>{html.escape(str(record.get('source_published_at', '')) or 'Unknown')}</code></p>
-          <p class="meta">Created at: <code>{html.escape(str(record.get('created_at', '')))}</code></p>
+          <p class="meta">Status: {render_status_badge(str(record.get("status", "queued")))}</p>
+          <p class="meta">Scheduled for: <code>{html.escape(str(record.get("scheduled_for", "")))}</code></p>
+          <p class="meta">Source published at: <code>{html.escape(str(record.get("source_published_at", "")) or "Unknown")}</code></p>
+          <p class="meta">Created at: <code>{html.escape(str(record.get("created_at", "")))}</code></p>
           <p class="meta">Processed at: <code>{html.escape(str(processed_at))}</code></p>
-          <p class="meta">Article link: <a href="{html.escape(str(record.get('article_link', '')))}" target="_blank" rel="noreferrer">{html.escape(str(record.get('article_link', '')))}</a></p>
-          <p class="meta">Notes: {html.escape(str(record.get('notes', '')) or 'No notes')}</p>
+          <p class="meta">Article link: <a href="{html.escape(str(record.get("article_link", "")))}" target="_blank" rel="noreferrer">{html.escape(str(record.get("article_link", "")))}</a></p>
+          <p class="meta">Notes: {html.escape(str(record.get("notes", "")) or "No notes")}</p>
           <h3>Teaser</h3>
-          <div class="teaser">{html.escape(str(record.get('article_teaser', '')))}</div>
+          <div class="teaser">{html.escape(str(record.get("article_teaser", "")))}</div>
           <h3>Media sources</h3>
           <ul>{image_rows}</ul>
           <h3>Result</h3>
@@ -1005,7 +1173,7 @@ def render_worker_history() -> str:
           <h2>Worker Runs</h2>
           <table>
             <thead><tr><th>Time</th><th>Status</th><th>Message</th></tr></thead>
-            <tbody>{''.join(rows)}</tbody>
+            <tbody>{"".join(rows)}</tbody>
           </table>
         </section>
     """
@@ -1031,7 +1199,7 @@ def render_browser_session(config: AppConfig, return_to: str) -> str:
           <p class="meta">Current mode: <code>{html.escape(current)}</code></p>
           <p class="meta">LinkedIn target: <code>{html.escape(config.linkedin_publish_as_page_name)}</code> · Content mode: <code>{html.escape(config.linkedin_content_mode)}</code></p>
           <p class="meta">Article timing: <code>{html.escape(timing_summary)}</code></p>
-          <p class="meta">Cover image: <code>{'enabled' if config.linkedin_article_use_cover_image else 'disabled'}</code></p>
+          <p class="meta">Cover image: <code>{"enabled" if config.linkedin_article_use_cover_image else "disabled"}</code></p>
           <p class="meta">Article admin URL: <code>{html.escape(config.linkedin_company_admin_url)}</code></p>
           <p class="meta">Article new URL: <code>{html.escape(config.linkedin_article_new_url)}</code></p>
           <p class="meta">Substack archive: <code>{html.escape(config.substack_archive_url)}</code></p>
@@ -1092,7 +1260,7 @@ def render_status_filters(route: str, records: list[dict[str, Any]], selected_st
     for status in ["all", "queued", "processing", "done", "failed"]:
         active = " active" if active_status == status else ""
         chips.append(
-            f"<a href=\"{status_filter_url(route, status)}\" class=\"button nav-chip{active}\">{html.escape(status.title())} ({counts[status]})</a>"
+            f'<a href="{status_filter_url(route, status)}" class="button nav-chip{active}">{html.escape(status.title())} ({counts[status]})</a>'
         )
     chips.append(
         f'<form class="inline-form" method="post" action="/retry-all"><input type="hidden" name="return_to" value="{html.escape(route)}" /><button type="submit">Retry all failed</button></form>'
@@ -1102,16 +1270,16 @@ def render_status_filters(route: str, records: list[dict[str, Any]], selected_st
 
 def render_scheduler_summary(records: list[dict[str, Any]]) -> str:
     total = len(records)
-    failed = sum(1 for record in records if str(record.get('status', '')) == 'failed')
-    processing = sum(1 for record in records if str(record.get('status', '')) == 'processing')
-    queued = sum(1 for record in records if str(record.get('status', '')) == 'queued')
-    done = sum(1 for record in records if str(record.get('status', '')) == 'done')
+    failed = sum(1 for record in records if str(record.get("status", "")) == "failed")
+    processing = sum(1 for record in records if str(record.get("status", "")) == "processing")
+    queued = sum(1 for record in records if str(record.get("status", "")) == "queued")
+    done = sum(1 for record in records if str(record.get("status", "")) == "done")
     latest_run = ""
     worker_runs = worker_run_summary(load_worker_runs())
     if worker_runs:
         latest = worker_runs[-1]
         latest_run = (
-            f"<p class=\"meta\">Last worker run: "
+            f'<p class="meta">Last worker run: '
             f"<strong>{html.escape(str(latest.get('status', 'unknown')))}</strong> · "
             f"{html.escape(str(latest.get('timestamp', 'unknown time')))}</p>"
         )
@@ -1125,11 +1293,11 @@ def render_scheduler_summary(records: list[dict[str, Any]]) -> str:
           <a class="button secondary" href="{ROUTE_SCHEDULER}">Open Scheduler</a>
         </div>
         <div class="summary-metrics">
-          <a class="summary-pill" href="{status_filter_url(ROUTE_SCHEDULER, 'all')}"><strong>{total}</strong><span>Total</span></a>
-          <a class="summary-pill" href="{status_filter_url(ROUTE_SCHEDULER, 'queued')}"><strong>{queued}</strong><span>Queued</span></a>
-          <a class="summary-pill" href="{status_filter_url(ROUTE_SCHEDULER, 'processing')}"><strong>{processing}</strong><span>Processing</span></a>
-          <a class="summary-pill" href="{status_filter_url(ROUTE_SCHEDULER, 'done')}"><strong>{done}</strong><span>Done</span></a>
-          <a class="summary-pill" href="{status_filter_url(ROUTE_SCHEDULER, 'failed')}"><strong>{failed}</strong><span>Failed</span></a>
+          <a class="summary-pill" href="{status_filter_url(ROUTE_SCHEDULER, "all")}"><strong>{total}</strong><span>Total</span></a>
+          <a class="summary-pill" href="{status_filter_url(ROUTE_SCHEDULER, "queued")}"><strong>{queued}</strong><span>Queued</span></a>
+          <a class="summary-pill" href="{status_filter_url(ROUTE_SCHEDULER, "processing")}"><strong>{processing}</strong><span>Processing</span></a>
+          <a class="summary-pill" href="{status_filter_url(ROUTE_SCHEDULER, "done")}"><strong>{done}</strong><span>Done</span></a>
+          <a class="summary-pill" href="{status_filter_url(ROUTE_SCHEDULER, "failed")}"><strong>{failed}</strong><span>Failed</span></a>
         </div>
         {latest_run}
       </section>
@@ -1141,7 +1309,7 @@ def render_queue_table(queue: list[dict[str, Any]], route: str) -> str:
     for item in reversed(queue):
         record_id = str(item.get("id", ""))
         queue_rows.append(
-            f"<tr><td><a href=\"{queue_item_url(record_id, route)}\">{html.escape(str(item.get('scheduled_for', '')))}</a></td>"
+            f'<tr><td><a href="{queue_item_url(record_id, route)}">{html.escape(str(item.get("scheduled_for", "")))}</a></td>'
             f"<td>{html.escape(str(item.get('platform', '')))}</td>"
             f"<td>{html.escape(str(item.get('content_type', 'article')))}</td>"
             f"<td>{html.escape(str(item.get('source_published_at', '') or 'Unknown'))}</td>"
@@ -1155,7 +1323,7 @@ def render_queue_table(queue: list[dict[str, Any]], route: str) -> str:
         <h2>Schedule Queue</h2>
         <table>
           <thead><tr><th>Scheduled for</th><th>Platform</th><th>Type</th><th>Source published</th><th>Article</th><th>Status</th></tr></thead>
-          <tbody>{''.join(queue_rows)}</tbody>
+          <tbody>{"".join(queue_rows)}</tbody>
         </table>
       </section>
     """
@@ -1168,7 +1336,7 @@ def render_current_article(article: Article, image_count: int, teaser: str, teas
       <p><strong>{html.escape(article.title)}</strong></p>
       <p class=\"meta\"><a href=\"{html.escape(article.link)}\" class=\"inline-link\" target=\"_blank\" rel=\"noreferrer\">Open source article</a> · {image_count} images found</p>
       <p class=\"meta\">{html.escape(teaser_meta)}</p>
-      <div class=\"teaser\">{html.escape(teaser) if teaser else 'Click Generate Preview to create the teaser.'}</div>
+      <div class=\"teaser\">{html.escape(teaser) if teaser else "Click Generate Preview to create the teaser."}</div>
     </section>
     """
 
@@ -1192,7 +1360,7 @@ def render_create_schedule(article: Article, config: AppConfig, return_to: str) 
           <option value=\"post\">Post</option>
         </select>
         <label for=\"scheduled_for\">Scheduled for</label>
-        <input id=\"scheduled_for\" name=\"scheduled_for\" value=\"{html.escape(default_schedule_time('article', article, config))}\" />
+        <input id=\"scheduled_for\" name=\"scheduled_for\" value=\"{html.escape(default_schedule_time("article", article, config))}\" />
         <label for=\"notes\">Notes</label>
         <textarea id=\"notes\" name=\"notes\" placeholder=\"Optional editorial notes\"></textarea>
         <div class=\"actions\"><button type=\"submit\">Save schedule</button></div>
@@ -1219,7 +1387,9 @@ def render_linkedin_actions(config: AppConfig, return_to: str) -> str:
     """
 
 
-def render_linkedin_page(config: AppConfig, snapshot: dict[str, Any], preview: dict[str, Any] | None, all_records: list[dict[str, Any]]) -> str:
+def render_linkedin_page(
+    config: AppConfig, snapshot: dict[str, Any], preview: dict[str, Any] | None, all_records: list[dict[str, Any]]
+) -> str:
     article: Article = snapshot["article"]
     image_count = snapshot["image_count"]
     teaser = ""
@@ -1242,7 +1412,12 @@ def render_linkedin_page(config: AppConfig, snapshot: dict[str, Any], preview: d
     """
 
 
-def render_scheduler_page(all_records: list[dict[str, Any]], queue: list[dict[str, Any]], selected_record: dict[str, Any] | None, selected_status: str | None) -> str:
+def render_scheduler_page(
+    all_records: list[dict[str, Any]],
+    queue: list[dict[str, Any]],
+    selected_record: dict[str, Any] | None,
+    selected_status: str | None,
+) -> str:
     publish_queue_count = sum(1 for record in all_records if str(record.get("status", "")) in {"queued", "processing"})
     failed_count = sum(1 for record in all_records if str(record.get("status", "")) == "failed")
     return f"""
@@ -1302,7 +1477,7 @@ def render_config_page(config: AppConfig) -> str:
                 <div><dt>Content mode</dt><dd><code>{html.escape(config.linkedin_content_mode)}</code></dd></div>
                 <div><dt>Schedule buffer</dt><dd><code>{html.escape(str(config.linkedin_article_schedule_buffer_minutes))} minutes</code></dd></div>
                 <div><dt>Stats interval</dt><dd><code>{html.escape(str(config.stats_sync_interval_minutes))} minutes</code></dd></div>
-                <div><dt>Cover upload</dt><dd><code>{'enabled' if config.linkedin_article_use_cover_image else 'disabled'}</code></dd></div>
+                <div><dt>Cover upload</dt><dd><code>{"enabled" if config.linkedin_article_use_cover_image else "disabled"}</code></dd></div>
               </dl>
             </section>
           </div>
@@ -1325,22 +1500,22 @@ def render_config_page(config: AppConfig) -> str:
                 <input id=\"stats_sync_interval_minutes\" name=\"stats_sync_interval_minutes\" type=\"number\" min=\"15\" value=\"{html.escape(str(config.stats_sync_interval_minutes))}\" />
                 <div class=\"editor-two-up\">
                   <div>
-                    <label><input type=\"checkbox\" name=\"linkedin_api_enabled\" value=\"true\" {'checked' if config.linkedin_api_enabled else ''} /> LinkedIn API enabled</label>
+                    <label><input type=\"checkbox\" name=\"linkedin_api_enabled\" value=\"true\" {"checked" if config.linkedin_api_enabled else ""} /> LinkedIn API enabled</label>
                     <label for=\"linkedin_api_org_urn\">LinkedIn org/page URN</label>
                     <input id=\"linkedin_api_org_urn\" name=\"linkedin_api_org_urn\" value=\"{html.escape(config.linkedin_api_org_urn)}\" placeholder=\"urn:li:organization:123\" />
                   </div>
                   <div>
-                    <label><input type=\"checkbox\" name=\"instagram_api_enabled\" value=\"true\" {'checked' if config.instagram_api_enabled else ''} /> Instagram/Meta API enabled</label>
+                    <label><input type=\"checkbox\" name=\"instagram_api_enabled\" value=\"true\" {"checked" if config.instagram_api_enabled else ""} /> Instagram/Meta API enabled</label>
                     <label for=\"instagram_business_account_id\">Instagram business account ID</label>
                     <input id=\"instagram_business_account_id\" name=\"instagram_business_account_id\" value=\"{html.escape(config.instagram_business_account_id)}\" placeholder=\"1784...\" />
                   </div>
                 </div>
                 <div class=\"editor-two-up\">
                   <div>
-                    <label><input type=\"checkbox\" name=\"substack_import_enabled\" value=\"true\" {'checked' if config.substack_import_enabled else ''} /> Substack import enabled</label>
+                    <label><input type=\"checkbox\" name=\"substack_import_enabled\" value=\"true\" {"checked" if config.substack_import_enabled else ""} /> Substack import enabled</label>
                   </div>
                   <div>
-                    <label><input type=\"checkbox\" name=\"x_api_enabled\" value=\"true\" {'checked' if config.x_api_enabled else ''} /> X API enabled</label>
+                    <label><input type=\"checkbox\" name=\"x_api_enabled\" value=\"true\" {"checked" if config.x_api_enabled else ""} /> X API enabled</label>
                     <label for=\"x_account_id\">X account ID</label>
                     <input id=\"x_account_id\" name=\"x_account_id\" value=\"{html.escape(config.x_account_id)}\" placeholder=\"account id\" />
                   </div>
@@ -1359,7 +1534,7 @@ def render_config_page(config: AppConfig) -> str:
 
 def render_instagram_page() -> str:
     return f"""
-      <div class=\"page-grid\"><div class=\"stack\">{render_placeholder_card('Instagram', 'Instagram workflow will be configured here later.')}</div></div>
+      <div class=\"page-grid\"><div class=\"stack\">{render_placeholder_card("Instagram", "Instagram workflow will be configured here later.")}</div></div>
     """
 
 
@@ -1372,10 +1547,13 @@ def render_stats_page(content_items: list[ContentItem]) -> str:
         "substack": sum(1 for publication in publications if publication.platform == "substack"),
         "x": sum(1 for publication in publications if publication.platform == "x"),
     }
-    recent_items = "".join(
-        f"<tr><td>{html.escape(item.title)}</td><td>{html.escape(item.status)}</td><td>{html.escape(', '.join(item.channels) or '—')}</td><td>{html.escape(item.updated_at or item.created_at or 'Unknown')}</td></tr>"
-        for item in content_items[:8]
-    ) or "<tr><td colspan='4'>No local content items yet.</td></tr>"
+    recent_items = (
+        "".join(
+            f"<tr><td>{html.escape(item.title)}</td><td>{html.escape(item.status)}</td><td>{html.escape(', '.join(item.channels) or '—')}</td><td>{html.escape(item.updated_at or item.created_at or 'Unknown')}</td></tr>"
+            for item in content_items[:8]
+        )
+        or "<tr><td colspan='4'>No local content items yet.</td></tr>"
+    )
     return f"""
       <div class=\"page-grid\">
         <div class=\"stack\">
@@ -1383,10 +1561,10 @@ def render_stats_page(content_items: list[ContentItem]) -> str:
             <h2>Stats Dashboard</h2>
             <p class=\"meta\">Official APIs, exports, or manual imports should feed these cards later. Web scraping is intentionally not the default path.</p>
             <div class=\"summary-metrics\">
-              <div class=\"summary-pill static\"><strong>{platform_counts['linkedin']}</strong><span>LinkedIn publications</span></div>
-              <div class=\"summary-pill static\"><strong>{platform_counts['instagram']}</strong><span>Instagram publications</span></div>
-              <div class=\"summary-pill static\"><strong>{platform_counts['substack']}</strong><span>Substack publications</span></div>
-              <div class=\"summary-pill static\"><strong>{platform_counts['x']}</strong><span>X publications</span></div>
+              <div class=\"summary-pill static\"><strong>{platform_counts["linkedin"]}</strong><span>LinkedIn publications</span></div>
+              <div class=\"summary-pill static\"><strong>{platform_counts["instagram"]}</strong><span>Instagram publications</span></div>
+              <div class=\"summary-pill static\"><strong>{platform_counts["substack"]}</strong><span>Substack publications</span></div>
+              <div class=\"summary-pill static\"><strong>{platform_counts["x"]}</strong><span>X publications</span></div>
               <div class=\"summary-pill static\"><strong>{len(snapshots)}</strong><span>Stats snapshots</span></div>
             </div>
           </section>
@@ -1399,10 +1577,10 @@ def render_stats_page(content_items: list[ContentItem]) -> str:
           </section>
         </div>
         <div class=\"stack\">
-          {render_placeholder_card('LinkedIn post stats', 'Impressions, reach, reactions, comments, shares, saves, clicks, and follower lift will appear here when the adapter is connected.')}
-          {render_placeholder_card('Instagram insights', 'Professional account and media insights will be surfaced here through the Meta API when configured.')}
-          {render_placeholder_card('Substack import stats', f'Manual ZIP/CSV imports from {SUBSTACK_IMPORTS_DIRNAME} will be associated to local content by title, slug, or URL.')}
-          {render_placeholder_card('X post stats', 'X analytics can be attached here later if the account and API access are configured.')}
+          {render_placeholder_card("LinkedIn post stats", "Impressions, reach, reactions, comments, shares, saves, clicks, and follower lift will appear here when the adapter is connected.")}
+          {render_placeholder_card("Instagram insights", "Professional account and media insights will be surfaced here through the Meta API when configured.")}
+          {render_placeholder_card("Substack import stats", f"Manual ZIP/CSV imports from {SUBSTACK_IMPORTS_DIRNAME} will be associated to local content by title, slug, or URL.")}
+          {render_placeholder_card("X post stats", "X analytics can be attached here later if the account and API access are configured.")}
         </div>
       </div>
     """
@@ -1413,49 +1591,68 @@ def render_sidebar(active_route: str) -> str:
     items = []
     channel_items = []
     for route, icon_name, label, fallback in SIDEBAR_ITEMS:
-        active = ' active' if route == active_route else ''
+        active = " active" if route == active_route else ""
         item = f'<a class="sidebar-link{active}" href="{route}"><span class="sidebar-icon">{render_sidebar_icon(icon_name, fallback)}</span><span class="sidebar-label">{html.escape(label)}</span></a>'
         if route in channel_routes:
             channel_items.append(item)
         else:
             items.append(item)
-    channels_open = ' open' if active_route in channel_routes else ''
-    channels_active = ' active' if active_route in channel_routes else ''
+    channels_open = " open" if active_route in channel_routes else ""
+    channels_active = " active" if active_route in channel_routes else ""
     channel_group = (
         f'<details class="sidebar-section"{channels_open}>'
         f'<summary class="sidebar-section-summary{channels_active}" aria-label="Toggle channel navigation">'
         f'<span class="sidebar-icon">{render_sidebar_icon("channels", "CH")}</span>'
         f'<span class="sidebar-label">Channels</span>'
         f'<span class="sidebar-section-chevron" aria-hidden="true"></span>'
-        f'</summary>'
+        f"</summary>"
         f'<div class="sidebar-subnav">{"".join(channel_items)}</div>'
-        f'</details>'
+        f"</details>"
     )
     return f"""
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-top">
           <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Toggle navigation"><span aria-hidden="true">|||</span></button>
         </div>
-        <nav class="sidebar-nav" aria-label="Primary navigation">{''.join(items[:2])}{channel_group}{''.join(items[2:])}</nav>
+        <nav class="sidebar-nav" aria-label="Primary navigation">{"".join(items[:2])}{channel_group}{"".join(items[2:])}</nav>
       </aside>
     """
 
 
-def render_main_content(route: str, config: AppConfig, snapshot: dict[str, Any] | None, all_records: list[dict[str, Any]], queue: list[dict[str, Any]], preview: dict[str, Any] | None, selected_record: dict[str, Any] | None, selected_status: str | None, content_items: list[ContentItem], selected_content_item: ContentItem) -> tuple[str, str, str]:
+def render_main_content(
+    route: str,
+    config: AppConfig,
+    snapshot: dict[str, Any] | None,
+    all_records: list[dict[str, Any]],
+    queue: list[dict[str, Any]],
+    preview: dict[str, Any] | None,
+    selected_record: dict[str, Any] | None,
+    selected_status: str | None,
+    content_items: list[ContentItem],
+    selected_content_item: ContentItem,
+) -> tuple[str, str, str]:
     if route == ROUTE_EDITOR:
-        return '', '', render_editor_page(config, content_items, selected_content_item)
+        return "", "", render_editor_page(config, content_items, selected_content_item)
     if route == ROUTE_DRAFTS:
-        return '', '', render_drafts_page(config, content_items, selected_content_item)
+        return "", "", render_drafts_page(config, content_items, selected_content_item)
     if route == ROUTE_SCHEDULER:
-        return 'Scheduler', 'Schedule Queue and Worker Runs', render_scheduler_page(all_records, queue, selected_record, selected_status)
+        return (
+            "Scheduler",
+            "Schedule Queue and Worker Runs",
+            render_scheduler_page(all_records, queue, selected_record, selected_status),
+        )
     if route == ROUTE_STATS:
-        return 'Stats', 'Central analytics workspace for local content items', render_stats_page(content_items)
+        return "Stats", "Central analytics workspace for local content items", render_stats_page(content_items)
     if route == ROUTE_INSTAGRAM:
-        return 'Instagram', 'Instagram workflow placeholder', render_instagram_page()
+        return "Instagram", "Instagram workflow placeholder", render_instagram_page()
     if route == ROUTE_CONFIG:
-        return 'Config', 'System and workflow configuration', render_config_page(config)
+        return "Config", "System and workflow configuration", render_config_page(config)
     assert snapshot is not None
-    return 'LinkedIn', 'Current LinkedIn workflow and article drafting tools', render_linkedin_page(config, snapshot, preview, all_records)
+    return (
+        "LinkedIn",
+        "Current LinkedIn workflow and article drafting tools",
+        render_linkedin_page(config, snapshot, preview, all_records),
+    )
 
 
 def render_page(
@@ -1470,7 +1667,18 @@ def render_page(
     content_items: list[ContentItem],
     selected_content_item: ContentItem,
 ) -> str:
-    page_title, page_intro, page_content = render_main_content(route, config, snapshot, all_records, queue, preview, selected_record, selected_status, content_items, selected_content_item)
+    page_title, page_intro, page_content = render_main_content(
+        route,
+        config,
+        snapshot,
+        all_records,
+        queue,
+        preview,
+        selected_record,
+        selected_status,
+        content_items,
+        selected_content_item,
+    )
     header_markup = (
         '<header class="page-header">'
         f'<div><p class="page-kicker">{html.escape(route.strip("/") or "editor")}</p>'
@@ -2387,7 +2595,7 @@ def render_page(
     }}
   </style>
 </head>
-<body class="route-{html.escape(route.strip('/') or 'root')}">
+<body class="route-{html.escape(route.strip("/") or "root")}">
   <a class=\"skip-link\" href=\"#main-content\">Skip to content</a>
   <div class=\"app-shell\">
     {render_sidebar(route)}
@@ -2458,7 +2666,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             mime_type, _ = mimetypes.guess_type(asset_path.name)
             payload = asset_path.read_bytes()
             self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", (mime_type or "application/octet-stream") + ("; charset=utf-8" if (mime_type or "").startswith(("text/", "application/javascript")) else ""))
+            self.send_header(
+                "Content-Type",
+                (mime_type or "application/octet-stream")
+                + ("; charset=utf-8" if (mime_type or "").startswith(("text/", "application/javascript")) else ""),
+            )
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
@@ -2511,7 +2723,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             payload = json.dumps(
                 {
                     "channel_id": channel_id,
-                    "logs": [record.__dict__ for record in list_channel_job_logs(channel_id=channel_id or None, limit=40)],
+                    "logs": [
+                        record.__dict__ for record in list_channel_job_logs(channel_id=channel_id or None, limit=40)
+                    ],
                 },
                 ensure_ascii=False,
             ).encode("utf-8")
@@ -2598,7 +2812,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
             detail_id = parse_qs(parsed.query).get("detail", [None])[0]
             selected_record = get_schedule_record(detail_id) if detail_id else None
             queue = queue_summary(filter_queue(all_queue, selected_status))
-            payload = render_page(route, self.config, snapshot, all_queue, queue, preview, selected_record, selected_status, content_items, selected_content_item).encode("utf-8")
+            payload = render_page(
+                route,
+                self.config,
+                snapshot,
+                all_queue,
+                queue,
+                preview,
+                selected_record,
+                selected_status,
+                content_items,
+                selected_content_item,
+            ).encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))
@@ -2622,7 +2847,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
             mime_type, _ = mimetypes.guess_type(asset_path.name)
             self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", (mime_type or "application/octet-stream") + ("; charset=utf-8" if (mime_type or "").startswith(("text/", "application/javascript")) else ""))
+            self.send_header(
+                "Content-Type",
+                (mime_type or "application/octet-stream")
+                + ("; charset=utf-8" if (mime_type or "").startswith(("text/", "application/javascript")) else ""),
+            )
             self.end_headers()
             return
         if parsed.path.startswith("/content-files/"):
@@ -2718,7 +2947,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 snapshot = build_snapshot(self.config)
                 article: Article = snapshot["article"]
                 content_type = form_value(form, "content_type", "article")
-                scheduled_for = form_value(form, "scheduled_for", default_schedule_time(content_type, article, self.config))
+                scheduled_for = form_value(
+                    form, "scheduled_for", default_schedule_time(content_type, article, self.config)
+                )
                 teaser = run_local_ai(build_prompt(article, self.config.max_teaser_words), self.config, article.link)
                 record = build_schedule_record(
                     article=article,
@@ -2731,16 +2962,30 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 append_queue(record.to_dict())
             elif path == "/editor/save":
-                existing = get_content_item(self.config.content_dir, form_value(form, "content_id")) if form_value(form, "content_id") else None
+                existing = (
+                    get_content_item(self.config.content_dir, form_value(form, "content_id"))
+                    if form_value(form, "content_id")
+                    else None
+                )
                 item = build_editor_item_from_request(form, existing=existing)
                 maybe_snapshot_revision(self.config.content_dir, existing, item, reason="save")
-                save_content_item(self.config.content_dir, item, previous_slug=form_value(form, "previous_slug") or None)
+                save_content_item(
+                    self.config.content_dir, item, previous_slug=form_value(form, "previous_slug") or None
+                )
                 return_to = f"{ROUTE_EDITOR}?content={item.id}"
             elif path == "/editor/schedule":
-                existing = get_content_item(self.config.content_dir, form_value(form, "content_id")) if form_value(form, "content_id") else None
-                item = build_editor_item_from_request(form, existing=existing, forced_status="scheduled", fallback_channels=["linkedin"])
+                existing = (
+                    get_content_item(self.config.content_dir, form_value(form, "content_id"))
+                    if form_value(form, "content_id")
+                    else None
+                )
+                item = build_editor_item_from_request(
+                    form, existing=existing, forced_status="scheduled", fallback_channels=["linkedin"]
+                )
                 maybe_snapshot_revision(self.config.content_dir, existing, item, reason="schedule")
-                save_content_item(self.config.content_dir, item, previous_slug=form_value(form, "previous_slug") or None)
+                save_content_item(
+                    self.config.content_dir, item, previous_slug=form_value(form, "previous_slug") or None
+                )
                 article = article_from_content_item(item)
                 teaser = teaser_from_markdown(item.markdown_body, max_words=min(self.config.max_teaser_words, 40))
                 channels = item.channels or ["linkedin"]
@@ -2760,10 +3005,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 append_queue(record.to_dict())
                 return_to = f"{ROUTE_EDITOR}?content={item.id}"
             elif path == "/editor/autosave":
-                existing = get_content_item(self.config.content_dir, form_value(form, "content_id")) if form_value(form, "content_id") else None
+                existing = (
+                    get_content_item(self.config.content_dir, form_value(form, "content_id"))
+                    if form_value(form, "content_id")
+                    else None
+                )
                 item = build_editor_item_from_request(form, existing=existing)
                 maybe_snapshot_revision(self.config.content_dir, existing, item, reason="autosave")
-                save_content_item(self.config.content_dir, item, previous_slug=form_value(form, "previous_slug") or None)
+                save_content_item(
+                    self.config.content_dir, item, previous_slug=form_value(form, "previous_slug") or None
+                )
                 payload = json.dumps(
                     {
                         "ok": True,
@@ -2788,7 +3039,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(payload)
                     return
-                existing = get_content_item(self.config.content_dir, form_value(form, "content_id")) if form_value(form, "content_id") else None
+                existing = (
+                    get_content_item(self.config.content_dir, form_value(form, "content_id"))
+                    if form_value(form, "content_id")
+                    else None
+                )
                 current_item = build_editor_item_from_request(form, existing=existing)
                 create_revision_snapshot(self.config.content_dir, current_item, reason="ai-before-edit")
                 ai_output = run_local_ai(
@@ -2828,7 +3083,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 content_id = form_value(form, "content_id")
                 revision_id = form_value(form, "revision_id")
                 current_item = get_content_item(self.config.content_dir, content_id) if content_id else None
-                revision = load_content_revision(self.config.content_dir, content_id, revision_id) if content_id and revision_id else None
+                revision = (
+                    load_content_revision(self.config.content_dir, content_id, revision_id)
+                    if content_id and revision_id
+                    else None
+                )
                 if not current_item or not revision:
                     self.send_error(HTTPStatus.NOT_FOUND)
                     return
@@ -2931,7 +3190,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 connection, should_spawn = begin_channel_connect(
                     channel_id,
                     mode=entry.mode or str(entry.manifest.get("mode") or "playwright_local"),
-                    local_profile_path=str(self.config.linkedin_user_data_dir.resolve()) if channel_id == "linkedin" else "",
+                    local_profile_path=str(self.config.linkedin_user_data_dir.resolve())
+                    if channel_id == "linkedin"
+                    else "",
                     capabilities_snapshot_json=dict(entry.manifest.get("capabilities") or {}),
                 )
                 if should_spawn:
@@ -2977,6 +3238,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 if entry is None:
                     self.send_error(HTTPStatus.NOT_FOUND)
                     return
+                if entry.profile_busy or entry.connection_status == "connecting":
+                    self.send_error(
+                        HTTPStatus.CONFLICT,
+                        "Cannot change provider while the channel has an active browser lock or connect job.",
+                    )
+                    return
                 runtime = get_plugin_runtime(self.config, reset=True, strict=False)
                 if browser_provider_id:
                     try:
@@ -2988,7 +3255,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     channel_id,
                     mode=entry.mode or str(entry.manifest.get("mode") or ""),
                     status=entry.connection_status or "not_configured",
-                    local_profile_path=str(self.config.linkedin_user_data_dir.resolve()) if channel_id == "linkedin" else "",
+                    local_profile_path=str(self.config.linkedin_user_data_dir.resolve())
+                    if channel_id == "linkedin"
+                    else "",
                     capabilities_snapshot_json=dict(entry.manifest.get("capabilities") or {}),
                 )
                 connection.browser_provider_id = browser_provider_id
@@ -3019,7 +3288,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     channel_id,
                     mode=entry.mode or str(entry.manifest.get("mode") or "playwright_local"),
                     status="not_configured",
-                    local_profile_path=str(self.config.linkedin_user_data_dir.resolve()) if channel_id == "linkedin" else "",
+                    local_profile_path=str(self.config.linkedin_user_data_dir.resolve())
+                    if channel_id == "linkedin"
+                    else "",
                     capabilities_snapshot_json=dict(entry.manifest.get("capabilities") or {}),
                 )
                 connection.status = "not_configured"
@@ -3042,7 +3313,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     channel_id=channel_id,
                     output_type=output_type,
                 )
-            elif path in {"/derivatives/save", "/derivatives/review", "/derivatives/approve", "/derivatives/reject", "/derivatives/return-draft"}:
+            elif path in {
+                "/derivatives/save",
+                "/derivatives/review",
+                "/derivatives/approve",
+                "/derivatives/reject",
+                "/derivatives/return-draft",
+            }:
                 derivative_id = form_value(form, "derivative_id").strip()
                 title = form_value(form, "title")
                 body_value = form_value(form, "body")
@@ -3099,7 +3376,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 self.config.linkedin_remote_debugging_url = remote_url
             elif path == "/article-settings":
-                buffer_minutes_value = form_value(form, "article_schedule_buffer_minutes", str(self.config.linkedin_article_schedule_buffer_minutes)).strip()
+                buffer_minutes_value = form_value(
+                    form, "article_schedule_buffer_minutes", str(self.config.linkedin_article_schedule_buffer_minutes)
+                ).strip()
                 use_cover_image = parse_checkbox(form, "article_use_cover_image")
                 try:
                     buffer_minutes = max(10, int(buffer_minutes_value))
@@ -3115,10 +3394,21 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.config.linkedin_article_schedule_buffer_minutes = buffer_minutes
                 self.config.linkedin_article_use_cover_image = use_cover_image
             elif path == "/system-config":
-                content_dir_value = form_value(form, "content_dir", str(self.config.content_dir)).strip() or str(self.config.content_dir)
-                substack_import_dir_value = form_value(form, "substack_import_dir", str(self.config.substack_import_dir)).strip() or str(self.config.substack_import_dir)
+                content_dir_value = form_value(form, "content_dir", str(self.config.content_dir)).strip() or str(
+                    self.config.content_dir
+                )
+                substack_import_dir_value = form_value(
+                    form, "substack_import_dir", str(self.config.substack_import_dir)
+                ).strip() or str(self.config.substack_import_dir)
                 try:
-                    stats_sync_interval = max(15, int(form_value(form, "stats_sync_interval_minutes", str(self.config.stats_sync_interval_minutes))))
+                    stats_sync_interval = max(
+                        15,
+                        int(
+                            form_value(
+                                form, "stats_sync_interval_minutes", str(self.config.stats_sync_interval_minutes)
+                            )
+                        ),
+                    )
                 except ValueError:
                     stats_sync_interval = self.config.stats_sync_interval_minutes
                 updates = {

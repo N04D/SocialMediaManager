@@ -24,6 +24,7 @@ class ChannelConnection:
     active_claimed_at: str = ""
     last_connect_diagnostics_json: dict[str, Any] = field(default_factory=dict)
     browser_provider_id: str = ""
+    provider_connection_state_json: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
