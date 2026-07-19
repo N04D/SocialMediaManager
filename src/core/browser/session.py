@@ -1,0 +1,36 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Protocol
+
+from .models import BrowserArtifact, BrowserSnapshot, BrowserTarget
+
+
+class BrowserSession(Protocol):
+    @property
+    def session_id(self) -> str:
+        ...
+
+    def navigate(self, url: str) -> BrowserSnapshot:
+        ...
+
+    def snapshot(self) -> BrowserSnapshot:
+        ...
+
+    def click(self, target: BrowserTarget) -> None:
+        ...
+
+    def fill(self, target: BrowserTarget, value: str) -> None:
+        ...
+
+    def upload(self, target: BrowserTarget, path: Path) -> None:
+        ...
+
+    def evaluate(self, script: str, arg: Any | None = None) -> Any:
+        ...
+
+    def screenshot(self, *, full_page: bool = True) -> BrowserArtifact:
+        ...
+
+    def close(self) -> None:
+        ...

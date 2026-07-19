@@ -7,6 +7,8 @@ from typing import Any
 from channel_models import ChannelConnection, ChannelJobLog
 from channel_store import append_channel_job_log, generate_id, now_iso, update_channel_connection
 from pipeline import AppConfig, POST_BUTTON_PATTERNS
+from plugins.providers.legacy_browser import LegacyBrowserProvider
+from src.core.browser import BrowserSessionOptions
 
 from .browser import ProfileBusyError, linkedin_profile_lock, open_local_linkedin_session, persistent_profile_path
 from .runtime import save_channel_worker_heartbeat, worker_id_for_channel
@@ -259,10 +261,21 @@ def run_session_check_action(
     )
     try:
         with linkedin_profile_lock(channel_id, owner=f"{resolved_worker_id}:session_check"):
-            playwright, browser, context, page, owns_session, session_label = open_local_linkedin_session(
-                config,
+            provider = LegacyBrowserProvider(
+                config=config,
+                channel_id=channel_id,
                 headed_default=False,
+                allow_remote_debugging=False,
+                open_session=open_local_linkedin_session,
             )
+            browser_session = provider.create_session(
+                BrowserSessionOptions(
+                    profile_id=str(persistent_profile_path(config)),
+                    headless=True,
+                    exclusive=False,
+                )
+            )
+            page = browser_session.page
             diagnostics["browser_launch_count"] = 1
             attach_navigation_observer(page, diagnostics)
             try:
@@ -309,9 +322,7 @@ def run_session_check_action(
                 )
                 return connection
             finally:
-                if owns_session:
-                    context.close()
-                playwright.stop()
+                browser_session.close()
     except ProfileBusyError as exc:
         connection = _preserve_connected_or_error(config, channel_id=channel_id, last_error=f"profile_busy: {exc}")
         save_channel_worker_heartbeat(

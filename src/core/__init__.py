@@ -1,0 +1,1 @@
+"""Core plugin framework contracts."""

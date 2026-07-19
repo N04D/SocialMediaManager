@@ -1,0 +1,17 @@
+{
+  "id": "provider.browser.legacy",
+  "name": "Legacy Browser Provider",
+  "version": "0.1.0",
+  "plugin_api_version": 1,
+  "type": "provider",
+  "entrypoint": "plugins.providers.legacy_browser.provider",
+  "capabilities": [
+    "browser.session",
+    "browser.auth_profile",
+    "browser.navigation",
+    "browser.interaction",
+    "browser.human_takeover"
+  ],
+  "dependencies": [],
+  "config_schema": {}
+}
