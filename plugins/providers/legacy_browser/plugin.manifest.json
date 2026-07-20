@@ -13,5 +13,11 @@
     "browser.human_takeover"
   ],
   "dependencies": [],
-  "config_schema": {}
+  "config_schema": {
+    "browser_framework_version": "1.0.0",
+    "browser_provider_contract_version": "1.0",
+    "browser_session_contract_version": "1.0",
+    "browser_target_contract_version": "1.0",
+    "browser_artifact_contract_version": "1.0"
+  }
 }

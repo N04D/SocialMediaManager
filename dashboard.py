@@ -18,6 +18,21 @@ from urllib.parse import parse_qs, urlparse
 
 from bs4 import BeautifulSoup
 
+from browser_pilots import (
+    ProviderStateEvent,
+    append_provider_state_event,
+    cancel_pilot,
+    confirm_pilot_action,
+    create_browser_pilot,
+    get_browser_pilot,
+    list_browser_pilots,
+    list_provider_state_events,
+    pause_pilot,
+    pop_issued_confirmation_token,
+    prepare_pilot_action,
+    rollback_pilot,
+    run_pilot_preflight,
+)
 from channel_actions import (
     ChannelActionError,
     approve_derivative,
@@ -281,6 +296,17 @@ def form_value(form: dict[str, list[str]], key: str, default: str = "") -> str:
 
 def form_values(form: dict[str, list[str]], key: str) -> list[str]:
     return [value for value in form.get(key, []) if value]
+
+
+def json_response(
+    handler: BaseHTTPRequestHandler, payload: dict[str, Any], *, status: HTTPStatus = HTTPStatus.OK
+) -> None:
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
 
 
 def validate_force_unlock_confirmation(reason: str, confirmation: str) -> tuple[bool, str]:
@@ -2765,6 +2791,58 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if parsed.path == "/api/browser-framework/conformance":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            body = json.dumps(runtime.browser_conformance_payload(), ensure_ascii=False).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if parsed.path == "/api/browser-pilots":
+            json_response(self, {"pilots": [record.__dict__ for record in list_browser_pilots()]})
+            return
+        if parsed.path.startswith("/api/browser-pilots/"):
+            pilot_id = parsed.path.rsplit("/", maxsplit=1)[-1]
+            pilot = get_browser_pilot(pilot_id)
+            if pilot is None:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            json_response(self, {"pilot": pilot.__dict__})
+            return
+        if parsed.path == "/api/provider-state/history":
+            query = parse_qs(parsed.query)
+            channel_account_id = query.get("channel_account_id", [""])[0]
+            json_response(
+                self,
+                {
+                    "events": [
+                        event.__dict__
+                        for event in list_provider_state_events(channel_account_id=channel_account_id, limit=10)
+                    ]
+                },
+            )
+            return
+        if parsed.path == "/api/browser-pilots/panel":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            conformance = runtime.browser_conformance_payload()
+            latest_pilot = next(iter(list_browser_pilots()), None)
+            linkedin_connection = get_channel_connection("linkedin")
+            json_response(
+                self,
+                {
+                    "active_provider": linkedin_connection.browser_provider_id if linkedin_connection else "",
+                    "conformance": conformance,
+                    "latest_pilot": latest_pilot.__dict__ if latest_pilot else {},
+                    "recent_provider_events": [event.__dict__ for event in list_provider_state_events(limit=10)],
+                    "kill_switches": {
+                        "global": bool(getattr(self.config, "auto_browser_global_kill_switch", False)),
+                        "accounts": list(getattr(self.config, "auto_browser_account_kill_switches", []) or []),
+                    },
+                },
+            )
+            return
         if parsed.path == "/api/providers/autobrowser/status":
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)
             provider_runtime = runtime.runtimes.get("provider.browser.autobrowser")
@@ -2967,6 +3045,82 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length).decode("utf-8")
+        if path.startswith("/api/browser-pilots"):
+            try:
+                payload = json.loads(body) if body.strip() else {}
+            except json.JSONDecodeError:
+                self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON payload.")
+                return
+            try:
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                if path == "/api/browser-pilots":
+                    pilot = create_browser_pilot(
+                        config=self.config,
+                        runtime=runtime,
+                        channel_account_id=str(payload.get("channel_account_id") or ""),
+                        provider_id=str(payload.get("provider_id") or ""),
+                        scope=str(payload.get("scope") or "login_only"),
+                        reason=str(payload.get("reason") or ""),
+                        actor=str(payload.get("actor") or ""),
+                        acknowledged=bool(payload.get("acknowledged")),
+                    )
+                    json_response(self, {"pilot": pilot.__dict__}, status=HTTPStatus.CREATED)
+                    return
+                parts = [part for part in path.split("/") if part]
+                if len(parts) < 3:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                pilot_id = parts[2]
+                if len(parts) == 4 and parts[3] == "preflight":
+                    pilot = run_pilot_preflight(config=self.config, runtime=runtime, pilot_id=pilot_id)
+                    json_response(self, {"pilot": pilot.__dict__})
+                    return
+                if len(parts) == 4 and parts[3] == "pause":
+                    json_response(self, {"pilot": pause_pilot(pilot_id).__dict__})
+                    return
+                if len(parts) == 4 and parts[3] == "rollback":
+                    pilot = rollback_pilot(
+                        config=self.config,
+                        runtime=runtime,
+                        pilot_id=pilot_id,
+                        actor=str(payload.get("actor") or ""),
+                        reason=str(payload.get("reason") or ""),
+                    )
+                    json_response(self, {"pilot": pilot.__dict__})
+                    return
+                if len(parts) == 4 and parts[3] == "cancel":
+                    json_response(
+                        self, {"pilot": cancel_pilot(pilot_id, reason=str(payload.get("reason") or "")).__dict__}
+                    )
+                    return
+                if len(parts) == 6 and parts[3] == "actions":
+                    action_type = parts[4]
+                    if parts[5] == "prepare":
+                        pilot = prepare_pilot_action(pilot_id, action_type, actor=str(payload.get("actor") or ""))
+                        response = {"pilot": pilot.__dict__}
+                        token = pop_issued_confirmation_token(pilot_id, action_type)
+                        if token:
+                            response["confirmation_token"] = token
+                        json_response(self, response)
+                        return
+                    if parts[5] == "confirm":
+                        pilot = confirm_pilot_action(
+                            pilot_id,
+                            action_type,
+                            token=str(payload.get("token") or ""),
+                            actor=str(payload.get("actor") or ""),
+                            reason=str(payload.get("reason") or ""),
+                        )
+                        json_response(self, {"pilot": pilot.__dict__})
+                        return
+            except ValueError as exc:
+                self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            except Exception:
+                self.send_error(HTTPStatus.BAD_GATEWAY, "Pilot operation failed safely.")
+                return
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
         form = parse_qs(body)
         return_to = sanitize_return_to(form.get("return_to", [ROUTE_LINKEDIN])[0])
 
@@ -3301,9 +3455,21 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     else "",
                     capabilities_snapshot_json=dict(entry.manifest.get("capabilities") or {}),
                 )
+                previous_provider_id = connection.browser_provider_id
                 connection.browser_provider_id = browser_provider_id
                 connection.updated_at = now_iso()
                 save_channel_connection(connection)
+                append_provider_state_event(
+                    ProviderStateEvent(
+                        channel_account_id=channel_id,
+                        provider_id=browser_provider_id or "provider.browser.legacy",
+                        timestamp=now_iso(),
+                        previous_status=previous_provider_id,
+                        new_status=browser_provider_id or "provider.browser.legacy",
+                        reason_code="provider_change",
+                        source="provider_change",
+                    )
+                )
             elif path == "/channels/forget-browser-login":
                 channel_id = form_value(form, "channel_id").strip()
                 provider_id = form_value(form, "provider_id").strip()

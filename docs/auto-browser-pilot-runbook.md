@@ -23,6 +23,8 @@ Use these read-only checks before enabling a pilot account:
 python3 integrations/auto-browser/doctor.py --json
 curl -s http://127.0.0.1:8080/api/providers/autobrowser/status
 curl -s http://127.0.0.1:8080/api/plugins/health
+curl -s http://127.0.0.1:8080/api/browser-framework/conformance
+curl -s http://127.0.0.1:8080/api/browser-pilots/panel
 ```
 
 The provider is pilot-ready only when `pilot_readiness.status` is `ready` and no required check is missing:
@@ -48,13 +50,14 @@ The provider is pilot-ready only when `pilot_readiness.status` is `ready` and no
 1. Confirm no active LinkedIn jobs or provider locks exist for the account.
 2. Confirm `provider.browser.legacy` still shows the previous provider-bound status.
 3. Set the account browser provider to `provider.browser.autobrowser`.
-4. Run LinkedIn Connect.
-5. Complete login through the generic takeover link only.
-6. Run session check and confirm the Auto Browser provider-bound state is `connected`.
-7. Run one dry-run text publish against a fixture or non-publishing path when available.
-8. Run one metrics collection and one scraping job against already existing content.
-9. Inspect plugin health and provider status for artifacts, orphaned sessions, stale mappings, and redacted errors.
-10. Leave the account on Auto Browser only after successful cleanup and no active locks.
+4. Create a pilot run through `POST /api/browser-pilots`.
+5. Run `POST /api/browser-pilots/{id}/preflight`.
+6. Run LinkedIn Connect only after preflight passes.
+7. Complete login through the generic takeover link only.
+8. Run session check and confirm the Auto Browser provider-bound state is `connected`.
+9. For any real publish action, prepare and confirm a one-time action token immediately before the operator-approved action.
+10. Inspect plugin health and provider status for artifacts, orphaned sessions, stale mappings, and redacted errors.
+11. Leave the account on Auto Browser only after successful cleanup and no active locks.
 
 Do not use automated tests with production LinkedIn accounts. Do not publish a real LinkedIn post from a pilot validation unless the operator explicitly approves that content and timing.
 

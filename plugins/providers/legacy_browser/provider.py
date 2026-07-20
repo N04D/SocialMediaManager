@@ -11,6 +11,7 @@ from uuid import uuid4
 
 import channel_store
 from src.core.browser import (
+    BROWSER_PROVIDER_CONTRACT_VERSION,
     BrowserArtifact,
     BrowserInteractionError,
     BrowserProfileBusyError,
@@ -25,6 +26,7 @@ from src.core.browser import (
     FileBackedBrowserProfileLockManager,
     HumanTakeoverRequest,
     HumanTakeoverStatus,
+    browser_contract_payload,
 )
 
 
@@ -502,6 +504,7 @@ class LegacyBrowserProvider:
             "provider": self.provider_id,
             "messages": messages,
             "sessions": len(self.sessions),
+            **browser_contract_payload(implemented_provider_version=BROWSER_PROVIDER_CONTRACT_VERSION),
         }
 
     def request_human_takeover(self, request: HumanTakeoverRequest) -> dict[str, Any]:

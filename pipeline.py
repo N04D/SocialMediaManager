@@ -59,6 +59,10 @@ DEFAULT_CONFIG = {
     "auto_browser_shared_upload_host_dir": "./studio_data/auto_browser_uploads",
     "auto_browser_shared_upload_controller_dir": "/shared/uploads/incoming",
     "auto_browser_auth_profile_delete_enabled": False,
+    "auto_browser_pilot_accounts": [],
+    "auto_browser_doctor_last_passed_at": "",
+    "auto_browser_integration_last_passed_at": "",
+    "auto_browser_chaos_last_passed_at": "",
     "media_dir": "./tmp_media",
     "ai_cli_command": "auto",
     "ai_cli_args": [],
@@ -78,6 +82,14 @@ DEFAULT_CONFIG = {
     "substack_import_enabled": True,
     "x_api_enabled": False,
     "x_account_id": "",
+}
+
+LEGACY_LINKEDIN_PIPELINE_DEPRECATION = {
+    "deprecated": True,
+    "deprecated_since": "browser-framework-v1.0.0",
+    "replacement": "LinkedInChannelRuntime article capability in a future browser framework version",
+    "removal_target": "phase-10-or-dedicated-article-migration",
+    "reason": "Legacy/manual article staging can bypass provider-managed browser ownership.",
 }
 
 POST_BUTTON_PATTERNS = [
@@ -138,6 +150,10 @@ class AppConfig:
     auto_browser_shared_upload_host_dir: str
     auto_browser_shared_upload_controller_dir: str
     auto_browser_auth_profile_delete_enabled: bool
+    auto_browser_pilot_accounts: list[str]
+    auto_browser_doctor_last_passed_at: str
+    auto_browser_integration_last_passed_at: str
+    auto_browser_chaos_last_passed_at: str
     media_dir: Path
     ai_cli_command: str
     ai_cli_args: list[str] = field(default_factory=list)
@@ -257,6 +273,10 @@ def load_config(config_path: str) -> AppConfig:
             raw.get("auto_browser_shared_upload_controller_dir", "/shared/uploads/incoming")
         ),
         auto_browser_auth_profile_delete_enabled=bool(raw.get("auto_browser_auth_profile_delete_enabled", False)),
+        auto_browser_pilot_accounts=[str(item) for item in raw.get("auto_browser_pilot_accounts", []) if str(item)],
+        auto_browser_doctor_last_passed_at=str(raw.get("auto_browser_doctor_last_passed_at", "")),
+        auto_browser_integration_last_passed_at=str(raw.get("auto_browser_integration_last_passed_at", "")),
+        auto_browser_chaos_last_passed_at=str(raw.get("auto_browser_chaos_last_passed_at", "")),
         media_dir=ROOT_DIR / str(raw["media_dir"]),
         ai_cli_command=str(raw["ai_cli_command"]),
         ai_cli_args=[str(item) for item in ai_args],

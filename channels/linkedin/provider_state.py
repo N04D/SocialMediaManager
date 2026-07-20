@@ -37,9 +37,13 @@ def set_provider_connection_status(
     provider_id: str,
     status: str,
     error_code: str = "",
+    source: str = "session_check",
+    job_id: str = "",
+    pilot_run_id: str = "",
 ) -> ChannelConnection:
     states = dict(connection.provider_connection_state_json or {})
     current = dict(states.get(provider_id) or {})
+    previous_status = str(current.get("status") or "")
     current.update(
         {
             "provider_id": provider_id,
@@ -50,4 +54,24 @@ def set_provider_connection_status(
     )
     states[provider_id] = current
     connection.provider_connection_state_json = states
+    if previous_status != status:
+        try:
+            from browser_pilots import ProviderStateEvent, append_provider_state_event
+
+            append_provider_state_event(
+                ProviderStateEvent(
+                    channel_account_id=connection.channel_id,
+                    provider_id=provider_id,
+                    timestamp=now_iso(),
+                    previous_status=previous_status,
+                    new_status=status,
+                    reason_code=error_code or status,
+                    source=source,
+                    job_id=job_id,
+                    pilot_run_id=pilot_run_id,
+                    safe_error_code=error_code,
+                )
+            )
+        except Exception:
+            pass
     return connection

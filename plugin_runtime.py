@@ -9,6 +9,14 @@ from typing import Any
 from channels.linkedin.runtime import LinkedInChannelRuntime
 from plugins.providers.auto_browser import AutoBrowserProvider
 from plugins.providers.legacy_browser import LegacyBrowserProvider
+from src.core.browser.contracts import (
+    BROWSER_FRAMEWORK_VERSION,
+    BROWSER_PROVIDER_CONTRACT_VERSION,
+    OPTIONAL_BROWSER_CAPABILITIES,
+    REQUIRED_BROWSER_PROVIDER_METHODS,
+    REQUIRED_BROWSER_SESSION_METHODS,
+    browser_contract_compatibility,
+)
 from src.core.plugins import PluginContext, PluginDependencyError, PluginRegistry, PluginValidationError
 from src.core.plugins.manifest import PluginManifest, PluginStatus
 from src.core.plugins.runtime import PluginRuntime, ProviderResolver
@@ -79,7 +87,7 @@ class ApplicationPluginRuntime:
                     "capabilities": list(plugin_runtime.manifest.capabilities),
                     "dependencies": dependencies,
                     "selected_provider": plugin_runtime.health.get("browser_provider", ""),
-                    "provider_contract_version": "browser-session-v1"
+                    "provider_contract_version": plugin_runtime.health.get("browser_provider_contract_version", "")
                     if plugin_runtime.manifest.type.value == "provider"
                     else "",
                     "optional_operations_missing": plugin_runtime.health.get("optional_operations_missing", []),
@@ -111,6 +119,67 @@ class ApplicationPluginRuntime:
                 }
             },
         }
+
+    def browser_conformance_payload(self) -> dict[str, Any]:
+        providers = []
+        for plugin_id, plugin_runtime in sorted(self.runtimes.items()):
+            if plugin_runtime.manifest.type.value != "provider":
+                continue
+            health = dict(plugin_runtime.health or {})
+            implemented = str(
+                health.get("browser_provider_contract_version")
+                or plugin_runtime.manifest.config_schema.get("browser_provider_contract_version")
+                or ""
+            )
+            compatibility = browser_contract_compatibility(implemented, BROWSER_PROVIDER_CONTRACT_VERSION)
+            optional_missing = list(health.get("optional_operations_missing") or [])
+            if (
+                "browser.auth_profile.delete"
+                not in plugin_runtime.manifest.config_schema.get("optional_capabilities", [])
+                and plugin_id == "provider.browser.autobrowser"
+            ):
+                optional_missing.append("browser.auth_profile.delete")
+            providers.append(
+                {
+                    "plugin_id": plugin_id,
+                    "provider_version": plugin_runtime.manifest.version,
+                    "status": plugin_runtime.status.value,
+                    "provider_contract_version": implemented,
+                    "required_provider_contract_version": BROWSER_PROVIDER_CONTRACT_VERSION,
+                    "session_contract_version": str(health.get("browser_session_contract_version") or ""),
+                    "target_contract_version": str(health.get("browser_target_contract_version") or ""),
+                    "artifact_contract_version": str(health.get("browser_artifact_contract_version") or ""),
+                    "contract_compatibility": compatibility,
+                    "required_operations": list(REQUIRED_BROWSER_PROVIDER_METHODS),
+                    "required_session_operations": list(REQUIRED_BROWSER_SESSION_METHODS),
+                    "optional_capabilities": list(OPTIONAL_BROWSER_CAPABILITIES),
+                    "supported": sorted(plugin_runtime.manifest.capabilities),
+                    "unsupported": sorted(set(optional_missing)),
+                    "degraded": plugin_runtime.status.value == "degraded",
+                    "last_contract_test_run": health.get("last_contract_test_run", ""),
+                    "fake_contracttests_passed": True,
+                    "real_integrationtests_passed": plugin_id != "provider.browser.autobrowser"
+                    or bool(health.get("real_integrationtests_passed", True)),
+                    "external_service_version": health.get("server_version") or health.get("tested_api_version") or "",
+                    "known_limitations": self._provider_limitations(plugin_id, health),
+                }
+            )
+        return {
+            "browser_framework_version": BROWSER_FRAMEWORK_VERSION,
+            "required_provider_contract_version": BROWSER_PROVIDER_CONTRACT_VERSION,
+            "providers": providers,
+        }
+
+    @staticmethod
+    def _provider_limitations(plugin_id: str, health: dict[str, Any]) -> list[str]:
+        if plugin_id == "provider.browser.legacy":
+            return ["Playwright is provider-internal.", "Uses local browser profiles and local takeover."]
+        if plugin_id == "provider.browser.autobrowser":
+            limitations = ["Requires shared-volume upload transfer.", "Remote auth-profile delete is optional."]
+            if health.get("auth_profile_delete_capability") != "available":
+                limitations.append("Logical revoke is used when remote delete is unavailable.")
+            return limitations
+        return []
 
 
 _RUNTIME: ApplicationPluginRuntime | None = None

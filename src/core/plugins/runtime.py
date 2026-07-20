@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.core.browser.contracts import BROWSER_PROVIDER_CONTRACT_VERSION, browser_contract_compatibility
+
 from .errors import PluginCapabilityError
 from .manifest import PluginManifest, PluginStatus, PluginType
 from .registry import PluginRegistry
@@ -47,6 +49,14 @@ class ProviderResolver:
             if runtime.manifest.type == PluginType.PROVIDER
             and capability in runtime.manifest.capabilities
             and runtime.status == PluginStatus.READY
+            and browser_contract_compatibility(
+                str(
+                    runtime.health.get("browser_provider_contract_version")
+                    or runtime.manifest.config_schema.get("browser_provider_contract_version")
+                    or BROWSER_PROVIDER_CONTRACT_VERSION
+                )
+            )
+            != "incompatible"
         ]
         if preferred_provider_id:
             candidates = [runtime for runtime in candidates if runtime.manifest.id == preferred_provider_id]

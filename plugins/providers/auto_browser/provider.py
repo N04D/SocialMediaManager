@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import channel_store
 from src.core.browser import (
+    BROWSER_PROVIDER_CONTRACT_VERSION,
     BrowserProfileBusyError,
     BrowserProfileStatus,
     BrowserProviderError,
@@ -17,6 +18,7 @@ from src.core.browser import (
     FileBackedBrowserProfileLockManager,
     HumanTakeoverRequest,
     HumanTakeoverStatus,
+    browser_contract_payload,
 )
 
 from .config import AutoBrowserConfig
@@ -215,6 +217,7 @@ class AutoBrowserProvider:
     def health_check(self) -> dict[str, Any]:
         messages = self.config.validate()
         operations = sorted(REQUIRED_OPERATIONS)
+        contract = browser_contract_payload(implemented_provider_version=BROWSER_PROVIDER_CONTRACT_VERSION)
         if not self.config.enabled:
             return {
                 "status": "disabled",
@@ -225,6 +228,7 @@ class AutoBrowserProvider:
                 "supported_operations": operations,
                 "optional_operations_missing": [],
                 "default_priority": 50,
+                **contract,
             }
         if self.config.global_kill_switch:
             return self._health(
@@ -299,6 +303,7 @@ class AutoBrowserProvider:
             "evaluation_capability": "available" if "evaluation" not in missing else "missing",
             "auth_profile_delete_capability": "available" if self.config.auth_profile_delete_enabled else "missing",
             "pilot_readiness": self.pilot_readiness(),
+            **contract,
         }
 
     def request_human_takeover(self, request: HumanTakeoverRequest) -> dict[str, Any]:
@@ -601,6 +606,7 @@ class AutoBrowserProvider:
             "optional_operations_missing": [],
             "default_priority": 50,
             "reconciliation": self._last_reconciliation or {"status": "not_checked"},
+            **browser_contract_payload(implemented_provider_version=BROWSER_PROVIDER_CONTRACT_VERSION),
         }
 
     @staticmethod

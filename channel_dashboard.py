@@ -240,6 +240,14 @@ def render_channel_cards(*, return_to: str) -> str:
                 f'<p class="meta">Browser session: <code>{html.escape(entry.browser_session_status or "unknown")}</code>'
                 f" · Human takeover: <code>{html.escape(entry.human_takeover_status or 'not_required')}</code></p>"
             )
+        pilot_meta = ""
+        if entry.id == "linkedin":
+            pilot_meta = (
+                '<p class="meta">Browser Framework v1 pilot: '
+                '<a href="/api/browser-pilots/panel" target="_blank" rel="noreferrer">panel JSON</a>'
+                ' · <a href="/api/browser-framework/conformance" target="_blank" rel="noreferrer">conformance</a>'
+                ' · <a href="/api/provider-state/history?channel_account_id=linkedin" target="_blank" rel="noreferrer">provider history</a></p>'
+            )
         actions: list[str] = []
         auto_profile = entry.auto_browser_auth_profile or {}
         if auto_profile.get("exists"):
@@ -330,6 +338,7 @@ def render_channel_cards(*, return_to: str) -> str:
               {provider_meta}
               <p class="meta">Active provider auth: <code>{html.escape(entry.active_provider_connection_status or "unknown")}</code></p>
               <p class="meta">Auto Browser auth profile: <code>{html.escape(str((entry.auto_browser_auth_profile or {}).get("status") or bool((entry.auto_browser_auth_profile or {}).get("exists"))).lower())}</code></p>
+              {pilot_meta}
               {session_meta}
               <p class="meta">Last checked: <code>{html.escape(entry.last_checked_at or "never")}</code></p>
               {profile_meta}

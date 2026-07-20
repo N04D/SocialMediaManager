@@ -16,7 +16,11 @@
   ],
   "dependencies": [],
   "config_schema": {
-    "browser_provider_contract_version": "browser-session-v1",
+    "browser_framework_version": "1.0.0",
+    "browser_provider_contract_version": "1.0",
+    "browser_session_contract_version": "1.0",
+    "browser_target_contract_version": "1.0",
+    "browser_artifact_contract_version": "1.0",
     "tested_auto_browser_server_version": "1.4.0",
     "tested_auto_browser_commit": "a7414a4",
     "tested_python_client_version": "1.4.0",
