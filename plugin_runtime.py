@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from channels.linkedin.runtime import LinkedInChannelRuntime
+from media_runtime import MediaRuntime
 from plugins.providers.auto_browser import AutoBrowserProvider
 from plugins.providers.legacy_browser import LegacyBrowserProvider
+from plugins.providers.local_media_storage import LocalMediaStorageProvider
 from src.core.browser.contracts import (
     BROWSER_FRAMEWORK_VERSION,
     BROWSER_PROVIDER_CONTRACT_VERSION,
@@ -25,6 +27,7 @@ ROOT_DIR = Path(__file__).resolve().parent
 LINKEDIN_PLUGIN_MANIFEST = ROOT_DIR / "channels" / "linkedin" / "plugin.manifest.json"
 LEGACY_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "legacy_browser" / "plugin.manifest.json"
 AUTO_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "auto_browser" / "plugin.manifest.json"
+LOCAL_MEDIA_STORAGE_MANIFEST = ROOT_DIR / "plugins" / "providers" / "local_media_storage" / "plugin.manifest.json"
 
 
 @dataclass
@@ -47,6 +50,42 @@ class ApplicationPluginRuntime:
             "browser_provider",
             preferred_provider_id=preferred_provider_id,
         )
+
+    def media_provider(self, *, preferred_provider_id: str = ""):
+        if self.resolver is None:
+            self.resolver = ProviderResolver(self.registry, self.runtimes)
+        return self.resolver.resolve_service(
+            "media.storage",
+            "media_storage_provider",
+            preferred_provider_id=preferred_provider_id,
+        )
+
+    def media_runtime(self, config: Any):
+        runtime = self.runtimes.get("media.runtime")
+        if runtime is not None and runtime.services.get("media_runtime") is not None:
+            return runtime.services["media_runtime"]
+        service = MediaRuntime(app_runtime=self, config=config)
+        manifest = PluginManifest.from_dict(
+            {
+                "id": "media.runtime",
+                "name": "Media Runtime",
+                "version": "0.1.0",
+                "plugin_api_version": 1,
+                "type": "media",
+                "entrypoint": "media_runtime",
+                "capabilities": ["media.asset.manage", "media.variant.manage"],
+                "dependencies": [{"capability": "media.storage"}],
+                "config_schema": {},
+            }
+        )
+        self.runtimes[manifest.id] = PluginRuntime(
+            manifest=manifest,
+            instance=service,
+            status=PluginStatus.READY,
+            services={"media_runtime": service},
+            health={"status": "ready"},
+        )
+        return service
 
     def get_plugin_service(self, plugin_id: str, service_name: str, *, require_ready: bool = True) -> Any:
         runtime = self.runtimes.get(plugin_id)
@@ -202,7 +241,12 @@ def load_plugin_manifest(path: Path) -> PluginManifest:
 def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginRuntime:
     runtime = ApplicationPluginRuntime()
     startup_errors: list[str] = []
-    for path in [LEGACY_BROWSER_MANIFEST, AUTO_BROWSER_MANIFEST, LINKEDIN_PLUGIN_MANIFEST]:
+    for path in [
+        LEGACY_BROWSER_MANIFEST,
+        AUTO_BROWSER_MANIFEST,
+        LOCAL_MEDIA_STORAGE_MANIFEST,
+        LINKEDIN_PLUGIN_MANIFEST,
+    ]:
         try:
             manifest = runtime.registry.register(load_plugin_manifest(path))
             runtime.runtimes[manifest.id] = PluginRuntime(manifest=manifest, status=PluginStatus.INSTALLED)
@@ -242,6 +286,16 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
         else:
             auto_browser.status = PluginStatus.DEGRADED
 
+    local_media = runtime.runtimes.get("provider.media.storage.local")
+    if local_media is not None:
+        provider = LocalMediaStorageProvider(config=config)
+        health = provider.health_check()
+        local_media.instance = provider
+        local_media.register_service("media_storage_provider", provider)
+        local_media.health = health
+        local_media.health["default_priority"] = 5
+        local_media.status = PluginStatus.READY if health.get("status") == "ready" else PluginStatus.DEGRADED
+
     linkedin = runtime.runtimes.get("channel.linkedin")
     if linkedin is not None:
         try:
@@ -277,6 +331,7 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
                 linkedin.health = channel_service.health_check()
 
     runtime.resolver = ProviderResolver(runtime.registry, runtime.runtimes)
+    runtime.media_runtime(config)
     runtime.errors = startup_errors
     if strict and startup_errors:
         raise RuntimeError("Plugin bootstrap failed: " + "; ".join(startup_errors))

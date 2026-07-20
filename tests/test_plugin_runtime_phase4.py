@@ -25,8 +25,10 @@ from src.core.browser import (
     FileBackedBrowserProfileLockManager,
 )
 from src.core.browser.fake_provider import InMemoryBrowserProvider
+from src.core.media.fake_provider import InMemoryMediaStorageProvider
 from src.core.plugins.manifest import PluginStatus
 from src.core.plugins.runtime import PluginRuntime
+from tests.test_media_framework_phase9 import _media_manifest
 from tests.test_plugin_runtime_phase2 import (
     Config,
     FakeContext,
@@ -49,9 +51,21 @@ class Phase4InMemoryLinkedInTests(unittest.TestCase):
         self.config.linkedin_user_data_dir = Path(self.tmp.name) / "profile"
         self.config.linkedin_user_data_dir.mkdir(parents=True)
         self.config.linkedin_browser_provider_id = ""
+        self.config.media_dir = Path(self.tmp.name)
+        self.config.content_dir = Path(self.tmp.name)
 
     def _runtime_with_channel(self, provider: InMemoryBrowserProvider):
         runtime = runtime_with_provider(provider)
+        media_provider = InMemoryMediaStorageProvider()
+        media_manifest = _media_manifest(plugin_id=media_provider.provider_id)
+        runtime.registry.register(media_manifest)
+        runtime.runtimes[media_manifest.id] = PluginRuntime(
+            manifest=media_manifest,
+            instance=media_provider,
+            status=PluginStatus.READY,
+            services={"media_storage_provider": media_provider},
+            health=media_provider.health_check() | {"default_priority": 5},
+        )
         manifest = linkedin_manifest()
         runtime.registry.register(manifest)
         service = LinkedInChannelRuntime(manifest=manifest, app_runtime=runtime, config=self.config)

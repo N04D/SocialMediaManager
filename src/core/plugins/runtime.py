@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.core.browser.contracts import BROWSER_PROVIDER_CONTRACT_VERSION, browser_contract_compatibility
+from src.core.media.contracts import MEDIA_STORAGE_PROVIDER_CONTRACT_VERSION, media_storage_contract_compatibility
 
 from .errors import PluginCapabilityError
 from .manifest import PluginManifest, PluginStatus, PluginType
@@ -49,14 +50,7 @@ class ProviderResolver:
             if runtime.manifest.type == PluginType.PROVIDER
             and capability in runtime.manifest.capabilities
             and runtime.status == PluginStatus.READY
-            and browser_contract_compatibility(
-                str(
-                    runtime.health.get("browser_provider_contract_version")
-                    or runtime.manifest.config_schema.get("browser_provider_contract_version")
-                    or BROWSER_PROVIDER_CONTRACT_VERSION
-                )
-            )
-            != "incompatible"
+            and self._provider_contract_compatible(runtime, capability)
         ]
         if preferred_provider_id:
             candidates = [runtime for runtime in candidates if runtime.manifest.id == preferred_provider_id]
@@ -76,6 +70,25 @@ class ProviderResolver:
                 {"capability": capability, "preferred_provider_id": preferred_provider_id},
             )
         return candidates[0]
+
+    @staticmethod
+    def _provider_contract_compatible(runtime: PluginRuntime, capability: str) -> bool:
+        if capability.startswith("media."):
+            implemented = str(
+                runtime.health.get("media_storage_provider_contract_version")
+                or runtime.manifest.config_schema.get("media_storage_provider_contract_version")
+                or ""
+            )
+            return (
+                media_storage_contract_compatibility(implemented, MEDIA_STORAGE_PROVIDER_CONTRACT_VERSION)
+                != "incompatible"
+            )
+        implemented = str(
+            runtime.health.get("browser_provider_contract_version")
+            or runtime.manifest.config_schema.get("browser_provider_contract_version")
+            or BROWSER_PROVIDER_CONTRACT_VERSION
+        )
+        return browser_contract_compatibility(implemented) != "incompatible"
 
     def resolve_service(self, capability: str, service_name: str, *, preferred_provider_id: str = "") -> Any:
         runtime = self.resolve_provider(capability, preferred_provider_id=preferred_provider_id)

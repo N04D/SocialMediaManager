@@ -1,0 +1,23 @@
+{
+  "id": "provider.media.storage.local",
+  "name": "Local Media Storage",
+  "version": "0.1.0",
+  "plugin_api_version": 1,
+  "type": "provider",
+  "entrypoint": "plugins.providers.local_media_storage.provider",
+  "capabilities": [
+    "media.storage",
+    "media.storage.store",
+    "media.storage.read",
+    "media.storage.materialize",
+    "media.storage.delete"
+  ],
+  "dependencies": [],
+  "config_schema": {
+    "media_framework_version": "0.1.0",
+    "media_storage_provider_contract_version": "1.0",
+    "media_asset_contract_version": "1.0",
+    "media_reference_contract_version": "1.0",
+    "storage_type": "local"
+  }
+}

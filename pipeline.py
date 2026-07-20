@@ -64,6 +64,7 @@ DEFAULT_CONFIG = {
     "auto_browser_integration_last_passed_at": "",
     "auto_browser_chaos_last_passed_at": "",
     "media_dir": "./tmp_media",
+    "media_storage_root": "./studio_data/media",
     "ai_cli_command": "auto",
     "ai_cli_args": [],
     "ai_cli_mode": "stdin",
@@ -155,6 +156,7 @@ class AppConfig:
     auto_browser_integration_last_passed_at: str
     auto_browser_chaos_last_passed_at: str
     media_dir: Path
+    media_storage_root: Path
     ai_cli_command: str
     ai_cli_args: list[str] = field(default_factory=list)
     ai_cli_mode: str = "stdin"
@@ -278,6 +280,7 @@ def load_config(config_path: str) -> AppConfig:
         auto_browser_integration_last_passed_at=str(raw.get("auto_browser_integration_last_passed_at", "")),
         auto_browser_chaos_last_passed_at=str(raw.get("auto_browser_chaos_last_passed_at", "")),
         media_dir=ROOT_DIR / str(raw["media_dir"]),
+        media_storage_root=ROOT_DIR / str(raw.get("media_storage_root", "./studio_data/media")),
         ai_cli_command=str(raw["ai_cli_command"]),
         ai_cli_args=[str(item) for item in ai_args],
         ai_cli_mode=str(raw["ai_cli_mode"]),

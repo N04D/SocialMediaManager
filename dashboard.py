@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import cgi
 import html
 import json
@@ -109,6 +110,7 @@ from scheduler import (
     update_schedule_record,
     worker_run_summary,
 )
+from src.core.media import MediaInput, MediaValidationError
 from studio_models import ContentItem
 from timing import compute_article_schedule_time
 
@@ -307,6 +309,27 @@ def json_response(
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
     handler.wfile.write(body)
+
+
+def _safe_media_asset_payload(asset) -> dict[str, Any]:
+    return {
+        "id": asset.id,
+        "workspace_id": asset.workspace_id,
+        "media_type": asset.media_type,
+        "mime_type": asset.mime_type,
+        "original_filename": asset.original_filename,
+        "display_name": asset.display_name,
+        "storage_provider_id": asset.storage_provider_id,
+        "checksum": asset.checksum[:12],
+        "file_size": asset.file_size,
+        "width": asset.width,
+        "height": asset.height,
+        "duration_ms": asset.duration_ms,
+        "status": asset.status,
+        "created_at": asset.created_at,
+        "updated_at": asset.updated_at,
+        "source_type": asset.source_type,
+    }
 
 
 def validate_force_unlock_confirmation(reason: str, confirmation: str) -> tuple[bool, str]:
@@ -2884,6 +2907,58 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if parsed.path == "/api/media/providers/health":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            providers = []
+            for plugin_id, plugin_runtime in sorted(runtime.runtimes.items()):
+                if "media.storage" not in plugin_runtime.manifest.capabilities:
+                    continue
+                health = dict(plugin_runtime.health or {})
+                providers.append(
+                    {
+                        "provider_id": plugin_id,
+                        "status": plugin_runtime.status.value,
+                        "contract_version": health.get("media_storage_provider_contract_version", ""),
+                        "capabilities": list(plugin_runtime.manifest.capabilities),
+                        "storage_type": health.get("storage_type", ""),
+                        "configured": bool(health.get("configured", True)),
+                        "readable": bool(health.get("readable", False)),
+                        "writable": bool(health.get("writable", False)),
+                        "materialization_available": bool(health.get("materialization_available", False)),
+                        "last_error_code": health.get("code", ""),
+                        "degraded_reason": "; ".join(health.get("messages", []) or []),
+                    }
+                )
+            json_response(self, {"providers": providers})
+            return
+        if parsed.path == "/api/media/assets":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            media_runtime = runtime.media_runtime(self.config)
+            json_response(
+                self,
+                {
+                    "assets": [
+                        _safe_media_asset_payload(asset)
+                        for asset in media_runtime.list_assets(
+                            workspace_id=parse_qs(parsed.query).get("workspace_id", [""])[0]
+                        )
+                    ]
+                },
+            )
+            return
+        if parsed.path.startswith("/api/media/assets/"):
+            asset_id = parsed.path.rsplit("/", maxsplit=1)[-1]
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            media_runtime = runtime.media_runtime(self.config)
+            try:
+                asset = media_runtime.get_asset(
+                    asset_id, workspace_id=parse_qs(parsed.query).get("workspace_id", [""])[0]
+                )
+            except Exception:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            json_response(self, {"asset": _safe_media_asset_payload(asset)})
+            return
         if parsed.path == "/derivatives/export":
             query = parse_qs(parsed.query)
             derivative_id = query.get("derivative_id", [""])[0]
@@ -3121,6 +3196,52 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
             return
+        if path == "/api/media/assets":
+            try:
+                payload = json.loads(body) if body.strip() else {}
+                data = base64.b64decode(str(payload.get("data_base64") or ""), validate=True)
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                asset = runtime.media_runtime(self.config).import_asset(
+                    workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                    source=MediaInput(
+                        data=data,
+                        original_filename=str(payload.get("original_filename") or "upload"),
+                        declared_mime_type=str(payload.get("mime_type") or ""),
+                        source_type="upload",
+                    ),
+                    created_by=str(payload.get("actor") or "dashboard"),
+                    metadata={"api_upload": True},
+                )
+                json_response(self, {"asset": _safe_media_asset_payload(asset)}, status=HTTPStatus.CREATED)
+                return
+            except (ValueError, MediaValidationError):
+                self.send_error(HTTPStatus.BAD_REQUEST, "Media upload was invalid.")
+                return
+            except Exception:
+                self.send_error(HTTPStatus.BAD_GATEWAY, "Media upload failed safely.")
+                return
+        if path.startswith("/api/media/assets/"):
+            try:
+                payload = json.loads(body) if body.strip() else {}
+            except json.JSONDecodeError:
+                payload = {}
+            asset_id = path.rsplit("/", maxsplit=1)[-1]
+            if str(payload.get("_method") or "").upper() != "DELETE":
+                self.send_error(HTTPStatus.METHOD_NOT_ALLOWED)
+                return
+            try:
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                asset = runtime.media_runtime(self.config).soft_delete_asset(
+                    asset_id,
+                    workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                    actor=str(payload.get("actor") or "dashboard"),
+                    reason=str(payload.get("reason") or "manual soft delete"),
+                )
+                json_response(self, {"asset": _safe_media_asset_payload(asset)})
+                return
+            except Exception:
+                self.send_error(HTTPStatus.BAD_REQUEST, "Media asset could not be deleted safely.")
+                return
         form = parse_qs(body)
         return_to = sanitize_return_to(form.get("return_to", [ROUTE_LINKEDIN])[0])
 
@@ -3724,6 +3845,27 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.BAD_REQUEST, explain=str(exc))
         except Exception as exc:
             self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, explain=str(exc))
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path.startswith("/api/media/assets/"):
+            asset_id = path.rsplit("/", maxsplit=1)[-1]
+            query = parse_qs(parsed.query)
+            try:
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                asset = runtime.media_runtime(self.config).soft_delete_asset(
+                    asset_id,
+                    workspace_id=query.get("workspace_id", ["linkedin"])[0],
+                    actor=query.get("actor", ["dashboard"])[0],
+                    reason=query.get("reason", ["manual soft delete"])[0],
+                )
+                json_response(self, {"asset": _safe_media_asset_payload(asset)})
+                return
+            except Exception:
+                self.send_error(HTTPStatus.BAD_REQUEST, "Media asset could not be deleted safely.")
+                return
+        self.send_error(HTTPStatus.NOT_FOUND)
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
         return

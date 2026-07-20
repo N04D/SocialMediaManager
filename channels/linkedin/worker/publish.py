@@ -19,6 +19,7 @@ from channels.linkedin.provider_config import preferred_browser_provider_id
 from channels.linkedin.targets import composer
 from plugin_runtime import get_plugin_runtime
 from src.core.browser import BrowserProfileBusyError, BrowserProviderError, BrowserSessionOptions, BrowserTarget
+from src.core.media import MediaError, MediaMimeTypeError
 
 from .runtime import save_channel_worker_heartbeat, worker_id_for_channel
 from .session import is_linkedin_logged_in_session
@@ -144,6 +145,14 @@ def _upload_images(browser_session, image_paths: list[Path]) -> None:
         browser_session.upload(composer.MEDIA_INPUT, image_path)
 
 
+def _derivative_media_asset_ids(derivative) -> list[str]:
+    metadata = dict(derivative.generation_metadata_json or {})
+    raw_ids = metadata.get("media_asset_ids") or []
+    if isinstance(raw_ids, str):
+        raw_ids = [raw_ids]
+    return [str(item) for item in raw_ids if str(item).strip()] if isinstance(raw_ids, list) else []
+
+
 def _derivative_image_paths(derivative) -> list[Path]:
     metadata = dict(derivative.generation_metadata_json or {})
     raw_paths = metadata.get("image_paths") or metadata.get("media_paths") or []
@@ -155,6 +164,35 @@ def _derivative_image_paths(derivative) -> list[Path]:
             if str(item).strip():
                 paths.append(Path(str(item)))
     return paths
+
+
+def _media_assets_for_publish(config: Any, app_runtime, derivative) -> list[str]:
+    media_asset_ids = _derivative_media_asset_ids(derivative)
+    if media_asset_ids:
+        return media_asset_ids
+    legacy_paths = _derivative_image_paths(derivative)
+    if not legacy_paths:
+        return []
+    media_runtime = app_runtime.media_runtime(config)
+    imported: list[str] = []
+    for image_path in legacy_paths:
+        asset = media_runtime.import_legacy_path(image_path, workspace_id=derivative.channel_id, derivative=derivative)
+        imported.append(asset.id)
+    return imported
+
+
+def _upload_media_assets(config: Any, app_runtime, browser_session, derivative, media_asset_ids: list[str]) -> None:
+    media_runtime = app_runtime.media_runtime(config)
+    for asset_id in media_asset_ids:
+        asset = media_runtime.get_asset(asset_id, workspace_id=derivative.channel_id)
+        if asset.mime_type not in {"image/jpeg", "image/png"}:
+            raise MediaMimeTypeError(
+                "media.linkedin_unsupported_mime", "LinkedIn image publish does not support this media type."
+            )
+        with media_runtime.materialize(
+            asset.id, workspace_id=derivative.channel_id, purpose="linkedin.image_publish"
+        ) as materialized:
+            browser_session.upload(composer.MEDIA_INPUT, materialized.local_path)
 
 
 def _extract_post_url(browser_session) -> tuple[str, str]:
@@ -302,13 +340,14 @@ def run_publish_job_with_runtime(
                 "final_submit_clicked": False,
                 "session_label": session_label,
             }
-            image_paths = _derivative_image_paths(derivative)
-            if image_paths:
+            media_asset_ids = _media_assets_for_publish(config, app_runtime, derivative)
+            if media_asset_ids:
                 job.last_step = "upload_media"
                 job.updated_at = now_iso()
                 save_publish_job(job)
-                _upload_images(browser_session, image_paths)
-                dry_run_details["uploaded_image_count"] = len(image_paths)
+                _upload_media_assets(config, app_runtime, browser_session, derivative, media_asset_ids)
+                dry_run_details["uploaded_image_count"] = len(media_asset_ids)
+                dry_run_details["media_asset_ids"] = media_asset_ids
             job.last_step = "filled_composer"
             job.screenshot_path = _capture_session_screenshot(browser_session)
             job.result_details_json = dict(job.result_details_json or {}) | dry_run_details
@@ -422,6 +461,26 @@ def run_publish_job_with_runtime(
             return job
         finally:
             browser_session.close()
+    except MediaError as exc:
+        job.status = "failed"
+        job.finished_at = now_iso()
+        job.updated_at = now_iso()
+        job.error_code = exc.code
+        job.error_message = exc.user_message
+        job.claimed_by = ""
+        job.claimed_at = ""
+        job.lease_expires_at = ""
+        job.heartbeat_at = ""
+        save_publish_job(job)
+        _record_log(
+            job,
+            status=job.status,
+            step=job.last_step or "media",
+            worker_id=resolved_worker_id,
+            error_code=exc.code,
+            error_message=exc.user_message,
+        )
+        return job
     except BrowserProfileBusyError as exc:
         job = _set_profile_busy(job, exc.user_message)
         save_channel_worker_heartbeat(
