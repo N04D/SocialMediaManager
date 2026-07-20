@@ -52,7 +52,11 @@ class AutoBrowserReconciliationTests(unittest.TestCase):
         self.addCleanup(self.store.__exit__, None, None, None)
         self.transport = ReconciliationTransport()
         self.provider = AutoBrowserProvider(
-            auto_browser_config=AutoBrowserConfig(enabled=True, base_url="http://127.0.0.1:9999"),
+            auto_browser_config=AutoBrowserConfig(
+                enabled=True,
+                base_url="http://127.0.0.1:9999",
+                shared_upload_host_dir=str(Path(self.tmp.name) / "uploads"),
+            ),
             transport=self.transport,
             lock_manager=FileBackedBrowserProfileLockManager(Path(self.tmp.name) / "locks"),
             mapping_path=Path(self.tmp.name) / "sessions.json",
@@ -112,7 +116,12 @@ class AutoBrowserReconciliationTests(unittest.TestCase):
                 raise AutoBrowserConnectionError("delete failed")
 
         provider = AutoBrowserProvider(
-            auto_browser_config=AutoBrowserConfig(enabled=True, base_url="http://127.0.0.1:9999"),
+            auto_browser_config=AutoBrowserConfig(
+                enabled=True,
+                base_url="http://127.0.0.1:9999",
+                shared_upload_host_dir=str(Path(self.tmp.name) / "uploads"),
+                auth_profile_delete_enabled=True,
+            ),
             transport=FailingDeleteTransport(),
             lock_manager=FileBackedBrowserProfileLockManager(Path(self.tmp.name) / "locks-2"),
             mapping_path=Path(self.tmp.name) / "sessions-2.json",

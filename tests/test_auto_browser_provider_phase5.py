@@ -164,7 +164,11 @@ class AutoBrowserProviderPhase5Tests(unittest.TestCase):
         self.addCleanup(self.store.__exit__, None, None, None)
         self.transport = FakeAutoBrowserTransport()
         self.provider = AutoBrowserProvider(
-            auto_browser_config=AutoBrowserConfig(enabled=True, base_url="http://127.0.0.1:9999"),
+            auto_browser_config=AutoBrowserConfig(
+                enabled=True,
+                base_url="http://127.0.0.1:9999",
+                shared_upload_host_dir=str(Path(self.tmp.name) / "uploads"),
+            ),
             transport=self.transport,
             lock_manager=FileBackedBrowserProfileLockManager(Path(self.tmp.name) / "locks"),
             mapping_path=Path(self.tmp.name) / "sessions.json",
@@ -274,7 +278,11 @@ class AutoBrowserLinkedInIndependenceTests(unittest.TestCase):
         self.transport = FakeAutoBrowserTransport()
         self.transport.evaluate_results = ["Hello LinkedIn"]
         self.provider = AutoBrowserProvider(
-            auto_browser_config=AutoBrowserConfig(enabled=True, base_url="http://127.0.0.1:9999"),
+            auto_browser_config=AutoBrowserConfig(
+                enabled=True,
+                base_url="http://127.0.0.1:9999",
+                shared_upload_host_dir=str(Path(self.tmp.name) / "uploads"),
+            ),
             transport=self.transport,
             lock_manager=FileBackedBrowserProfileLockManager(Path(self.tmp.name) / "locks"),
             mapping_path=Path(self.tmp.name) / "sessions.json",

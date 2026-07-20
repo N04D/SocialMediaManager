@@ -24,6 +24,7 @@ from .errors import (
     AutoBrowserConnectionError,
     AutoBrowserError,
     AutoBrowserNotReadyError,
+    AutoBrowserResponseError,
     AutoBrowserSessionNotFoundError,
     AutoBrowserUnauthorizedError,
     AutoBrowserVersionError,
@@ -32,6 +33,7 @@ from .models import AutoBrowserReconciliationItem, AutoBrowserSessionMapping
 from .session import AutoBrowserSession
 from .target_resolver import AutoBrowserTargetResolver
 from .transport import AutoBrowserHttpTransport, AutoBrowserTransport
+from .uploads import SharedVolumeUploadTransfer
 
 PROVIDER_ID = "provider.browser.autobrowser"
 REQUIRED_OPERATIONS = {
@@ -64,7 +66,16 @@ class AutoBrowserProvider:
         self.transport = transport or AutoBrowserHttpTransport(self.config)
         self.lock_manager = lock_manager or FileBackedBrowserProfileLockManager(channel_store.LOCKS_DIR)
         self.mapping_path = mapping_path or (channel_store.STUDIO_DATA_DIR / "auto_browser_sessions.json")
+        self.revocations_path = channel_store.STUDIO_DATA_DIR / "auto_browser_auth_profile_revocations.json"
         self.target_resolver = AutoBrowserTargetResolver()
+        self.upload_transfer = (
+            SharedVolumeUploadTransfer(
+                host_dir=Path(self.config.shared_upload_host_dir),
+                controller_dir=self.config.shared_upload_controller_dir,
+            )
+            if self.config.shared_upload_host_dir
+            else None
+        )
         self.sessions: dict[str, AutoBrowserSession] = {}
         self._locks: dict[str, Any] = {}
         self._takeovers: dict[str, dict[str, Any]] = {}
@@ -72,6 +83,12 @@ class AutoBrowserProvider:
 
     def create_session(self, options: BrowserSessionOptions) -> AutoBrowserSession:
         self._ensure_configured()
+        if options.profile_id in self.config.account_kill_switches:
+            raise BrowserUnavailableError(
+                "auto_browser.account_kill_switch",
+                "Auto Browser is disabled for this account.",
+                {"profile_id": options.profile_id},
+            )
         health = self.health_check()
         if health.get("status") != "ready":
             raise BrowserUnavailableError(
@@ -87,6 +104,7 @@ class AutoBrowserProvider:
         job_id = str(options.metadata.get("job_id") or "")
         ownership = self._ownership_metadata(options.profile_id, local_session_id, purpose=purpose, job_id=job_id)
         profile_exists = False
+        profile_revoked = self._is_auth_profile_revoked(profile_name)
         try:
             self.transport.get_auth_profile(profile_name)
             profile_exists = True
@@ -108,7 +126,7 @@ class AutoBrowserProvider:
                 "name": local_session_id,
                 "start_url": options.start_url or None,
             }
-            if profile_exists:
+            if profile_exists and not profile_revoked:
                 remote_payload["auth_profile"] = profile_name
             remote = self.transport.create_session(remote_payload)
             remote_session_id = str(remote.get("session_id") or remote.get("id") or "")
@@ -134,6 +152,7 @@ class AutoBrowserProvider:
                 mapping=mapping,
                 transport=self.transport,
                 target_resolver=self.target_resolver,
+                upload_transfer=self.upload_transfer,
                 on_close=self._close_local_session,
             )
             self.sessions[local_session_id] = session
@@ -207,6 +226,13 @@ class AutoBrowserProvider:
                 "optional_operations_missing": [],
                 "default_priority": 50,
             }
+        if self.config.global_kill_switch:
+            return self._health(
+                "disabled",
+                "auto_browser.global_kill_switch",
+                ["Auto Browser global kill switch is enabled."],
+                compatibility="disabled",
+            )
         if messages:
             return self._health("error", "auto_browser.misconfigured", messages, compatibility="misconfigured")
         try:
@@ -246,6 +272,8 @@ class AutoBrowserProvider:
             for item in ["takeover", "auth_profiles", "uploads", "evaluation", "screenshots"]
             if feature_payload and not feature_payload.get(item, True)
         ]
+        if not self.config.shared_upload_host_dir and "uploads" not in missing:
+            missing.append("uploads")
         status = "ready" if not missing else "degraded"
         return {
             "status": status,
@@ -269,6 +297,8 @@ class AutoBrowserProvider:
             "artifact_capability": "available" if "screenshots" not in missing else "missing",
             "upload_capability": "available" if "uploads" not in missing else "missing",
             "evaluation_capability": "available" if "evaluation" not in missing else "missing",
+            "auth_profile_delete_capability": "available" if self.config.auth_profile_delete_enabled else "missing",
+            "pilot_readiness": self.pilot_readiness(),
         }
 
     def request_human_takeover(self, request: HumanTakeoverRequest) -> dict[str, Any]:
@@ -307,20 +337,31 @@ class AutoBrowserProvider:
         return self.transport.save_auth_profile(session.remote_session_id, session.mapping.auth_profile_name)
 
     def forget_auth_profile(self, profile_id: str) -> dict[str, Any]:
+        if not self.config.auth_profile_delete_enabled:
+            return self._mark_auth_profile_revoked(profile_id, reason="delete route not enabled")
         return self.transport.delete_auth_profile(self.auth_profile_name(profile_id))
 
     def auth_profile_status(self, profile_id: str) -> dict[str, Any]:
         profile_name = self.auth_profile_name(profile_id)
+        revoked = self._auth_profile_revocation(profile_name)
         try:
             payload = self.transport.get_auth_profile(profile_name)
         except AutoBrowserError as exc:
             if exc.code == "auto_browser.session_not_found":
-                return {"exists": False, "provider_id": PROVIDER_ID, "auth_profile_reference": profile_name}
+                return {
+                    "exists": False,
+                    "provider_id": PROVIDER_ID,
+                    "auth_profile_reference": profile_name,
+                    "status": "revoked_locally" if revoked else "missing",
+                    "revoked_locally": bool(revoked),
+                }
             return {
                 "exists": False,
                 "provider_id": PROVIDER_ID,
                 "auth_profile_reference": profile_name,
                 "error_code": exc.code,
+                "status": "revoked_locally" if revoked else "unknown",
+                "revoked_locally": bool(revoked),
             }
         return {
             "exists": True,
@@ -328,7 +369,8 @@ class AutoBrowserProvider:
             "auth_profile_reference": profile_name,
             "created_at": str(payload.get("created_at") or ""),
             "last_used_at": str(payload.get("last_used_at") or ""),
-            "status": str(payload.get("status") or "available"),
+            "status": "revoked_locally" if revoked else str(payload.get("status") or "available"),
+            "revoked_locally": bool(revoked),
         }
 
     def forget_auth_profile_with_audit(
@@ -362,6 +404,33 @@ class AutoBrowserProvider:
                 "ok": True,
                 "auth_profile_reference": profile_name,
                 "delete_result": audit["remote_delete_result"],
+            }
+        except AutoBrowserResponseError as exc:
+            if exc.details.get("status") in {404, 405}:
+                revoked = self._mark_auth_profile_revoked(profile_id, reason="delete route unavailable")
+                audit["remote_delete_result"] = "route_unavailable"
+                audit["local_status_update"] = "revoked_locally"
+                result = {
+                    "ok": True,
+                    "auth_profile_reference": profile_name,
+                    "delete_result": "revoked_locally",
+                    "revoked_locally": True,
+                    "revocation": revoked,
+                }
+            else:
+                audit["remote_delete_result"] = "failed"
+                audit["error_code"] = exc.code
+                result = {"ok": False, "auth_profile_reference": profile_name, "error_code": exc.code}
+        except AutoBrowserSessionNotFoundError:
+            revoked = self._mark_auth_profile_revoked(profile_id, reason="remote profile missing")
+            audit["remote_delete_result"] = "remote_missing"
+            audit["local_status_update"] = "revoked_locally"
+            result = {
+                "ok": True,
+                "auth_profile_reference": profile_name,
+                "delete_result": "revoked_locally",
+                "revoked_locally": True,
+                "revocation": revoked,
             }
         except AutoBrowserError as exc:
             audit["remote_delete_result"] = "failed"
@@ -465,6 +534,28 @@ class AutoBrowserProvider:
     ) -> dict[str, Any]:
         return self.lock_manager.force_unlock(profile_id, admin_reason=admin_reason, actor=actor)
 
+    def pilot_readiness(self) -> dict[str, Any]:
+        reasons: list[str] = []
+        if self.config.global_kill_switch:
+            reasons.append("global_kill_switch")
+        if not self.config.shared_upload_host_dir:
+            reasons.append("shared_upload_unconfigured")
+        if (self._last_reconciliation or {}).get("status") == "inconsistent_state":
+            reasons.append("inconsistent_state")
+        return {
+            "status": "ready" if not reasons else "not_ready",
+            "machine_readable": True,
+            "provider_id": PROVIDER_ID,
+            "reasons": reasons,
+            "required_checks": [
+                "health_ready",
+                "shared_volume_upload_transfer",
+                "provider_bound_auth_state",
+                "takeover_reference_safe",
+                "legacy_rollback_available",
+            ],
+        }
+
     def auth_profile_name(self, profile_id: str) -> str:
         raw = f"{Path.cwd()}:{profile_id}".encode()
         digest = hashlib.sha256(raw).hexdigest()[:24]
@@ -545,6 +636,41 @@ class AutoBrowserProvider:
         if session_id in mappings:
             mappings.pop(session_id, None)
             self._write_mappings(mappings)
+
+    def _load_revocations(self) -> dict[str, dict[str, Any]]:
+        if not self.revocations_path.exists():
+            return {}
+        try:
+            payload = json.loads(self.revocations_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        return {str(key): value for key, value in payload.items() if isinstance(value, dict)}
+
+    def _write_revocations(self, revocations: dict[str, dict[str, Any]]) -> None:
+        self.revocations_path.parent.mkdir(parents=True, exist_ok=True)
+        self.revocations_path.write_text(json.dumps(revocations, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    def _auth_profile_revocation(self, profile_name: str) -> dict[str, Any]:
+        return self._load_revocations().get(profile_name, {})
+
+    def _is_auth_profile_revoked(self, profile_name: str) -> bool:
+        return bool(self._auth_profile_revocation(profile_name))
+
+    def _mark_auth_profile_revoked(self, profile_id: str, *, reason: str) -> dict[str, Any]:
+        profile_name = self.auth_profile_name(profile_id)
+        revocations = self._load_revocations()
+        revocation = {
+            "provider_id": PROVIDER_ID,
+            "auth_profile_reference": profile_name,
+            "status": "revoked_locally",
+            "revoked_at": channel_store.now_iso(),
+            "reason": reason,
+        }
+        revocations[profile_name] = revocation
+        self._write_revocations(revocations)
+        return revocation
 
     def _ownership_metadata(
         self, profile_id: str, local_session_id: str, *, purpose: str, job_id: str

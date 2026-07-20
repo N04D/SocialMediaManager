@@ -53,7 +53,12 @@ DEFAULT_CONFIG = {
     "auto_browser_artifact_policy": "remote_reference",
     "auto_browser_takeover_public_base_url": "",
     "auto_browser_max_session_seconds": 1800,
-    "auto_browser_expected_server_version": "1.4.0",
+    "auto_browser_expected_server_version": "1.3.1",
+    "auto_browser_global_kill_switch": False,
+    "auto_browser_account_kill_switches": [],
+    "auto_browser_shared_upload_host_dir": "./studio_data/auto_browser_uploads",
+    "auto_browser_shared_upload_controller_dir": "/shared/uploads/incoming",
+    "auto_browser_auth_profile_delete_enabled": False,
     "media_dir": "./tmp_media",
     "ai_cli_command": "auto",
     "ai_cli_args": [],
@@ -128,6 +133,11 @@ class AppConfig:
     auto_browser_takeover_public_base_url: str
     auto_browser_max_session_seconds: int
     auto_browser_expected_server_version: str
+    auto_browser_global_kill_switch: bool
+    auto_browser_account_kill_switches: list[str]
+    auto_browser_shared_upload_host_dir: str
+    auto_browser_shared_upload_controller_dir: str
+    auto_browser_auth_profile_delete_enabled: bool
     media_dir: Path
     ai_cli_command: str
     ai_cli_args: list[str] = field(default_factory=list)
@@ -235,7 +245,18 @@ def load_config(config_path: str) -> AppConfig:
         auto_browser_artifact_policy=str(raw.get("auto_browser_artifact_policy", "remote_reference")),
         auto_browser_takeover_public_base_url=str(raw.get("auto_browser_takeover_public_base_url", "")),
         auto_browser_max_session_seconds=int(raw.get("auto_browser_max_session_seconds", 1800)),
-        auto_browser_expected_server_version=str(raw.get("auto_browser_expected_server_version", "1.4.0")),
+        auto_browser_expected_server_version=str(raw.get("auto_browser_expected_server_version", "1.3.1")),
+        auto_browser_global_kill_switch=bool(raw.get("auto_browser_global_kill_switch", False)),
+        auto_browser_account_kill_switches=[
+            str(item) for item in raw.get("auto_browser_account_kill_switches", []) if str(item)
+        ],
+        auto_browser_shared_upload_host_dir=str(
+            raw.get("auto_browser_shared_upload_host_dir", "./studio_data/auto_browser_uploads")
+        ),
+        auto_browser_shared_upload_controller_dir=str(
+            raw.get("auto_browser_shared_upload_controller_dir", "/shared/uploads/incoming")
+        ),
+        auto_browser_auth_profile_delete_enabled=bool(raw.get("auto_browser_auth_profile_delete_enabled", False)),
         media_dir=ROOT_DIR / str(raw["media_dir"]),
         ai_cli_command=str(raw["ai_cli_command"]),
         ai_cli_args=[str(item) for item in ai_args],

@@ -20,6 +20,7 @@ from .errors import AutoBrowserError, AutoBrowserTargetNotFoundError
 from .models import AutoBrowserSessionMapping
 from .target_resolver import AutoBrowserTargetResolver
 from .transport import AutoBrowserTransport
+from .uploads import ALLOWED_IMAGE_SUFFIXES, MAX_UPLOAD_BYTES, SharedVolumeUploadTransfer
 
 
 class AutoBrowserSession:
@@ -29,11 +30,13 @@ class AutoBrowserSession:
         mapping: AutoBrowserSessionMapping,
         transport: AutoBrowserTransport,
         target_resolver: AutoBrowserTargetResolver,
+        upload_transfer: SharedVolumeUploadTransfer | None,
         on_close,
     ) -> None:
         self.mapping = mapping
         self.transport = transport
         self.target_resolver = target_resolver
+        self.upload_transfer = upload_transfer
         self.status = BrowserSessionStatus.ACTIVE
         self._on_close = on_close
         self._closed = False
@@ -184,14 +187,25 @@ class AutoBrowserSession:
                 "Upload file is not available.",
                 {"path": str(path)},
             )
-        if resolved.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+        if resolved.suffix.lower() not in ALLOWED_IMAGE_SUFFIXES:
             raise BrowserInteractionError(
                 "browser_interaction.upload_type_blocked", "Upload file type is not supported."
             )
-        if resolved.stat().st_size > 25_000_000:
+        if resolved.stat().st_size > MAX_UPLOAD_BYTES:
             raise BrowserInteractionError("browser_interaction.upload_too_large", "Upload file is too large.")
+        if self.upload_transfer is None:
+            raise BrowserInteractionError(
+                "browser_interaction.upload_transfer_unconfigured",
+                "Auto Browser shared upload transfer is not configured.",
+            )
         element = self._resolve(target)
-        self._action("upload", {"element_id": element.element_id, "file_path": str(resolved), "approved": True})
+        reference = self.upload_transfer.prepare(resolved, session_id=self.session_id)
+        try:
+            self._action(
+                "upload", {"element_id": element.element_id, "file_path": reference.controller_path, "approved": True}
+            )
+        finally:
+            self.upload_transfer.cleanup(reference)
 
     def wait_for_load_state(self, state: str = "domcontentloaded", *, timeout_millis: int = 10000) -> None:
         self.wait_for_timeout(min(timeout_millis, 1000))

@@ -329,7 +329,7 @@ def render_channel_cards(*, return_to: str) -> str:
               <p class="meta">Worker: <code>{html.escape(worker_meta)}</code></p>
               {provider_meta}
               <p class="meta">Active provider auth: <code>{html.escape(entry.active_provider_connection_status or "unknown")}</code></p>
-              <p class="meta">Auto Browser auth profile: <code>{html.escape(str(bool((entry.auto_browser_auth_profile or {}).get("exists"))).lower())}</code></p>
+              <p class="meta">Auto Browser auth profile: <code>{html.escape(str((entry.auto_browser_auth_profile or {}).get("status") or bool((entry.auto_browser_auth_profile or {}).get("exists"))).lower())}</code></p>
               {session_meta}
               <p class="meta">Last checked: <code>{html.escape(entry.last_checked_at or "never")}</code></p>
               {profile_meta}

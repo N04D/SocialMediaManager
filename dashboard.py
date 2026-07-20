@@ -2775,15 +2775,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if provider_runtime is not None:
                 provider = provider_runtime.services.get("browser_provider")
                 reconciliation = {}
+                pilot_readiness = {}
                 if provider is not None and hasattr(provider, "reconcile_sessions"):
                     try:
                         reconciliation = provider.reconcile_sessions()
                     except Exception:
                         reconciliation = {"status": "unavailable"}
+                if provider is not None and hasattr(provider, "pilot_readiness"):
+                    try:
+                        pilot_readiness = provider.pilot_readiness()
+                    except Exception:
+                        pilot_readiness = {"status": "unknown"}
                 payload.update(
                     {
                         "status": provider_runtime.status.value,
                         "health": provider_runtime.health,
+                        "pilot_readiness": pilot_readiness,
                         "reconciliation": {
                             "status": reconciliation.get("status", ""),
                             "checked_at": reconciliation.get("checked_at", ""),

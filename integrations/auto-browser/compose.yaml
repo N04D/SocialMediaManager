@@ -37,3 +37,4 @@ services:
     volumes:
       - ./data/controller:/data
       - ./data/browser-profile:/data/browser-profile
+      - ./data/uploads-incoming:/shared/uploads/incoming

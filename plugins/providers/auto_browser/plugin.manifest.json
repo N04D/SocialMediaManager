@@ -21,6 +21,7 @@
     "tested_auto_browser_commit": "a7414a4",
     "tested_python_client_version": "1.4.0",
     "transport": "rest",
+    "optional_capabilities": ["browser.auth_profile.delete"],
     "required": ["enabled", "base_url", "operator_id"]
   }
 }

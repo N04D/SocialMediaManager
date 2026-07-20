@@ -22,6 +22,7 @@ class RealAutoBrowserIntegrationTests(unittest.TestCase):
                 bearer_token=os.environ.get("AUTO_BROWSER_BEARER_TOKEN", ""),
                 operator_id=os.environ.get("AUTO_BROWSER_OPERATOR_ID", "social-media-manager"),
                 expected_server_version=os.environ.get("AUTO_BROWSER_EXPECTED_VERSION", "1.3.1"),
+                shared_upload_host_dir=str(Path(self.tmp.name) / "uploads"),
             ),
             lock_manager=FileBackedBrowserProfileLockManager(Path(self.tmp.name) / "locks"),
             mapping_path=Path(self.tmp.name) / "sessions.json",

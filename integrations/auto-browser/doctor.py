@@ -42,6 +42,14 @@ def _config_from_env(args: argparse.Namespace) -> AutoBrowserConfig:
         request_timeout=float(getattr(args, "request_timeout", 15.0)),
         readiness_timeout=float(getattr(args, "readiness_timeout", 5.0)),
         expected_server_version=args.expected_version,
+        shared_upload_host_dir=os.environ.get(
+            "AUTO_BROWSER_SHARED_UPLOAD_HOST_DIR",
+            str(ROOT / "integrations" / "auto-browser" / "data" / "uploads-incoming"),
+        ),
+        shared_upload_controller_dir=os.environ.get(
+            "AUTO_BROWSER_SHARED_UPLOAD_CONTROLLER_DIR",
+            "/shared/uploads/incoming",
+        ),
     )
 
 

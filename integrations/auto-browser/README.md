@@ -19,7 +19,12 @@ Configure locally through `config.json` and environment secrets:
   "auto_browser_base_url": "http://127.0.0.1:8000",
   "auto_browser_bearer_token_env": "AUTO_BROWSER_BEARER_TOKEN",
   "auto_browser_operator_id": "social-media-manager",
-  "auto_browser_expected_server_version": "1.3.1"
+  "auto_browser_expected_server_version": "1.3.1",
+  "auto_browser_shared_upload_host_dir": "./integrations/auto-browser/data/uploads-incoming",
+  "auto_browser_shared_upload_controller_dir": "/shared/uploads/incoming",
+  "auto_browser_global_kill_switch": false,
+  "auto_browser_account_kill_switches": [],
+  "auto_browser_auth_profile_delete_enabled": false
 }
 ```
 
@@ -100,6 +105,11 @@ The pinned `v1.4.0` build was checked against the local fixture. Differences fro
 - Controlled evaluation is available through `/sessions/{session_id}/cdp/raw` with `Runtime.evaluate`.
 - Upload actions accept a controller-local file path; a production-safe app-to-controller file transfer endpoint was not present in the inspected REST routes.
 - Auth profile save and lookup are available, but a targeted auth profile DELETE route was not present in the inspected REST routes. The app therefore keeps forget-login audited and safe, and reports remote delete failures without deleting legacy state or content.
+- Upload actions require a shared host/controller volume. The app copies allowed files into the configured shared directory and passes only the controller-local path to Auto Browser.
+- The shared upload volume is mounted at `/shared/uploads/incoming`, outside the controller's `/data` cleanup root, because mounting an empty subdirectory under `/data/uploads` can make the pinned controller fail startup cleanup with a busy mount.
+- Targeted auth-profile deletion is treated as optional. When the route is unavailable, the app records `revoked_locally` and blocks reuse of the remote profile name instead of pretending remote deletion happened.
+
+See [Auto Browser Pilot Runbook](../../docs/auto-browser-pilot-runbook.md) for the controlled LinkedIn pilot, rollback, kill switches, and framework-v1 freeze notes.
 
 ## Opt-in integration tests
 

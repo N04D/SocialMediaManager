@@ -20,10 +20,20 @@ class AutoBrowserConfig:
     takeover_public_base_url: str = ""
     max_session_seconds: int = 1800
     expected_server_version: str = "1.3.1"
+    global_kill_switch: bool = False
+    account_kill_switches: tuple[str, ...] = ()
+    shared_upload_host_dir: str = ""
+    shared_upload_controller_dir: str = "/shared/uploads/incoming"
+    auth_profile_delete_enabled: bool = False
 
     @classmethod
     def from_app_config(cls, config: Any) -> AutoBrowserConfig:
         token_env = str(getattr(config, "auto_browser_bearer_token_env", "AUTO_BROWSER_BEARER_TOKEN") or "")
+        account_kill_switches_raw = getattr(config, "auto_browser_account_kill_switches", []) or []
+        if isinstance(account_kill_switches_raw, str):
+            account_kill_switches = tuple(item.strip() for item in account_kill_switches_raw.split(",") if item.strip())
+        else:
+            account_kill_switches = tuple(str(item) for item in account_kill_switches_raw if str(item))
         return cls(
             enabled=bool(getattr(config, "auto_browser_enabled", False)),
             base_url=str(getattr(config, "auto_browser_base_url", "") or "").rstrip("/"),
@@ -41,6 +51,14 @@ class AutoBrowserConfig:
             ),
             max_session_seconds=int(getattr(config, "auto_browser_max_session_seconds", 1800) or 1800),
             expected_server_version=str(getattr(config, "auto_browser_expected_server_version", "1.3.1") or "1.3.1"),
+            global_kill_switch=bool(getattr(config, "auto_browser_global_kill_switch", False)),
+            account_kill_switches=account_kill_switches,
+            shared_upload_host_dir=str(getattr(config, "auto_browser_shared_upload_host_dir", "") or ""),
+            shared_upload_controller_dir=str(
+                getattr(config, "auto_browser_shared_upload_controller_dir", "/shared/uploads/incoming")
+                or "/shared/uploads/incoming"
+            ),
+            auth_profile_delete_enabled=bool(getattr(config, "auto_browser_auth_profile_delete_enabled", False)),
         )
 
     def safe_base_url(self) -> str:
@@ -58,6 +76,8 @@ class AutoBrowserConfig:
             messages.append("Auto Browser base URL is not configured.")
         if not self.operator_id.strip():
             messages.append("Auto Browser operator ID is not configured.")
+        if self.global_kill_switch:
+            messages.append("Auto Browser global kill switch is enabled.")
         local_hosts = {"127.0.0.1", "localhost", "::1"}
         if parsed.scheme == "http" and (parsed.hostname or "") not in local_hosts:
             messages.append("Auto Browser HTTP is only allowed for localhost.")
