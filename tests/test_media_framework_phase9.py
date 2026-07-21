@@ -102,7 +102,7 @@ class MediaStorageContractTests(unittest.TestCase):
         self.assertFalse(provider.exists(stored.storage_reference))
 
     def test_central_contract_versions(self) -> None:
-        self.assertEqual(MEDIA_FRAMEWORK_VERSION, "0.2.0")
+        self.assertEqual(MEDIA_FRAMEWORK_VERSION, "0.3.0")
         self.assertEqual(MEDIA_STORAGE_PROVIDER_CONTRACT_VERSION, "1.0")
         self.assertEqual(MEDIA_ASSET_CONTRACT_VERSION, "1.0")
         self.assertEqual(MEDIA_REFERENCE_CONTRACT_VERSION, "1.0")

@@ -47,6 +47,52 @@ class MediaVariantStatus(StrEnum):
     DELETED = "deleted"
 
 
+class ContentMediaOwnerType(StrEnum):
+    CONTENT = "content"
+    DRAFT = "draft"
+    PUBLICATION = "publication"
+    PUBLICATION_ATTEMPT = "publication_attempt"
+    UNKNOWN = "unknown"
+
+
+class ContentMediaRole(StrEnum):
+    PRIMARY = "primary"
+    SOCIAL_IMAGE = "social_image"
+    ATTACHMENT = "attachment"
+    GALLERY = "gallery"
+    PUBLICATION_MEDIA = "publication_media"
+    SOURCE = "source"
+    REFERENCE = "reference"
+
+
+class MediaUsageType(StrEnum):
+    LINKED = "linked"
+    SELECTED = "selected"
+    MATERIALIZED = "materialized"
+    PROCESSED = "processed"
+    PUBLISH_ATTEMPT = "publish_attempt"
+    PUBLISHED = "published"
+    PREVIEWED = "previewed"
+
+
+class MediaRetentionTargetType(StrEnum):
+    VARIANT = "variant"
+    SOFT_DELETED_ASSET = "soft_deleted_asset"
+    TEMPORARY_MATERIALIZATION = "temporary_materialization"
+    FAILED_PROCESSING_OUTPUT = "failed_processing_output"
+
+
+class MediaRetentionPlanStatus(StrEnum):
+    DRAFT = "draft"
+    REVIEWED = "reviewed"
+    APPROVED = "approved"
+    EXECUTING = "executing"
+    COMPLETED = "completed"
+    PARTIALLY_COMPLETED = "partially_completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
 @dataclass
 class MediaAsset:
     id: str
@@ -73,6 +119,10 @@ class MediaAsset:
     deleted_at: str = ""
     deleted_by: str = ""
     delete_reason: str = ""
+    retention_pinned: bool = False
+    pinned_at: str = ""
+    pinned_by: str = ""
+    pin_reason: str = ""
 
 
 @dataclass
@@ -100,6 +150,10 @@ class MediaVariant:
     created_at: str = ""
     updated_at: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    retention_pinned: bool = False
+    pinned_at: str = ""
+    pinned_by: str = ""
+    pin_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -255,3 +309,151 @@ class ChannelMediaResolution:
     rejected: tuple[MediaRequirementViolation, ...] = field(default_factory=tuple)
     warnings: tuple[str, ...] = field(default_factory=tuple)
     requirement_version: str = ""
+
+
+@dataclass
+class ContentMediaRelation:
+    id: str
+    workspace_id: str
+    owner_type: str
+    owner_id: str
+    asset_id: str
+    variant_id: str = ""
+    role: str = ContentMediaRole.ATTACHMENT.value
+    position: int = 0
+    channel_plugin_id: str = ""
+    publication_id: str = ""
+    required: bool = False
+    active: bool = True
+    created_at: str = ""
+    updated_at: str = ""
+    created_by: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class MediaUsage:
+    id: str
+    workspace_id: str
+    asset_id: str
+    variant_id: str = ""
+    usage_type: str = MediaUsageType.LINKED.value
+    owner_type: str = ContentMediaOwnerType.UNKNOWN.value
+    owner_id: str = ""
+    channel_plugin_id: str = ""
+    publication_id: str = ""
+    job_id: str = ""
+    status: str = "active"
+    first_used_at: str = ""
+    last_used_at: str = ""
+    usage_count: int = 0
+    retained_until: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class SelectedMediaItem:
+    relation_id: str
+    asset_id: str
+    variant_id: str
+    role: str
+    position: int
+    resolved_mime_type: str
+    width: int
+    height: int
+    checksum: str
+    direct_use: bool
+    processor_plugin_id: str
+    suitability_status: str
+
+
+@dataclass(frozen=True)
+class MediaSelectionResult:
+    owner_type: str
+    owner_id: str
+    channel_plugin_id: str
+    capability: str
+    selected_items: tuple[SelectedMediaItem, ...] = field(default_factory=tuple)
+    rejected_items: tuple[MediaRequirementViolation, ...] = field(default_factory=tuple)
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+    requirement_version: str = ""
+
+
+@dataclass
+class MediaRetentionPolicy:
+    id: str
+    workspace_id: str
+    target_type: str = MediaRetentionTargetType.VARIANT.value
+    unused_for_days: int = 30
+    failed_variant_days: int = 7
+    deleted_asset_days: int = 30
+    keep_historical_publications: bool = True
+    keep_latest_variants_per_spec: int = 1
+    dry_run_required: bool = True
+    enabled: bool = True
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass(frozen=True)
+class MediaRetentionCandidate:
+    asset_id: str
+    variant_id: str
+    status: str
+    reason: str
+    last_used_at: str
+    relation_count: int
+    publication_usage_count: int
+    estimated_bytes: int
+    blockers: tuple[str, ...] = field(default_factory=tuple)
+    proposed_action: str = "variant_soft_delete"
+
+
+@dataclass
+class MediaRetentionPlan:
+    id: str
+    workspace_id: str
+    policy_id: str
+    created_at: str
+    created_by: str
+    reason: str
+    status: str = MediaRetentionPlanStatus.DRAFT.value
+    candidate_count: int = 0
+    estimated_bytes: int = 0
+    candidates: list[dict[str, Any]] = field(default_factory=list)
+    blockers: list[dict[str, Any]] = field(default_factory=list)
+    confirmation_required: bool = True
+    confirmation_token: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class MediaAuditEvent:
+    id: str
+    workspace_id: str
+    action: str
+    target_type: str
+    target_id: str
+    actor: str
+    created_at: str
+    reason: str = ""
+    result: str = "success"
+    error_code: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class MediaIntegrityIssue:
+    code: str
+    severity: str
+    message: str
+    identifiers: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class MediaLibrarySearchResult:
+    assets: tuple[dict[str, Any], ...]
+    page: int
+    page_size: int
+    total: int
+    has_next: bool

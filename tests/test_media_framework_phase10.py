@@ -88,7 +88,7 @@ class MediaFrameworkPhase10Tests(unittest.TestCase):
         self.processing_runtime = self.runtime.media_processing_runtime(self.config)
 
     def test_phase10_contract_versions(self) -> None:
-        self.assertEqual(MEDIA_FRAMEWORK_VERSION, "0.2.0")
+        self.assertEqual(MEDIA_FRAMEWORK_VERSION, "0.3.0")
         self.assertEqual(MEDIA_INSPECTION_CONTRACT_VERSION, "1.0")
         self.assertEqual(MEDIA_PROCESSING_CONTRACT_VERSION, "1.0")
         self.assertEqual(MEDIA_REQUIREMENT_CONTRACT_VERSION, "1.0")

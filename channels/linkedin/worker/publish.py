@@ -181,44 +181,57 @@ def _media_assets_for_publish(config: Any, app_runtime, derivative) -> list[str]
     return imported
 
 
-def _upload_media_assets(
-    config: Any, app_runtime, browser_session, derivative, media_asset_ids: list[str]
-) -> list[dict]:
-    processing_runtime = app_runtime.media_processing_runtime(config)
-    resolution = processing_runtime.resolve_channel_media(
-        media_asset_ids,
+def _resolve_media_for_publish(config: Any, app_runtime, derivative, *, job_id: str):
+    library = app_runtime.media_library_service(config)
+    return library.resolve_owner_media(
+        owner_type="draft",
+        owner_id=derivative.id,
         workspace_id=derivative.channel_id,
         channel_plugin_id="channel.linkedin",
         capability="linkedin.image_publish",
+        compatibility_metadata=dict(derivative.generation_metadata_json or {}),
+        job_id=job_id,
     )
-    if resolution.rejected and not resolution.selected:
-        first = resolution.rejected[0]
+
+
+def _upload_resolved_media(
+    config: Any, app_runtime, browser_session, derivative, resolution, *, job_id: str
+) -> list[dict]:
+    library = app_runtime.media_library_service(config)
+    if resolution.rejected_items and not resolution.selected_items:
+        first = resolution.rejected_items[0]
         raise MediaError(first.code, first.message, {"asset_id": first.asset_id, "variant_id": first.variant_id})
+    library.record_publish_attempts(resolution, workspace_id=derivative.channel_id, job_id=job_id)
     evidence: list[dict] = []
-    for position, item in enumerate(resolution.selected):
-        with processing_runtime.materialize_resolved(
-            item, workspace_id=derivative.channel_id, purpose="linkedin.image_publish"
+    for upload_index, item in enumerate(resolution.selected_items):
+        with library.materialize_selected(
+            item, workspace_id=derivative.channel_id, purpose="linkedin.image_publish", job_id=job_id
         ) as materialized:
             browser_session.upload(composer.MEDIA_INPUT, materialized.local_path)
         evidence.append(
             {
-                "owner_type": "derivative",
+                "relation_id": item.relation_id,
+                "owner_type": resolution.owner_type,
                 "owner_id": derivative.id,
                 "source_asset_id": item.asset_id,
                 "selected_variant_id": item.variant_id,
+                "role": item.role,
+                "position": item.position,
+                "upload_position": upload_index,
                 "direct_use": item.direct_use,
-                "position": position,
-                "mime_type": item.mime_type,
+                "resolved_mime_type": item.resolved_mime_type,
                 "width": item.width,
                 "height": item.height,
                 "checksum": item.checksum,
-                "requirement_id": item.requirement_id,
-                "requirement_version": item.requirement_version,
-                "processing_plugin": item.processor_plugin_id,
+                "requirement_id": "linkedin.image.publish.v1",
+                "requirement_version": resolution.requirement_version,
+                "processor_plugin": item.processor_plugin_id,
+                "processor_version": "0.2.0",
+                "suitability_status": item.suitability_status,
                 "publication_timestamp": now_iso(),
             }
         )
-    if resolution.rejected:
+    if resolution.rejected_items:
         evidence.append(
             {
                 "rejected": [
@@ -227,7 +240,7 @@ def _upload_media_assets(
                         "asset_id": item.asset_id,
                         "variant_id": item.variant_id,
                     }
-                    for item in resolution.rejected
+                    for item in resolution.rejected_items
                 ]
             }
         )
@@ -380,13 +393,18 @@ def run_publish_job_with_runtime(
                 "session_label": session_label,
             }
             media_asset_ids = _media_assets_for_publish(config, app_runtime, derivative)
-            if media_asset_ids:
+            resolution = _resolve_media_for_publish(config, app_runtime, derivative, job_id=job.id)
+            if resolution.selected_items:
                 job.last_step = "upload_media"
                 job.updated_at = now_iso()
                 save_publish_job(job)
-                media_evidence = _upload_media_assets(config, app_runtime, browser_session, derivative, media_asset_ids)
-                dry_run_details["uploaded_image_count"] = len(media_asset_ids)
-                dry_run_details["media_asset_ids"] = media_asset_ids
+                media_evidence = _upload_resolved_media(
+                    config, app_runtime, browser_session, derivative, resolution, job_id=job.id
+                )
+                dry_run_details["uploaded_image_count"] = len(resolution.selected_items)
+                dry_run_details["media_asset_ids"] = media_asset_ids or [
+                    item.asset_id for item in resolution.selected_items
+                ]
                 dry_run_details["media_publication_evidence"] = media_evidence
             job.last_step = "filled_composer"
             job.screenshot_path = _capture_session_screenshot(browser_session)
@@ -468,7 +486,7 @@ def run_publish_job_with_runtime(
                 )
                 return job
 
-            record_confirmed_publish(
+            published_post = record_confirmed_publish(
                 job=job,
                 derivative=derivative,
                 external_url=result_url,
@@ -480,6 +498,12 @@ def run_publish_job_with_runtime(
                     "session_label": session_label,
                     "media_publication_evidence": dry_run_details.get("media_publication_evidence", []),
                 },
+            )
+            app_runtime.media_library_service(config).record_published_usage(
+                dry_run_details.get("media_publication_evidence", []),
+                workspace_id=derivative.channel_id,
+                publication_id=published_post.id,
+                job_id=job.id,
             )
             job.status = "success"
             job.finished_at = now_iso()

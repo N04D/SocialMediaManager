@@ -20866,8 +20866,9 @@ if (!seed) {
   const maybeAssignCoverImage = (data) => {
     if (!coverImagePathInput || !hiddenCoverImagePathInput) return;
     if ((coverImagePathInput.value || "").trim()) return;
-    coverImagePathInput.value = data.local_path;
-    hiddenCoverImagePathInput.value = data.local_path;
+    const coverAsset = data.content_asset || data.public_url;
+    coverImagePathInput.value = coverAsset;
+    hiddenCoverImagePathInput.value = coverAsset;
     setCoverPreview(data.public_url, "Cover image");
     updateFrontmatterPreview();
   };

@@ -401,8 +401,9 @@ if (!seed) {
     setAutosaveState('Uploading cover image...', 'warn')
     try {
       const data = await uploadImageFile(file)
-      coverImagePathInput.value = data.local_path
-      hiddenCoverImagePathInput.value = data.local_path
+      const coverAsset = data.content_asset || data.public_url
+      coverImagePathInput.value = coverAsset
+      hiddenCoverImagePathInput.value = coverAsset
       setCoverPreview(data.public_url, 'Cover image')
       updateFrontmatterPreview()
       setAutosaveState('Cover image uploaded', 'ok')

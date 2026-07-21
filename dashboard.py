@@ -123,6 +123,7 @@ ROUTE_STATS = "/stats"
 ROUTE_SCHEDULER = "/scheduler"
 ROUTE_INSTAGRAM = "/instagram"
 ROUTE_CONFIG = "/config"
+ROUTE_MEDIA = "/media-library"
 VALID_ROUTES = {
     ROUTE_EDITOR,
     ROUTE_DRAFTS,
@@ -131,6 +132,7 @@ VALID_ROUTES = {
     ROUTE_SCHEDULER,
     ROUTE_INSTAGRAM,
     ROUTE_CONFIG,
+    ROUTE_MEDIA,
 }
 
 SIDEBAR_ITEMS = [
@@ -140,6 +142,7 @@ SIDEBAR_ITEMS = [
     (ROUTE_INSTAGRAM, "instagram", "Instagram", "IG"),
     (ROUTE_SCHEDULER, "scheduler", "Scheduler", "SC"),
     (ROUTE_STATS, "stats", "Stats", "ST"),
+    (ROUTE_MEDIA, "media", "Media", "ML"),
     (ROUTE_CONFIG, "config", "Config", "CF"),
 ]
 
@@ -330,6 +333,74 @@ def _safe_media_asset_payload(asset) -> dict[str, Any]:
         "updated_at": asset.updated_at,
         "source_type": asset.source_type,
     }
+
+
+def _safe_relation_payload(relation) -> dict[str, Any]:
+    return {
+        "id": relation.id,
+        "workspace_id": relation.workspace_id,
+        "owner_type": relation.owner_type,
+        "owner_id": relation.owner_id,
+        "asset_id": relation.asset_id,
+        "variant_id": relation.variant_id,
+        "role": relation.role,
+        "position": relation.position,
+        "channel_plugin_id": relation.channel_plugin_id,
+        "publication_id": relation.publication_id,
+        "required": relation.required,
+        "active": relation.active,
+        "created_at": relation.created_at,
+        "updated_at": relation.updated_at,
+    }
+
+
+def _safe_usage_payload(usage) -> dict[str, Any]:
+    return {
+        "id": usage.id,
+        "workspace_id": usage.workspace_id,
+        "asset_id": usage.asset_id,
+        "variant_id": usage.variant_id,
+        "usage_type": usage.usage_type,
+        "owner_type": usage.owner_type,
+        "owner_id": usage.owner_id,
+        "channel_plugin_id": usage.channel_plugin_id,
+        "publication_id": usage.publication_id,
+        "job_id": usage.job_id,
+        "status": usage.status,
+        "first_used_at": usage.first_used_at,
+        "last_used_at": usage.last_used_at,
+        "usage_count": usage.usage_count,
+        "retained_until": usage.retained_until,
+    }
+
+
+def _query_filters(query: dict[str, list[str]]) -> dict[str, Any]:
+    filters: dict[str, Any] = {}
+    for key in [
+        "page",
+        "page_size",
+        "sort_by",
+        "sort_dir",
+        "display_name",
+        "original_filename",
+        "media_type",
+        "mime_type",
+        "status",
+        "storage_provider_id",
+        "inspection_status",
+        "min_width",
+        "max_width",
+        "min_height",
+        "max_height",
+        "checksum",
+        "suitability",
+    ]:
+        if query.get(key, [""])[0] != "":
+            filters[key] = query.get(key, [""])[0]
+    for key in ["linked", "used", "deleted"]:
+        if key in query:
+            filters[key] = query.get(key, [""])[0].lower() in {"1", "true", "on", "yes"}
+    return filters
 
 
 def validate_force_unlock_confirmation(reason: str, confirmation: str) -> tuple[bool, str]:
@@ -1581,6 +1652,93 @@ def render_config_page(config: AppConfig) -> str:
     """
 
 
+def render_media_library_page(config: AppConfig, query: dict[str, list[str]] | None = None) -> str:
+    query = query or {}
+    runtime = get_plugin_runtime(config, reset=True, strict=False)
+    library = runtime.media_library_service(config)
+    workspace_id = query.get("workspace_id", ["linkedin"])[0]
+    filters = {
+        "page": query.get("page", ["1"])[0],
+        "page_size": query.get("page_size", ["24"])[0],
+        "display_name": query.get("display_name", [""])[0],
+        "mime_type": query.get("mime_type", [""])[0],
+        "status": query.get("status", [""])[0],
+        "sort_by": query.get("sort_by", ["created_at"])[0],
+        "sort_dir": query.get("sort_dir", ["desc"])[0],
+        "deleted": query.get("deleted", [""])[0].lower() in {"1", "true", "on"},
+    }
+    result = library.search_assets(workspace_id=workspace_id, filters=filters)
+    cards = []
+    for asset in result.assets:
+        suitability = asset.get("channel_suitability", {})
+        linkedin = next(iter(suitability.values()), {})
+        preview_url = f"/api/media/assets/{html.escape(asset['id'])}/preview?workspace_id={html.escape(workspace_id)}"
+        cards.append(
+            f"""
+            <article class="panel-card media-library-card">
+              <img class="media-library-preview" src="{preview_url}" alt="" loading="lazy" />
+              <div class="media-library-meta">
+                <strong>{html.escape(str(asset.get("display_name") or asset.get("original_filename") or asset["id"]))}</strong>
+                <span class="meta">{html.escape(str(asset.get("mime_type") or ""))} · {asset.get("width", 0)}×{asset.get("height", 0)} · {asset.get("file_size", 0)} bytes</span>
+                <span class="meta">Relations {asset.get("relation_count", 0)} · Usage {asset.get("usage_count", 0)} · {html.escape(str(asset.get("created_at") or ""))}</span>
+                <span class="meta">LinkedIn: {html.escape(str(linkedin.get("status") or "unknown"))}</span>
+                <div class="inline-actions">
+                  <form method="post" action="/media-library/soft-delete">
+                    <input type="hidden" name="asset_id" value="{html.escape(asset["id"])}" />
+                    <input type="hidden" name="workspace_id" value="{html.escape(workspace_id)}" />
+                    <button type="submit" class="danger">Soft delete</button>
+                  </form>
+                  <form method="post" action="/media-library/restore">
+                    <input type="hidden" name="asset_id" value="{html.escape(asset["id"])}" />
+                    <input type="hidden" name="workspace_id" value="{html.escape(workspace_id)}" />
+                    <button type="submit" class="secondary">Restore</button>
+                  </form>
+                </div>
+              </div>
+            </article>
+            """
+        )
+    page_prev = max(result.page - 1, 1)
+    page_next = result.page + 1
+    return f"""
+    <section class="editor-shell">
+      <div class="editor-main">
+        <div class="editor-panel">
+          <div class="editor-panel-header">
+            <div>
+              <h2>Media Library</h2>
+              <p class="meta">{result.total} assets · page {result.page}</p>
+            </div>
+            <div class="inline-actions">
+              <a class="button secondary" href="/api/media/library/health">Health</a>
+              <a class="button secondary" href="/api/media/integrity?workspace_id={html.escape(workspace_id)}">Integrity</a>
+              <a class="button secondary" href="/api/media/retention/preview?workspace_id={html.escape(workspace_id)}">Retention preview</a>
+            </div>
+          </div>
+          <form class="config-grid" method="get" action="{ROUTE_MEDIA}">
+            <label>Workspace<input name="workspace_id" value="{html.escape(workspace_id)}" /></label>
+            <label>Name<input name="display_name" value="{html.escape(str(filters["display_name"]))}" /></label>
+            <label>MIME<input name="mime_type" value="{html.escape(str(filters["mime_type"]))}" /></label>
+            <label>Status<input name="status" value="{html.escape(str(filters["status"]))}" /></label>
+            <label>Sort
+              <select name="sort_by">
+                {"".join(f'<option value="{value}" {"selected" if filters["sort_by"] == value else ""}>{value}</option>' for value in ["created_at", "display_name", "file_size", "last_used_at", "usage_count"])}
+              </select>
+            </label>
+            <label><input type="checkbox" name="deleted" value="1" {"checked" if filters["deleted"] else ""} /> include deleted</label>
+            <button type="submit">Filter</button>
+          </form>
+          <div class="media-library-grid">{"".join(cards) or render_placeholder_card("No media", "No matching media assets found.")}</div>
+          <div class="inline-actions">
+            <a class="button secondary" href="{ROUTE_MEDIA}?workspace_id={html.escape(workspace_id)}&page={page_prev}">Previous</a>
+            <a class="button secondary" href="{ROUTE_MEDIA}?workspace_id={html.escape(workspace_id)}&page={page_next}">Next</a>
+          </div>
+        </div>
+      </div>
+    </section>
+    """
+
+
 def render_instagram_page() -> str:
     return f"""
       <div class=\"page-grid\"><div class=\"stack\">{render_placeholder_card("Instagram", "Instagram workflow will be configured here later.")}</div></div>
@@ -1696,6 +1854,12 @@ def render_main_content(
         return "Instagram", "Instagram workflow placeholder", render_instagram_page()
     if route == ROUTE_CONFIG:
         return "Config", "System and workflow configuration", render_config_page(config)
+    if route == ROUTE_MEDIA:
+        return (
+            "Media Library",
+            "Shared product media, relations, usage, and retention",
+            render_media_library_page(config),
+        )
     assert snapshot is not None
     return (
         "LinkedIn",
@@ -2931,6 +3095,122 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
             json_response(self, {"providers": providers})
             return
+        if parsed.path == "/api/media/library/health":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            json_response(self, {"health": runtime.media_library_service(self.config).health_check()})
+            return
+        if parsed.path == "/api/media/library":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            library = runtime.media_library_service(self.config)
+            result = library.search_assets(
+                workspace_id=query.get("workspace_id", ["linkedin"])[0],
+                filters=_query_filters(query),
+            )
+            json_response(
+                self,
+                {
+                    "assets": list(result.assets),
+                    "page": result.page,
+                    "page_size": result.page_size,
+                    "total": result.total,
+                    "has_next": result.has_next,
+                },
+            )
+            return
+        if parsed.path.startswith("/api/media/library/"):
+            parts = [part for part in parsed.path.split("/") if part]
+            if len(parts) >= 4:
+                asset_id = parts[3]
+                query = parse_qs(parsed.query)
+                workspace_id = query.get("workspace_id", ["linkedin"])[0]
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                library = runtime.media_library_service(self.config)
+                try:
+                    asset = library.get_asset(asset_id, workspace_id=workspace_id, include_deleted=True)
+                    if len(parts) == 4:
+                        counters = library.search_assets(
+                            workspace_id=workspace_id,
+                            filters={"deleted": True, "checksum": asset.checksum},
+                        )
+                        payload = next((item for item in counters.assets if item["id"] == asset.id), None)
+                        json_response(self, {"asset": payload or _safe_media_asset_payload(asset)})
+                        return
+                    if len(parts) == 5 and parts[4] == "usage":
+                        json_response(
+                            self,
+                            {
+                                "usage": [
+                                    _safe_usage_payload(item)
+                                    for item in library.list_asset_usage(asset_id, workspace_id=workspace_id)
+                                ]
+                            },
+                        )
+                        return
+                    if len(parts) == 5 and parts[4] == "relations":
+                        json_response(
+                            self,
+                            {
+                                "relations": [
+                                    _safe_relation_payload(item)
+                                    for item in library.relation_repository.list_by_asset(asset_id)
+                                    if item.workspace_id == workspace_id
+                                ]
+                            },
+                        )
+                        return
+                except Exception:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        if parsed.path.startswith("/api/media/assets/") and parsed.path.endswith("/preview"):
+            asset_id = parsed.path.split("/")[-2]
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            library = runtime.media_library_service(self.config)
+            try:
+                data, _mime, headers = library.preview_asset(
+                    asset_id,
+                    workspace_id=query.get("workspace_id", ["linkedin"])[0],
+                )
+            except Exception:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            self.send_response(HTTPStatus.OK)
+            for key, value in headers.items():
+                self.send_header(key, value)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if parsed.path == "/api/media/retention/preview":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            candidates = runtime.media_library_service(self.config).retention_preview(
+                workspace_id=query.get("workspace_id", ["linkedin"])[0]
+            )
+            json_response(self, {"candidates": [candidate.__dict__ for candidate in candidates]})
+            return
+        if parsed.path.startswith("/api/media/retention/plans/"):
+            plan_id = parsed.path.rsplit("/", maxsplit=1)[-1]
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            plan = runtime.media_library_service(self.config).get_retention_plan(plan_id)
+            if plan is None:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            json_response(self, {"plan": plan.__dict__})
+            return
+        if parsed.path == "/api/media/integrity":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            json_response(
+                self,
+                runtime.media_library_service(self.config).integrity_scan(
+                    workspace_id=query.get("workspace_id", ["linkedin"])[0]
+                ),
+            )
+            return
         if parsed.path == "/api/media/assets":
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)
             media_runtime = runtime.media_runtime(self.config)
@@ -3099,13 +3379,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 target = paths["assets"] / safe_name
                 with target.open("wb") as handle:
                     handle.write(upload.file.read())
-                local_path = f"{config_path_string(str(self.config.content_dir))}/{slug}/assets/{safe_name}"
+                content_asset = f"{slug}/assets/{safe_name}"
                 payload = json.dumps(
                     {
                         "ok": True,
                         "slug": slug,
                         "filename": safe_name,
-                        "local_path": local_path,
+                        "content_asset": content_asset,
                         "public_url": f"/content-files/{slug}/assets/{safe_name}",
                     }
                 ).encode("utf-8")
@@ -3196,6 +3476,140 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
             return
+        if path == "/api/media/relations":
+            try:
+                payload = json.loads(body) if body.strip() else {}
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                relation = runtime.media_library_service(self.config).attach_asset(
+                    workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                    owner_type=str(payload.get("owner_type") or "draft"),
+                    owner_id=str(payload.get("owner_id") or ""),
+                    asset_id=str(payload.get("asset_id") or ""),
+                    variant_id=str(payload.get("variant_id") or ""),
+                    role=str(payload.get("role") or "attachment"),
+                    position=int(payload.get("position") or 0),
+                    channel_plugin_id=str(payload.get("channel_plugin_id") or ""),
+                    publication_id=str(payload.get("publication_id") or ""),
+                    required=bool(payload.get("required", False)),
+                    created_by=str(payload.get("actor") or "dashboard"),
+                    metadata=dict(payload.get("metadata") or {}),
+                )
+                json_response(self, {"relation": _safe_relation_payload(relation)}, status=HTTPStatus.CREATED)
+                return
+            except Exception as exc:
+                self.send_error(
+                    HTTPStatus.BAD_REQUEST, getattr(exc, "user_message", "Relation could not be created safely.")
+                )
+                return
+        if path.startswith("/api/media/relations/"):
+            try:
+                payload = json.loads(body) if body.strip() else {}
+            except json.JSONDecodeError:
+                payload = {}
+            relation_id = path.rsplit("/", maxsplit=1)[-1]
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            library = runtime.media_library_service(self.config)
+            try:
+                if str(payload.get("_method") or "").upper() == "DELETE":
+                    relation = library.detach_asset(
+                        relation_id,
+                        actor=str(payload.get("actor") or "dashboard"),
+                        reason=str(payload.get("reason") or "manual detach"),
+                    )
+                    json_response(self, {"relation": _safe_relation_payload(relation)})
+                    return
+                relation = library.relation_repository.get(relation_id)
+                if relation is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                if payload.get("role"):
+                    relation.role = str(payload.get("role"))
+                if payload.get("position") is not None:
+                    relation.position = int(payload.get("position") or 0)
+                relation.updated_at = now_iso()
+                relation = library.relation_repository.update(relation)
+                json_response(self, {"relation": _safe_relation_payload(relation)})
+                return
+            except Exception as exc:
+                self.send_error(HTTPStatus.BAD_REQUEST, getattr(exc, "user_message", "Relation update failed safely."))
+                return
+        if path == "/api/media/relations/reorder":
+            try:
+                payload = json.loads(body) if body.strip() else {}
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                relations = runtime.media_library_service(self.config).reorder_assets(
+                    workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                    owner_type=str(payload.get("owner_type") or "draft"),
+                    owner_id=str(payload.get("owner_id") or ""),
+                    ordered_relation_ids=[str(item) for item in payload.get("relation_ids", [])],
+                    actor=str(payload.get("actor") or "dashboard"),
+                )
+                json_response(self, {"relations": [_safe_relation_payload(item) for item in relations]})
+                return
+            except Exception as exc:
+                self.send_error(HTTPStatus.BAD_REQUEST, getattr(exc, "user_message", "Relation reorder failed safely."))
+                return
+        if path.startswith("/api/media/assets/") and path.endswith("/restore"):
+            asset_id = path.split("/")[-2]
+            try:
+                payload = json.loads(body) if body.strip() else {}
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                asset = runtime.media_library_service(self.config).restore_asset(
+                    asset_id,
+                    workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                    actor=str(payload.get("actor") or "dashboard"),
+                )
+                json_response(self, {"asset": _safe_media_asset_payload(asset)})
+                return
+            except Exception as exc:
+                self.send_error(
+                    HTTPStatus.BAD_REQUEST, getattr(exc, "user_message", "Media asset could not be restored safely.")
+                )
+                return
+        if path == "/api/media/retention/plans":
+            try:
+                payload = json.loads(body) if body.strip() else {}
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                plan = runtime.media_library_service(self.config).create_retention_plan(
+                    workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                    actor=str(payload.get("actor") or "dashboard"),
+                    reason=str(payload.get("reason") or "retention review"),
+                )
+                json_response(self, {"plan": plan.__dict__}, status=HTTPStatus.CREATED)
+                return
+            except Exception as exc:
+                self.send_error(
+                    HTTPStatus.BAD_REQUEST, getattr(exc, "user_message", "Retention plan could not be created safely.")
+                )
+                return
+        if path.startswith("/api/media/retention/plans/"):
+            plan_id = path.rsplit("/", maxsplit=1)[-1]
+            try:
+                payload = json.loads(body) if body.strip() else {}
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                if str(payload.get("action") or "") == "cancel":
+                    plan = runtime.media_library_service(self.config).get_retention_plan(plan_id)
+                    if plan is None:
+                        self.send_error(HTTPStatus.NOT_FOUND)
+                        return
+                    plan.status = "cancelled"
+                    plan.updated_at = now_iso()
+                    runtime.media_library_service(self.config).retention_service.repository.save_plan(plan)
+                    json_response(self, {"plan": plan.__dict__})
+                    return
+                plan = runtime.media_library_service(self.config).execute_retention_plan(
+                    plan_id=plan_id,
+                    actor=str(payload.get("actor") or "dashboard"),
+                    reason=str(payload.get("reason") or "confirmed retention cleanup"),
+                    confirmation_token=str(payload.get("confirmation_token") or ""),
+                )
+                json_response(self, {"plan": plan.__dict__})
+                return
+            except Exception as exc:
+                self.send_error(
+                    HTTPStatus.BAD_REQUEST, getattr(exc, "user_message", "Retention plan operation failed safely.")
+                )
+                return
         if path == "/api/media/assets":
             try:
                 payload = json.loads(body) if body.strip() else {}
@@ -3231,13 +3645,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
             try:
                 runtime = get_plugin_runtime(self.config, reset=True, strict=False)
-                asset = runtime.media_runtime(self.config).soft_delete_asset(
+                result = runtime.media_library_service(self.config).request_delete(
                     asset_id,
                     workspace_id=str(payload.get("workspace_id") or "linkedin"),
                     actor=str(payload.get("actor") or "dashboard"),
                     reason=str(payload.get("reason") or "manual soft delete"),
                 )
-                json_response(self, {"asset": _safe_media_asset_payload(asset)})
+                json_response(self, result)
                 return
             except Exception:
                 self.send_error(HTTPStatus.BAD_REQUEST, "Media asset could not be deleted safely.")
@@ -3247,6 +3661,29 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         try:
             ensure_studio_dirs(self.config.content_dir)
+            if path == "/media-library/soft-delete":
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                runtime.media_library_service(self.config).request_delete(
+                    form_value(form, "asset_id"),
+                    workspace_id=form_value(form, "workspace_id", "linkedin"),
+                    actor="dashboard",
+                    reason="dashboard soft delete",
+                )
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", ROUTE_MEDIA)
+                self.end_headers()
+                return
+            if path == "/media-library/restore":
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                runtime.media_library_service(self.config).restore_asset(
+                    form_value(form, "asset_id"),
+                    workspace_id=form_value(form, "workspace_id", "linkedin"),
+                    actor="dashboard",
+                )
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", ROUTE_MEDIA)
+                self.end_headers()
+                return
             if path == "/preview":
                 snapshot = build_snapshot(self.config)
                 article: Article = snapshot["article"]
@@ -3854,13 +4291,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
             query = parse_qs(parsed.query)
             try:
                 runtime = get_plugin_runtime(self.config, reset=True, strict=False)
-                asset = runtime.media_runtime(self.config).soft_delete_asset(
+                result = runtime.media_library_service(self.config).request_delete(
                     asset_id,
                     workspace_id=query.get("workspace_id", ["linkedin"])[0],
                     actor=query.get("actor", ["dashboard"])[0],
                     reason=query.get("reason", ["manual soft delete"])[0],
                 )
-                json_response(self, {"asset": _safe_media_asset_payload(asset)})
+                json_response(self, result)
                 return
             except Exception:
                 self.send_error(HTTPStatus.BAD_REQUEST, "Media asset could not be deleted safely.")
