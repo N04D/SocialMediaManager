@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-MEDIA_FRAMEWORK_VERSION = "0.1.0"
+MEDIA_FRAMEWORK_VERSION = "0.2.0"
 MEDIA_STORAGE_PROVIDER_CONTRACT_VERSION = "1.0"
 MEDIA_ASSET_CONTRACT_VERSION = "1.0"
 MEDIA_REFERENCE_CONTRACT_VERSION = "1.0"
 MEDIA_PLUGIN_CONTRACT_VERSION = "1.0"
+MEDIA_INSPECTION_CONTRACT_VERSION = "1.0"
+MEDIA_PROCESSING_CONTRACT_VERSION = "1.0"
+MEDIA_REQUIREMENT_CONTRACT_VERSION = "1.0"
 
 MEDIA_STORAGE_CAPABILITIES = (
     "media.storage",
@@ -12,6 +15,11 @@ MEDIA_STORAGE_CAPABILITIES = (
     "media.storage.read",
     "media.storage.materialize",
     "media.storage.delete",
+)
+
+MEDIA_PROCESSING_CAPABILITIES = (
+    "media.image.inspect",
+    "media.image.processing.basic",
 )
 
 
@@ -41,5 +49,8 @@ def media_contract_payload(
         "media_asset_contract_version": MEDIA_ASSET_CONTRACT_VERSION,
         "media_reference_contract_version": MEDIA_REFERENCE_CONTRACT_VERSION,
         "media_plugin_contract_version": MEDIA_PLUGIN_CONTRACT_VERSION,
+        "media_inspection_contract_version": MEDIA_INSPECTION_CONTRACT_VERSION,
+        "media_processing_contract_version": MEDIA_PROCESSING_CONTRACT_VERSION,
+        "media_requirement_contract_version": MEDIA_REQUIREMENT_CONTRACT_VERSION,
         "contract_compatibility": media_storage_contract_compatibility(implemented_storage_version),
     }

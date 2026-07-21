@@ -41,6 +41,7 @@ class MediaAccessMode(StrEnum):
 
 class MediaVariantStatus(StrEnum):
     PENDING = "pending"
+    PROCESSING = "processing"
     AVAILABLE = "available"
     FAILED = "failed"
     DELETED = "deleted"
@@ -85,6 +86,11 @@ class MediaVariant:
     storage_reference: str
     checksum: str
     file_size: int
+    workspace_id: str = ""
+    variant_key: str = ""
+    source_checksum: str = ""
+    requirement_id: str = ""
+    requirement_version: str = ""
     width: int = 0
     height: int = 0
     duration_ms: int = 0
@@ -92,6 +98,7 @@ class MediaVariant:
     transformation: dict[str, Any] = field(default_factory=dict)
     status: str = MediaVariantStatus.PENDING.value
     created_at: str = ""
+    updated_at: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -183,3 +190,68 @@ class MediaDeleteOptions:
     reason: str
     actor: str = ""
     physical: bool = False
+
+
+@dataclass(frozen=True)
+class ImageInspectionResult:
+    mime_type: str
+    width: int
+    height: int
+    file_size: int
+    checksum: str
+    status: str
+    inspector_id: str
+    inspected_at: str
+    errors: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ChannelMediaRequirements:
+    channel_plugin_id: str
+    capability: str
+    requirement_id: str
+    requirement_version: str
+    media_type: str = MediaType.IMAGE.value
+    allowed_mime_types: tuple[str, ...] = ("image/jpeg", "image/png")
+    min_width: int = 1
+    min_height: int = 1
+    max_width: int = 7680
+    max_height: int = 4320
+    max_file_size: int = 25_000_000
+    max_assets: int = 9
+    preferred_mime_type: str = ""
+    processor_plugin_id: str = "media.image.processing.basic"
+
+
+@dataclass(frozen=True)
+class MediaRequirementViolation:
+    code: str
+    message: str
+    asset_id: str = ""
+    variant_id: str = ""
+
+
+@dataclass(frozen=True)
+class ResolvedMediaItem:
+    asset_id: str
+    variant_id: str
+    media_type: str
+    mime_type: str
+    file_size: int
+    checksum: str
+    width: int
+    height: int
+    direct_use: bool
+    processor_plugin_id: str
+    requirement_id: str
+    requirement_version: str
+
+
+@dataclass(frozen=True)
+class ChannelMediaResolution:
+    channel_plugin_id: str
+    capability: str
+    selected: tuple[ResolvedMediaItem, ...] = field(default_factory=tuple)
+    rejected: tuple[MediaRequirementViolation, ...] = field(default_factory=tuple)
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+    requirement_version: str = ""

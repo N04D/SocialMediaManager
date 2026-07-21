@@ -1,8 +1,12 @@
 from .contracts import (
     MEDIA_ASSET_CONTRACT_VERSION,
     MEDIA_FRAMEWORK_VERSION,
+    MEDIA_INSPECTION_CONTRACT_VERSION,
     MEDIA_PLUGIN_CONTRACT_VERSION,
+    MEDIA_PROCESSING_CAPABILITIES,
+    MEDIA_PROCESSING_CONTRACT_VERSION,
     MEDIA_REFERENCE_CONTRACT_VERSION,
+    MEDIA_REQUIREMENT_CONTRACT_VERSION,
     MEDIA_STORAGE_CAPABILITIES,
     MEDIA_STORAGE_PROVIDER_CONTRACT_VERSION,
     media_contract_payload,
@@ -29,6 +33,9 @@ from .errors import (
 )
 from .fake_provider import InMemoryMediaStorageProvider
 from .models import (
+    ChannelMediaRequirements,
+    ChannelMediaResolution,
+    ImageInspectionResult,
     MediaAccessMode,
     MediaAsset,
     MediaDeleteOptions,
@@ -37,12 +44,14 @@ from .models import (
     MediaMaterializeOptions,
     MediaObjectMetadata,
     MediaReference,
+    MediaRequirementViolation,
     MediaSourceType,
     MediaStatus,
     MediaStoreOptions,
     MediaType,
     MediaVariant,
     MediaVariantStatus,
+    ResolvedMediaItem,
     StoredMedia,
 )
 from .plugin import MediaPluginRuntime, MediaPluginService
@@ -51,11 +60,18 @@ from .utils import media_type_for_mime
 
 __all__ = [
     "MEDIA_FRAMEWORK_VERSION",
+    "MEDIA_INSPECTION_CONTRACT_VERSION",
     "MEDIA_STORAGE_PROVIDER_CONTRACT_VERSION",
     "MEDIA_ASSET_CONTRACT_VERSION",
     "MEDIA_REFERENCE_CONTRACT_VERSION",
     "MEDIA_PLUGIN_CONTRACT_VERSION",
+    "MEDIA_PROCESSING_CONTRACT_VERSION",
+    "MEDIA_REQUIREMENT_CONTRACT_VERSION",
     "MEDIA_STORAGE_CAPABILITIES",
+    "MEDIA_PROCESSING_CAPABILITIES",
+    "ChannelMediaRequirements",
+    "ChannelMediaResolution",
+    "ImageInspectionResult",
     "MediaAccessMode",
     "InMemoryMediaStorageProvider",
     "MediaAsset",
@@ -76,6 +92,7 @@ __all__ = [
     "MediaPluginService",
     "MediaProviderIncompatibleError",
     "MediaReference",
+    "MediaRequirementViolation",
     "MediaSourceType",
     "MediaStatus",
     "MediaStorageCapabilityError",
@@ -91,6 +108,7 @@ __all__ = [
     "MediaVariant",
     "MediaVariantNotFoundError",
     "MediaVariantStatus",
+    "ResolvedMediaItem",
     "StoredMedia",
     "media_contract_payload",
     "media_type_for_mime",

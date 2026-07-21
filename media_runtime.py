@@ -29,6 +29,7 @@ from src.core.media import (
     media_type_for_mime,
 )
 from src.core.media.errors import MediaUnsafePathError
+from src.core.media.inspection import ImageInspector
 from src.core.media.utils import safe_display_name
 
 
@@ -64,6 +65,28 @@ class MediaRuntime:
             provider.delete(stored.storage_reference, MediaDeleteOptions(reason="duplicate import cleanup"))
             return existing
         current_time = now_iso()
+        inspection_metadata = {}
+        width = 0
+        height = 0
+        if stored.mime_type in {"image/jpeg", "image/png"}:
+            provider_data = b"".join(provider.open_stream(stored.storage_reference))
+            inspection = ImageInspector().inspect_bytes(provider_data, mime_type=stored.mime_type)
+            inspection_metadata = {
+                "image_inspection": {
+                    "mime_type": inspection.mime_type,
+                    "width": inspection.width,
+                    "height": inspection.height,
+                    "file_size": inspection.file_size,
+                    "checksum": inspection.checksum,
+                    "status": inspection.status,
+                    "inspector_id": inspection.inspector_id,
+                    "inspected_at": inspection.inspected_at,
+                    "errors": list(inspection.errors),
+                }
+            }
+            if inspection.status == "passed":
+                width = inspection.width
+                height = inspection.height
         asset = MediaAsset(
             id=f"media_{uuid4().hex}",
             workspace_id=workspace_id,
@@ -76,13 +99,15 @@ class MediaRuntime:
             checksum_algorithm="sha256",
             checksum=stored.checksum,
             file_size=stored.file_size,
+            width=width,
+            height=height,
             status=MediaStatus.AVAILABLE.value,
             created_at=current_time,
             updated_at=current_time,
             created_by=created_by,
             source_type=source.source_type,
             source_reference=source.source_reference,
-            metadata=dict(metadata or {}) | {"provider_metadata": stored.provider_metadata},
+            metadata=dict(metadata or {}) | {"provider_metadata": stored.provider_metadata} | inspection_metadata,
         )
         try:
             return save_media_asset(asset)

@@ -84,14 +84,26 @@ def find_media_asset_by_checksum(workspace_id: str, checksum: str) -> MediaAsset
 
 
 def save_media_variant(variant: MediaVariant) -> MediaVariant:
-    records = list_media_variants()
-    for index, record in enumerate(records):
-        if record.id == variant.id:
-            records[index] = variant
-            _save_records(media_variants_path(), records)
-            return variant
-    records.append(variant)
-    _save_records(media_variants_path(), records)
+    with _list_store(media_variants_path()) as store:
+        payload = store.read()
+        records = []
+        for item in payload:
+            if isinstance(item, dict):
+                try:
+                    records.append(MediaVariant(**item))
+                except TypeError:
+                    continue
+        for index, record in enumerate(records):
+            if record.id == variant.id or (
+                variant.variant_key
+                and record.asset_id == variant.asset_id
+                and record.variant_key == variant.variant_key
+            ):
+                records[index] = variant
+                store.write([asdict(record) for record in records])
+                return variant
+        records.append(variant)
+        store.write([asdict(record) for record in records])
     return variant
 
 
@@ -100,6 +112,21 @@ def list_media_variants(*, asset_id: str = "") -> list[MediaVariant]:
     if asset_id:
         records = [record for record in records if record.asset_id == asset_id]
     return records
+
+
+def get_media_variant(variant_id: str) -> MediaVariant | None:
+    return next((variant for variant in list_media_variants() if variant.id == variant_id), None)
+
+
+def find_media_variant_by_key(asset_id: str, variant_key: str) -> MediaVariant | None:
+    return next(
+        (
+            variant
+            for variant in list_media_variants(asset_id=asset_id)
+            if variant.variant_key == variant_key and variant.status != "deleted"
+        ),
+        None,
+    )
 
 
 def get_legacy_media_mapping(path: Path) -> str:

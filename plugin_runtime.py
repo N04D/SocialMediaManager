@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from channels.linkedin.runtime import LinkedInChannelRuntime
+from media_processing_runtime import MediaProcessingRuntime
 from media_runtime import MediaRuntime
 from plugins.providers.auto_browser import AutoBrowserProvider
 from plugins.providers.legacy_browser import LegacyBrowserProvider
@@ -84,6 +85,39 @@ class ApplicationPluginRuntime:
             status=PluginStatus.READY,
             services={"media_runtime": service},
             health={"status": "ready"},
+        )
+        return service
+
+    def media_processing_runtime(self, config: Any):
+        runtime = self.runtimes.get("media.processing.runtime")
+        if runtime is not None and runtime.services.get("media_processing_runtime") is not None:
+            return runtime.services["media_processing_runtime"]
+        service = MediaProcessingRuntime(app_runtime=self, config=config)
+        try:
+            from channels.linkedin.media_requirements import register_linkedin_media_requirements
+
+            register_linkedin_media_requirements(service.requirement_registry)
+        except Exception as exc:
+            self.errors.append(f"LinkedIn media requirements were not registered: {exc}")
+        manifest = PluginManifest.from_dict(
+            {
+                "id": "media.processing.runtime",
+                "name": "Media Processing Runtime",
+                "version": "0.2.0",
+                "plugin_api_version": 1,
+                "type": "media",
+                "entrypoint": "media_processing_runtime",
+                "capabilities": ["media.image.inspect", "media.image.processing.basic", "media.requirements"],
+                "dependencies": [{"capability": "media.storage"}],
+                "config_schema": {},
+            }
+        )
+        self.runtimes[manifest.id] = PluginRuntime(
+            manifest=manifest,
+            instance=service,
+            status=PluginStatus.READY,
+            services={"media_processing_runtime": service},
+            health=service.health_check(),
         )
         return service
 
@@ -332,6 +366,7 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
 
     runtime.resolver = ProviderResolver(runtime.registry, runtime.runtimes)
     runtime.media_runtime(config)
+    runtime.media_processing_runtime(config)
     runtime.errors = startup_errors
     if strict and startup_errors:
         raise RuntimeError("Plugin bootstrap failed: " + "; ".join(startup_errors))

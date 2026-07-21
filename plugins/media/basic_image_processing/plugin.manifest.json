@@ -1,0 +1,23 @@
+{
+  "id": "media.image.processing.basic",
+  "name": "Basic Image Processing",
+  "version": "0.2.0",
+  "plugin_api_version": 1,
+  "type": "media",
+  "entrypoint": "media_processing_runtime.BasicImageProcessingPlugin",
+  "capabilities": [
+    "media.image.inspect",
+    "media.image.processing.basic"
+  ],
+  "dependencies": [
+    {
+      "capability": "media.storage.read"
+    },
+    {
+      "capability": "media.storage.store"
+    }
+  ],
+  "config_schema": {
+    "media_processing_contract_version": "1.0"
+  }
+}

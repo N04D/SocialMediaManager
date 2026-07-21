@@ -19,7 +19,7 @@ from channels.linkedin.provider_config import preferred_browser_provider_id
 from channels.linkedin.targets import composer
 from plugin_runtime import get_plugin_runtime
 from src.core.browser import BrowserProfileBusyError, BrowserProviderError, BrowserSessionOptions, BrowserTarget
-from src.core.media import MediaError, MediaMimeTypeError
+from src.core.media import MediaError
 
 from .runtime import save_channel_worker_heartbeat, worker_id_for_channel
 from .session import is_linkedin_logged_in_session
@@ -181,18 +181,57 @@ def _media_assets_for_publish(config: Any, app_runtime, derivative) -> list[str]
     return imported
 
 
-def _upload_media_assets(config: Any, app_runtime, browser_session, derivative, media_asset_ids: list[str]) -> None:
-    media_runtime = app_runtime.media_runtime(config)
-    for asset_id in media_asset_ids:
-        asset = media_runtime.get_asset(asset_id, workspace_id=derivative.channel_id)
-        if asset.mime_type not in {"image/jpeg", "image/png"}:
-            raise MediaMimeTypeError(
-                "media.linkedin_unsupported_mime", "LinkedIn image publish does not support this media type."
-            )
-        with media_runtime.materialize(
-            asset.id, workspace_id=derivative.channel_id, purpose="linkedin.image_publish"
+def _upload_media_assets(
+    config: Any, app_runtime, browser_session, derivative, media_asset_ids: list[str]
+) -> list[dict]:
+    processing_runtime = app_runtime.media_processing_runtime(config)
+    resolution = processing_runtime.resolve_channel_media(
+        media_asset_ids,
+        workspace_id=derivative.channel_id,
+        channel_plugin_id="channel.linkedin",
+        capability="linkedin.image_publish",
+    )
+    if resolution.rejected and not resolution.selected:
+        first = resolution.rejected[0]
+        raise MediaError(first.code, first.message, {"asset_id": first.asset_id, "variant_id": first.variant_id})
+    evidence: list[dict] = []
+    for position, item in enumerate(resolution.selected):
+        with processing_runtime.materialize_resolved(
+            item, workspace_id=derivative.channel_id, purpose="linkedin.image_publish"
         ) as materialized:
             browser_session.upload(composer.MEDIA_INPUT, materialized.local_path)
+        evidence.append(
+            {
+                "owner_type": "derivative",
+                "owner_id": derivative.id,
+                "source_asset_id": item.asset_id,
+                "selected_variant_id": item.variant_id,
+                "direct_use": item.direct_use,
+                "position": position,
+                "mime_type": item.mime_type,
+                "width": item.width,
+                "height": item.height,
+                "checksum": item.checksum,
+                "requirement_id": item.requirement_id,
+                "requirement_version": item.requirement_version,
+                "processing_plugin": item.processor_plugin_id,
+                "publication_timestamp": now_iso(),
+            }
+        )
+    if resolution.rejected:
+        evidence.append(
+            {
+                "rejected": [
+                    {
+                        "code": item.code,
+                        "asset_id": item.asset_id,
+                        "variant_id": item.variant_id,
+                    }
+                    for item in resolution.rejected
+                ]
+            }
+        )
+    return evidence
 
 
 def _extract_post_url(browser_session) -> tuple[str, str]:
@@ -345,9 +384,10 @@ def run_publish_job_with_runtime(
                 job.last_step = "upload_media"
                 job.updated_at = now_iso()
                 save_publish_job(job)
-                _upload_media_assets(config, app_runtime, browser_session, derivative, media_asset_ids)
+                media_evidence = _upload_media_assets(config, app_runtime, browser_session, derivative, media_asset_ids)
                 dry_run_details["uploaded_image_count"] = len(media_asset_ids)
                 dry_run_details["media_asset_ids"] = media_asset_ids
+                dry_run_details["media_publication_evidence"] = media_evidence
             job.last_step = "filled_composer"
             job.screenshot_path = _capture_session_screenshot(browser_session)
             job.result_details_json = dict(job.result_details_json or {}) | dry_run_details
@@ -438,6 +478,7 @@ def run_publish_job_with_runtime(
                     "confirmation_seen": confirmed,
                     "confirmation_signal": confirmation_signal,
                     "session_label": session_label,
+                    "media_publication_evidence": dry_run_details.get("media_publication_evidence", []),
                 },
             )
             job.status = "success"

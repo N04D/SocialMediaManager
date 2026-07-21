@@ -30,6 +30,15 @@ from src.core.plugins.runtime import PluginRuntime, ProviderResolver
 from tests.test_plugin_runtime_phase2 import Config, linkedin_manifest, runtime_with_provider
 from tests.test_support import isolated_channel_store
 
+VALID_PNG = (
+    b"\x89PNG\r\n\x1a\n"
+    b"\x00\x00\x00\rIHDR"
+    b"\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x02\x00\x00\x00"
+    b"\x90wS\xde"
+    b"\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
 
 class MediaConfig(Config):
     pass
@@ -93,7 +102,7 @@ class MediaStorageContractTests(unittest.TestCase):
         self.assertFalse(provider.exists(stored.storage_reference))
 
     def test_central_contract_versions(self) -> None:
-        self.assertEqual(MEDIA_FRAMEWORK_VERSION, "0.1.0")
+        self.assertEqual(MEDIA_FRAMEWORK_VERSION, "0.2.0")
         self.assertEqual(MEDIA_STORAGE_PROVIDER_CONTRACT_VERSION, "1.0")
         self.assertEqual(MEDIA_ASSET_CONTRACT_VERSION, "1.0")
         self.assertEqual(MEDIA_REFERENCE_CONTRACT_VERSION, "1.0")
@@ -142,7 +151,7 @@ class MediaRuntimeTests(unittest.TestCase):
     def test_import_asset_reference_materialize_and_soft_delete(self) -> None:
         asset = self.media_runtime.import_asset(
             workspace_id="linkedin",
-            source=MediaInput(data=b"image", original_filename="post.png", declared_mime_type="image/png"),
+            source=MediaInput(data=VALID_PNG, original_filename="post.png", declared_mime_type="image/png"),
             created_by="test",
         )
         self.assertEqual(asset.status, "available")
@@ -251,7 +260,7 @@ class LinkedInMediaAssetPublishTests(unittest.TestCase):
         media_runtime = self.runtime.media_runtime(self.config)
         asset = media_runtime.import_asset(
             workspace_id="linkedin",
-            source=MediaInput(data=b"image", original_filename="post.png", declared_mime_type="image/png"),
+            source=MediaInput(data=VALID_PNG, original_filename="post.png", declared_mime_type="image/png"),
         )
         job = self._job({"media_asset_ids": [asset.id]})
         result = self.service.publish(job.id, worker_id="worker-a")
@@ -263,7 +272,7 @@ class LinkedInMediaAssetPublishTests(unittest.TestCase):
 
     def test_image_publish_legacy_path_lazy_migrates(self) -> None:
         legacy = self.config.media_dir / "legacy.png"
-        legacy.write_bytes(b"legacy")
+        legacy.write_bytes(VALID_PNG)
         job = self._job({"image_paths": [str(legacy)]})
         result = self.service.publish(job.id, worker_id="worker-a")
         self.assertEqual(result.status, "success")

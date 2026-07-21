@@ -39,6 +39,15 @@ from tests.test_plugin_runtime_phase2 import (
 )
 from tests.test_support import isolated_channel_store
 
+VALID_PNG = (
+    b"\x89PNG\r\n\x1a\n"
+    b"\x00\x00\x00\rIHDR"
+    b"\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x02\x00\x00\x00"
+    b"\x90wS\xde"
+    b"\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
 
 class Phase4InMemoryLinkedInTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -148,7 +157,7 @@ class Phase4InMemoryLinkedInTests(unittest.TestCase):
         provider.evaluate_results = ["Hello LinkedIn"]
         _, service = self._runtime_with_channel(provider)
         image_path = Path(self.tmp.name) / "image.png"
-        image_path.write_bytes(b"fake")
+        image_path.write_bytes(VALID_PNG)
         job = self._publish_job(metadata={"image_paths": [str(image_path)]})
 
         result = service.publish(job.id, worker_id="worker-a")
@@ -176,7 +185,7 @@ class Phase4InMemoryLinkedInTests(unittest.TestCase):
         provider.simulate_failure("upload", BrowserInteractionError("upload.failed", "Upload failed."))
         _, service = self._runtime_with_channel(provider)
         image_path = Path(self.tmp.name) / "image.png"
-        image_path.write_bytes(b"fake")
+        image_path.write_bytes(VALID_PNG)
         job = self._publish_job(metadata={"image_paths": [str(image_path)]})
 
         result = service.publish(job.id, worker_id="worker-a")
