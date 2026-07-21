@@ -13,6 +13,7 @@ SUPPORTED_PLUGIN_API_VERSION = 1
 class PluginType(StrEnum):
     CHANNEL = "channel"
     CONTENT = "content"
+    EXECUTION = "execution"
     MEDIA = "media"
     PROVIDER = "provider"
 

@@ -14,6 +14,7 @@ from media_runtime import MediaRuntime
 from plugins.providers.auto_browser import AutoBrowserProvider
 from plugins.providers.legacy_browser import LegacyBrowserProvider
 from plugins.providers.local_media_storage import LocalMediaStorageProvider
+from publication_execution import PublicationExecutionService
 from publication_planning import PublicationPlanningService
 from src.core.browser.contracts import (
     BROWSER_FRAMEWORK_VERSION,
@@ -219,6 +220,39 @@ class ApplicationPluginRuntime:
             instance=service,
             status=PluginStatus.READY,
             services={"publication_planning_service": service},
+            health=service.health_check(),
+        )
+        return service
+
+    def publication_execution_service(self, config: Any):
+        runtime = self.runtimes.get("publication.execution.service")
+        if runtime is not None and runtime.services.get("publication_execution_service") is not None:
+            return runtime.services["publication_execution_service"]
+        planning_service = self.publication_planning_service(config)
+        service = PublicationExecutionService(app_runtime=self, config=config, planning_service=planning_service)
+        manifest = PluginManifest.from_dict(
+            {
+                "id": "publication.execution.service",
+                "name": "Publication Execution Service",
+                "version": "0.1.0",
+                "plugin_api_version": 1,
+                "type": "execution",
+                "entrypoint": "publication_execution",
+                "capabilities": [
+                    "publication.dispatch",
+                    "publication.execution",
+                    "publication.reconciliation",
+                    "publication.retry",
+                ],
+                "dependencies": [{"capability": "publication.plans"}],
+                "config_schema": {},
+            }
+        )
+        self.runtimes[manifest.id] = PluginRuntime(
+            manifest=manifest,
+            instance=service,
+            status=PluginStatus.READY,
+            services={"publication_execution_service": service},
             health=service.health_check(),
         )
         return service
@@ -472,6 +506,7 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
     runtime.media_library_service(config)
     runtime.content_service(config)
     runtime.publication_planning_service(config)
+    runtime.publication_execution_service(config)
     runtime.errors = startup_errors
     if strict and startup_errors:
         raise RuntimeError("Plugin bootstrap failed: " + "; ".join(startup_errors))

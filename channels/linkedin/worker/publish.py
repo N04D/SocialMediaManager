@@ -322,6 +322,30 @@ def _set_profile_busy(job: PublishJob, message: str) -> PublishJob:
     return save_publish_job(job)
 
 
+def _report_execution_phase(
+    config: Any,
+    app_runtime,
+    job: PublishJob,
+    *,
+    phase: str,
+    mutation_state: str | None = None,
+    status: str | None = None,
+    remote_verification_state: str = "",
+    safe_error_code: str = "",
+) -> None:
+    try:
+        app_runtime.publication_execution_service(config).report_job_phase(
+            job_id=job.id,
+            phase=phase,
+            mutation_state=mutation_state,
+            status=status,
+            remote_verification_state=remote_verification_state,
+            safe_error_code=safe_error_code,
+        )
+    except Exception:
+        return
+
+
 def run_publish_job_with_runtime(
     config: Any,
     app_runtime,
@@ -336,6 +360,14 @@ def run_publish_job_with_runtime(
     derivative = get_derivative(job.derivative_id)
     if derivative is None:
         raise RuntimeError(f"Derivative {job.derivative_id} not found.")
+    _report_execution_phase(
+        config,
+        app_runtime,
+        job,
+        phase="job_claim",
+        mutation_state="not_started",
+        status="running",
+    )
 
     resolved_worker_id = worker_id or worker_id_for_channel(job.channel_id)
     save_channel_worker_heartbeat(
@@ -401,12 +433,20 @@ def run_publish_job_with_runtime(
             job.last_step = "open_composer"
             job.updated_at = now_iso()
             save_publish_job(job)
+            _report_execution_phase(config, app_runtime, job, phase="channel_prepare", mutation_state="prepared")
             _open_linkedin_post_composer(browser_session)
 
             job.last_step = "fill_composer"
             job.updated_at = now_iso()
             save_publish_job(job)
             rendered_text = _fill_composer(browser_session, derivative.body)
+            _report_execution_phase(
+                config,
+                app_runtime,
+                job,
+                phase="remote_mutation",
+                mutation_state="mutation_started",
+            )
             expected_normalized = _normalize_text(derivative.body)
             actual_normalized = _normalize_text(rendered_text)
             content_match = expected_normalized == actual_normalized
@@ -456,6 +496,15 @@ def run_publish_job_with_runtime(
                 job.lease_expires_at = ""
                 job.heartbeat_at = ""
                 save_publish_job(job)
+                _report_execution_phase(
+                    config,
+                    app_runtime,
+                    job,
+                    phase="cleanup",
+                    mutation_state="mutation_verified",
+                    status="succeeded",
+                    remote_verification_state="dry_run_verified",
+                )
                 save_channel_worker_heartbeat(
                     job.channel_id,
                     status="idle",
@@ -475,6 +524,14 @@ def run_publish_job_with_runtime(
             browser_session.wait_for_timeout(2500)
 
             confirmed, confirmation_signal = _confirmation_seen(browser_session)
+            _report_execution_phase(
+                config,
+                app_runtime,
+                job,
+                phase="remote_verification",
+                mutation_state="mutation_acknowledged" if confirmed else "mutation_uncertain",
+                remote_verification_state="confirmation_seen" if confirmed else "pending",
+            )
 
             result_url, external_id = _extract_post_url(browser_session)
             job.screenshot_path = _capture_session_screenshot(browser_session)
@@ -498,6 +555,16 @@ def run_publish_job_with_runtime(
                 job.lease_expires_at = ""
                 job.heartbeat_at = ""
                 save_publish_job(job)
+                _report_execution_phase(
+                    config,
+                    app_runtime,
+                    job,
+                    phase="remote_verification",
+                    mutation_state="mutation_uncertain",
+                    status="uncertain",
+                    remote_verification_state="manual_review_required",
+                    safe_error_code="unknown_result",
+                )
                 save_channel_worker_heartbeat(
                     job.channel_id,
                     status="error",
@@ -548,6 +615,15 @@ def run_publish_job_with_runtime(
             job.lease_expires_at = ""
             job.heartbeat_at = ""
             save_publish_job(job)
+            _report_execution_phase(
+                config,
+                app_runtime,
+                job,
+                phase="evidence_persistence",
+                mutation_state="mutation_verified",
+                status="succeeded",
+                remote_verification_state="verified",
+            )
             save_channel_worker_heartbeat(
                 job.channel_id,
                 status="idle",
@@ -569,6 +645,14 @@ def run_publish_job_with_runtime(
         job.lease_expires_at = ""
         job.heartbeat_at = ""
         save_publish_job(job)
+        _report_execution_phase(
+            config,
+            app_runtime,
+            job,
+            phase="cleanup",
+            status="failed",
+            safe_error_code=exc.code,
+        )
         _record_log(
             job,
             status=job.status,
@@ -580,6 +664,15 @@ def run_publish_job_with_runtime(
         return job
     except BrowserProfileBusyError as exc:
         job = _set_profile_busy(job, exc.user_message)
+        _report_execution_phase(
+            config,
+            app_runtime,
+            job,
+            phase="preflight",
+            mutation_state="not_started",
+            status="blocked",
+            safe_error_code="provider_busy_before_mutation",
+        )
         save_channel_worker_heartbeat(
             job.channel_id,
             status="error",
@@ -609,6 +702,15 @@ def run_publish_job_with_runtime(
         job.lease_expires_at = ""
         job.heartbeat_at = ""
         save_publish_job(job)
+        _report_execution_phase(
+            config,
+            app_runtime,
+            job,
+            phase="preflight",
+            mutation_state="not_started",
+            status="failed",
+            safe_error_code=exc.code,
+        )
         save_channel_worker_heartbeat(
             job.channel_id,
             status="error",
@@ -638,6 +740,14 @@ def run_publish_job_with_runtime(
         job.lease_expires_at = ""
         job.heartbeat_at = ""
         save_publish_job(job)
+        _report_execution_phase(
+            config,
+            app_runtime,
+            job,
+            phase="reconciliation",
+            status="failed",
+            safe_error_code="publish_error",
+        )
         save_channel_worker_heartbeat(
             job.channel_id,
             status="error",

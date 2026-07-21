@@ -77,12 +77,13 @@ class LeaseKeeper:
             )
 
 
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Process scheduled social posts")
     parser.add_argument("--config", default="config.json", help="Path to config.json")
     parser.add_argument("--once", action="store_true", help="Run one queue pass and exit")
-    parser.add_argument("--interval", type=int, default=DEFAULT_CHANNEL_WORKER_POLL_SECONDS, help="Polling interval in seconds")
+    parser.add_argument(
+        "--interval", type=int, default=DEFAULT_CHANNEL_WORKER_POLL_SECONDS, help="Polling interval in seconds"
+    )
     parser.add_argument("--channel-id", default="", help="Optional channel id for targeted channel actions or jobs")
     parser.add_argument(
         "--channel-action",
@@ -95,8 +96,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Process only plugin-backed publish and metrics jobs.",
     )
-    parser.add_argument("--channel-action-id", default="", help="Optional claimed action id for one-shot channel actions.")
+    parser.add_argument(
+        "--channel-action-id", default="", help="Optional claimed action id for one-shot channel actions."
+    )
     return parser.parse_args()
+
 
 def _save_channel_heartbeat(
     channel_id: str,
@@ -124,7 +128,6 @@ def _save_channel_heartbeat(
     )
 
 
-
 def _channel_runtime_service(config: AppConfig, channel_id: str):
     if channel_id != "linkedin":
         raise ValueError(f"Unsupported channel runtime: {channel_id}")
@@ -132,7 +135,9 @@ def _channel_runtime_service(config: AppConfig, channel_id: str):
     return runtime.get_plugin_service("channel.linkedin", "channel_runtime")
 
 
-def run_channel_action(config: AppConfig, *, channel_id: str, action: str, action_id: str, worker_id: str, started_at: str) -> int:
+def run_channel_action(
+    config: AppConfig, *, channel_id: str, action: str, action_id: str, worker_id: str, started_at: str
+) -> int:
     service = _channel_runtime_service(config, channel_id)
     if action == "connect":
         service.connect(channel_id=channel_id, action_id=action_id, worker_id=worker_id, started_at=started_at)
@@ -141,7 +146,6 @@ def run_channel_action(config: AppConfig, *, channel_id: str, action: str, actio
         service.check_session(channel_id=channel_id, worker_id=worker_id, started_at=started_at)
         return 1
     raise ValueError(f"Unsupported channel action: {action}")
-
 
 
 def _process_claimed_channel_job(
@@ -198,7 +202,6 @@ def _process_claimed_channel_job(
     return 1
 
 
-
 def process_channel_jobs(
     config: AppConfig,
     channel_id: str | None = None,
@@ -209,7 +212,9 @@ def process_channel_jobs(
     lease_seconds: int,
 ) -> int:
     ensure_channel_store_dirs()
-    publish_job = claim_next_publish_job(channel_id=channel_id or None, worker_id=worker_id, lease_seconds=lease_seconds)
+    publish_job = claim_next_publish_job(
+        channel_id=channel_id or None, worker_id=worker_id, lease_seconds=lease_seconds
+    )
     if publish_job is not None:
         return _process_claimed_channel_job(
             config,
@@ -236,6 +241,15 @@ def process_channel_jobs(
         )
     return 0
 
+
+def dispatch_due_publication_targets(config: AppConfig, *, worker_id: str) -> int:
+    runtime = get_plugin_runtime(config, reset=False, strict=True)
+    result = runtime.publication_execution_service(config).dispatch_due_targets(
+        batch_size=10,
+        dry_run=False,
+        worker_id=worker_id,
+    )
+    return len(result.get("dispatched", []))
 
 
 def process_queue(config: AppConfig) -> int:
@@ -328,7 +342,6 @@ def process_queue(config: AppConfig) -> int:
         cleanup_media(config.media_dir, config.cleanup_media_after_run)
 
 
-
 def main() -> int:
     args = parse_args()
     config = load_config(args.config)
@@ -360,10 +373,18 @@ def main() -> int:
         if args.channel_action:
             if not args.channel_id:
                 raise ValueError("--channel-id is required when --channel-action is used.")
-            run_channel_action(config, channel_id=args.channel_id, action=args.channel_action, action_id=args.channel_action_id, worker_id=worker_id, started_at=started_at)
+            run_channel_action(
+                config,
+                channel_id=args.channel_id,
+                action=args.channel_action,
+                action_id=args.channel_action_id,
+                worker_id=worker_id,
+                started_at=started_at,
+            )
             return 0
         if args.once:
-            processed = process_channel_jobs(
+            processed = dispatch_due_publication_targets(config, worker_id=worker_id)
+            processed += process_channel_jobs(
                 config,
                 channel_id=args.channel_id or None,
                 worker_id=worker_id,
@@ -383,7 +404,8 @@ def main() -> int:
                     status="idle",
                     started_at=started_at,
                 )
-            processed = process_channel_jobs(
+            processed = dispatch_due_publication_targets(config, worker_id=worker_id)
+            processed += process_channel_jobs(
                 config,
                 channel_id=args.channel_id or None,
                 worker_id=worker_id,

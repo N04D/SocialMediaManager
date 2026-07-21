@@ -482,6 +482,34 @@ def _safe_target_payload(target) -> dict[str, Any]:
     }
 
 
+def _safe_attempt_payload(attempt) -> dict[str, Any]:
+    return {
+        "id": attempt.id,
+        "workspace_id": attempt.workspace_id,
+        "publication_plan_id": attempt.publication_plan_id,
+        "publication_target_id": attempt.publication_target_id,
+        "attempt_number": attempt.attempt_number,
+        "snapshot_checksum": attempt.snapshot_checksum[:16],
+        "status": attempt.status,
+        "phase": attempt.phase,
+        "trigger": attempt.trigger,
+        "worker_id": attempt.worker_id,
+        "lease_id": attempt.lease_id,
+        "job_id": attempt.job_id,
+        "publication_id": attempt.publication_id,
+        "started_at": attempt.started_at,
+        "heartbeat_at": attempt.heartbeat_at,
+        "completed_at": attempt.completed_at,
+        "next_retry_at": attempt.next_retry_at,
+        "retry_count": attempt.retry_count,
+        "error_class": attempt.error_class,
+        "safe_error_code": attempt.safe_error_code,
+        "mutation_state": attempt.mutation_state,
+        "remote_verification_state": attempt.remote_verification_state,
+        "cleanup_state": attempt.cleanup_state,
+    }
+
+
 def _query_filters(query: dict[str, list[str]]) -> dict[str, Any]:
     filters: dict[str, Any] = {}
     for key in [
@@ -1851,8 +1879,11 @@ def render_content_planning_page(config: AppConfig) -> str:
     runtime = get_plugin_runtime(config, reset=True, strict=False)
     content_service = runtime.content_service(config)
     planning = runtime.publication_planning_service(config)
+    execution = runtime.publication_execution_service(config)
     items = content_service.list_content()
     plans = planning.plan_repository.list_all()
+    due = execution.find_due_targets(batch_size=10, dry_run=True)
+    health = execution.health_check()
     item_options = "".join(
         f'<option value="{html.escape(item.id)}">{html.escape(item.title)} · {html.escape(item.status)}</option>'
         for item in items
@@ -1903,6 +1934,21 @@ def render_content_planning_page(config: AppConfig) -> str:
           </section>
         </div>
         <div class="stack">
+          <section class="card">
+            <div class="card-heading">
+              <div><h2>Execution</h2><p class="meta">Due {health.get("due_targets", 0)} · active leases {health.get("active_leases", 0)} · uncertain {health.get("uncertain_targets", 0)}</p></div>
+              <a class="button secondary" href="/api/publication-execution/health">Health</a>
+            </div>
+            <div class="inline-actions">
+              <a class="button secondary" href="/api/publication-execution/due?dry_run=1">Due dry-run</a>
+              <form method="post" action="/content-plans/dispatch-due"><button type="submit">Dispatch due</button></form>
+              <form method="post" action="/content-plans/reconcile"><button type="submit" class="secondary">Reconcile</button></form>
+            </div>
+            <table>
+              <thead><tr><th>Target</th><th>Scheduled UTC</th><th>Status</th><th>Blockers</th></tr></thead>
+              <tbody>{"".join(f"<tr><td><code>{html.escape(item.publication_target_id)}</code></td><td>{html.escape(item.resolved_scheduled_at_utc)}</td><td>{html.escape(item.status)}</td><td>{html.escape(', '.join(item.blockers) or 'ready')}</td></tr>" for item in due) or "<tr><td colspan='4'>No due targets.</td></tr>"}</tbody>
+            </table>
+          </section>
           <section class="card">
             <h2>Create Plan</h2>
             <form method="post" action="/content-plans/create-plan">
@@ -3425,6 +3471,35 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if parsed.path == "/api/publication-execution/health":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            json_response(self, {"health": runtime.publication_execution_service(self.config).health_check()})
+            return
+        if parsed.path == "/api/publication-execution/due":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            due = runtime.publication_execution_service(self.config).find_due_targets(
+                workspace_id=query.get("workspace_id", [""])[0],
+                batch_size=int(query.get("batch_size", ["25"])[0] or 25),
+                dry_run=True,
+            )
+            json_response(self, {"due": [asdict(item) for item in due]})
+            return
+        if parsed.path.startswith("/api/publication-targets/") and parsed.path.endswith("/attempts"):
+            target_id = parsed.path.split("/")[-2]
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            attempts = runtime.publication_execution_service(self.config).attempt_repository.list_by_target(target_id)
+            json_response(self, {"attempts": [_safe_attempt_payload(attempt) for attempt in attempts]})
+            return
+        if parsed.path.startswith("/api/publication-attempts/"):
+            attempt_id = parsed.path.rsplit("/", maxsplit=1)[-1]
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            attempt = runtime.publication_execution_service(self.config).attempt_repository.get(attempt_id)
+            if attempt is None:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            json_response(self, {"attempt": _safe_attempt_payload(attempt)})
+            return
         if parsed.path == "/api/media/library/health":
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)
             json_response(self, {"health": runtime.media_library_service(self.config).health_check()})
@@ -3735,6 +3810,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)
             content_service = runtime.content_service(self.config)
             planning = runtime.publication_planning_service(self.config)
+            execution = runtime.publication_execution_service(self.config)
             try:
                 if path == "/content-plans/create-content":
                     content_service.create_content(
@@ -3772,6 +3848,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         actor="dashboard",
                         confirmation=True,
                     )
+                elif path == "/content-plans/dispatch-due":
+                    execution.dispatch_due_targets(workspace_id="linkedin", batch_size=10, dry_run=False)
+                elif path == "/content-plans/reconcile":
+                    for plan in planning.plan_repository.list_all(workspace_id="linkedin"):
+                        execution.reconcile_plan(plan.id, workspace_id="linkedin", dry_run=False)
                 else:
                     self.send_error(HTTPStatus.NOT_FOUND)
                     return
@@ -3869,7 +3950,57 @@ class DashboardHandler(BaseHTTPRequestHandler):
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)
             content_service = runtime.content_service(self.config)
             planning = runtime.publication_planning_service(self.config)
+            execution = runtime.publication_execution_service(self.config)
             try:
+                if path == "/api/publication-execution/dispatch":
+                    if payload.get("target_id"):
+                        attempt = execution.dispatch_target(
+                            str(payload.get("target_id") or ""),
+                            worker_id=str(payload.get("worker_id") or ""),
+                            actor=str(payload.get("actor") or "api"),
+                            confirmation=bool(payload.get("confirmation")),
+                        )
+                        json_response(self, {"attempt": _safe_attempt_payload(attempt)}, status=HTTPStatus.CREATED)
+                        return
+                    result = execution.dispatch_due_targets(
+                        workspace_id=str(payload.get("workspace_id") or ""),
+                        batch_size=int(payload.get("batch_size") or 10),
+                        dry_run=bool(payload.get("dry_run", False)),
+                        worker_id=str(payload.get("worker_id") or ""),
+                    )
+                    json_response(self, result)
+                    return
+                if path == "/api/publication-execution/reconcile":
+                    if payload.get("target_id"):
+                        result = execution.reconcile_target(
+                            str(payload.get("target_id") or ""),
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            dry_run=bool(payload.get("dry_run", False)),
+                        )
+                        json_response(self, {"result": asdict(result)})
+                        return
+                    if payload.get("plan_id"):
+                        results = execution.reconcile_plan(
+                            str(payload.get("plan_id") or ""),
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            dry_run=bool(payload.get("dry_run", False)),
+                        )
+                        json_response(self, {"results": [asdict(result) for result in results]})
+                        return
+                    results = execution.recover_expired_claims()
+                    json_response(self, {"recovered": [asdict(result) for result in results]})
+                    return
+                if path.startswith("/api/publication-attempts/") and path.endswith("/resolve-uncertain"):
+                    attempt_id = path.split("/")[-2]
+                    resolution = execution.resolve_uncertain(
+                        attempt_id,
+                        resolution=str(payload.get("resolution") or "cannot_determine"),
+                        resolved_by=str(payload.get("actor") or "api"),
+                        reason=str(payload.get("reason") or ""),
+                        evidence=dict(payload.get("evidence") or {}),
+                    )
+                    json_response(self, {"resolution": asdict(resolution)})
+                    return
                 if path == "/api/content/items":
                     item = content_service.create_content(
                         workspace_id=str(payload.get("workspace_id") or "linkedin"),
@@ -4032,6 +4163,24 @@ class DashboardHandler(BaseHTTPRequestHandler):
                             allow_stale=bool(payload.get("allow_stale", False)),
                         )
                         json_response(self, {"target": _safe_target_payload(target)})
+                        return
+                    if len(parts) == 4 and parts[3] == "cancel":
+                        target = execution.cancel_target_execution(
+                            target_id,
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            actor=str(payload.get("actor") or "api"),
+                            reason=str(payload.get("reason") or ""),
+                        )
+                        json_response(self, {"target": _safe_target_payload(target)})
+                        return
+                    if len(parts) == 4 and parts[3] == "retry":
+                        decision = execution.retry_target(
+                            target_id,
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            actor=str(payload.get("actor") or "api"),
+                            confirmation=bool(payload.get("confirmation")),
+                        )
+                        json_response(self, {"retry_decision": asdict(decision)})
                         return
             except Exception as exc:
                 json_response(
