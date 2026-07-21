@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://socialmediamanager.local/schemas/plugin-manifest-v1.schema.json",
+  "title": "SocialMediaManager Plugin Manifest v1",
+  "type": "object",
+  "required": ["schema_version", "id", "name", "version", "plugin_type", "entrypoint", "plugin_api_version", "capabilities"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "id": {"type": "string", "pattern": "^(channel|provider|media)\\.[a-z0-9][a-z0-9_.-]{1,80}$"},
+    "name": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+([+-][0-9A-Za-z.-]+)?$"},
+    "plugin_type": {"enum": ["channel", "provider", "media", "integration"]},
+    "description": {"type": "string"},
+    "entrypoint": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"},
+    "plugin_api_version": {"type": "integer", "minimum": 1},
+    "sdk_contract_version": {"type": "string", "pattern": "^1\\.\\d+\\.\\d+$"},
+    "framework_contract_versions": {"type": "object", "additionalProperties": {"type": "string"}},
+    "capabilities": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_-]*)+$"}, "uniqueItems": true},
+    "dependencies": {"type": "array"},
+    "optional_dependencies": {"type": "array"},
+    "configuration_schema": {"type": "object"},
+    "secrets": {"type": "array", "items": {"type": "object", "not": {"required": ["default"]}}},
+    "health": {"type": "object"},
+    "compatibility": {"type": "object"},
+    "permissions": {"type": "array", "items": {"enum": ["outbound_network", "browser_session", "secret_storage", "media_read", "media_materialization", "analytics_ingestion", "execution_reporting", "account_configuration"]}, "uniqueItems": true},
+    "distribution": {"enum": ["builtin", "official", "community", "experimental"]},
+    "maintainers": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, "role": {"type": "string"}, "contact_reference": {"type": "string"}}}},
+    "license": {"type": "string"},
+    "repository": {"type": "string"},
+    "documentation": {"type": "string"}
+  }
+}

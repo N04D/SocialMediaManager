@@ -1,0 +1,1 @@
+"""Generated plugin placeholder module."""

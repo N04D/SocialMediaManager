@@ -1,10 +1,16 @@
+"""Provider plugin public interface."""
+
 from __future__ import annotations
 
-from typing import Protocol
-
-from src.core.plugins import PluginContext
+from typing import Any, Protocol
 
 
 class ProviderPlugin(Protocol):
-    def initialize(self, context: PluginContext) -> None:
-        ...
+    """Minimal provider plugin lifecycle contract."""
+
+    @property
+    def manifest(self) -> Any: ...
+    def register(self, context: Any) -> None: ...
+
+
+__all__ = ["ProviderPlugin"]

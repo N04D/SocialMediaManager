@@ -115,6 +115,8 @@ from scheduler import (
     worker_run_summary,
 )
 from src.core.media import MediaInput, MediaValidationError
+from src.plugin_sdk.compatibility import build_compatibility_report
+from src.plugin_sdk.contracts import PLUGIN_SDK_VERSION
 from studio_models import ContentItem
 from timing import compute_article_schedule_time
 
@@ -131,6 +133,7 @@ ROUTE_MEDIA = "/media-library"
 ROUTE_CONTENT_PLANS = "/content-plans"
 ROUTE_CONTENT_CALENDAR = "/content-calendar"
 ROUTE_ANALYTICS = "/analytics"
+ROUTE_PLUGINS = "/plugins"
 VALID_ROUTES = {
     ROUTE_EDITOR,
     ROUTE_DRAFTS,
@@ -143,6 +146,7 @@ VALID_ROUTES = {
     ROUTE_CONTENT_PLANS,
     ROUTE_CONTENT_CALENDAR,
     ROUTE_ANALYTICS,
+    ROUTE_PLUGINS,
 }
 
 SIDEBAR_ITEMS = [
@@ -2526,6 +2530,66 @@ def render_sidebar(active_route: str) -> str:
     """
 
 
+def _builtin_plugin_paths() -> dict[str, Path]:
+    return {
+        "channel.linkedin": ROOT_DIR / "channels" / "linkedin",
+        "channel.mastodon": ROOT_DIR / "channels" / "mastodon",
+    }
+
+
+def _safe_plugin_report_payload(plugin_id: str, plugin_path: Path) -> dict[str, Any]:
+    report = build_compatibility_report(plugin_path)
+    return {
+        "plugin_id": report.plugin_id if report.plugin_id != "unknown" else plugin_id,
+        "version": report.plugin_version,
+        "distribution": report.distribution,
+        "sdk_version": report.sdk_version,
+        "manifest_status": "valid" if report.compatibility_status != "invalid" else "invalid",
+        "framework_compatibility": report.declared_contract_versions,
+        "compatibility": report.compatibility_status,
+        "capabilities": list(report.capabilities),
+        "permissions": list(report.permissions),
+        "contract_tests_status": "passed" if report.compatible else "failed",
+        "fixture_status": report.fixture_status,
+        "doctor_status": report.doctor_status,
+        "warnings": list(report.warnings),
+    }
+
+
+def plugin_sdk_version_payload() -> dict[str, Any]:
+    return {"plugin_sdk_version": PLUGIN_SDK_VERSION, "manifest_schema_version": "1.0"}
+
+
+def plugin_compatibility_payload(plugin_id: str | None = None) -> dict[str, Any]:
+    plugin_paths = _builtin_plugin_paths()
+    if plugin_id:
+        plugin_path = plugin_paths.get(plugin_id)
+        if plugin_path is None:
+            return {"error": {"code": "plugin_not_found", "message": "Plugin not found."}}
+        return {"plugin": _safe_plugin_report_payload(plugin_id, plugin_path)}
+    return {"plugins": [_safe_plugin_report_payload(pid, path) for pid, path in plugin_paths.items()]}
+
+
+def render_plugins_page() -> str:
+    payload = plugin_compatibility_payload()
+    cards = []
+    for plugin in payload["plugins"]:
+        caps = "".join(f"<span class='pill'>{html.escape(cap)}</span>" for cap in plugin["capabilities"])
+        perms = "".join(f"<span class='pill muted'>{html.escape(perm)}</span>" for perm in plugin["permissions"])
+        warnings = ", ".join(plugin["warnings"]) or "none"
+        cards.append(
+            "<article class='panel plugin-card'>"
+            f"<h3>{html.escape(plugin['plugin_id'])}</h3>"
+            f"<p>{html.escape(plugin['version'])} · {html.escape(plugin['distribution'])} · {html.escape(plugin['compatibility'])}</p>"
+            f"<div class='pill-row'>{caps}</div>"
+            f"<div class='pill-row'>{perms}</div>"
+            f"<p>Fixture: {html.escape(plugin['fixture_status'])} · Doctor: {html.escape(plugin['doctor_status'])}</p>"
+            f"<p>Warnings: {html.escape(warnings)}</p>"
+            "</article>"
+        )
+    return "<section class='stack plugin-admin'>" + "".join(cards) + "</section>"
+
+
 def render_main_content(
     route: str,
     config: AppConfig,
@@ -2577,6 +2641,12 @@ def render_main_content(
             "Analytics",
             "Content-aware publication attribution and performance readmodels",
             render_analytics_page(config),
+        )
+    if route == ROUTE_PLUGINS:
+        return (
+            "Plugins",
+            "SDK compatibility, capabilities, and developer readiness",
+            render_plugins_page(),
         )
     assert snapshot is not None
     return (
@@ -3742,6 +3812,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     status=HTTPStatus.BAD_REQUEST,
                 )
                 return
+        if parsed.path == "/api/plugin-sdk/version":
+            json_response(self, plugin_sdk_version_payload())
+            return
+        if parsed.path == "/api/plugins/compatibility":
+            json_response(self, plugin_compatibility_payload())
+            return
+        if parsed.path.startswith("/api/plugins/") and parsed.path.endswith("/compatibility"):
+            plugin_id = parsed.path.removeprefix("/api/plugins/").removesuffix("/compatibility").replace("%2E", ".")
+            payload = plugin_compatibility_payload(plugin_id)
+            status = HTTPStatus.NOT_FOUND if "error" in payload else HTTPStatus.OK
+            json_response(self, payload, status=status)
+            return
         if parsed.path == "/api/plugins/health":
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)
             body = json.dumps(runtime.health_payload(), ensure_ascii=False).encode("utf-8")

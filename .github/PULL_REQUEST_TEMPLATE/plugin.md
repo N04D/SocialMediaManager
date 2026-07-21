@@ -1,0 +1,21 @@
+# Plugin PR Checklist
+
+- Plugin ID:
+- Plugin type:
+- Distribution:
+- Capabilities:
+- Permissions:
+- Authentication method:
+- Requirements and snapshots:
+- Media formats:
+- Metric definitions:
+- Fixture scenarios:
+- Doctor result:
+- Contract tests:
+- Integration tests:
+- Pilot status:
+- Security review:
+- Privacy impact:
+- Framework contract versions:
+- Changelog entry:
+- Maintainer commitment:

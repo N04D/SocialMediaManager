@@ -16,16 +16,71 @@
     "channel.health"
   ],
   "dependencies": [
-    {"capability": "content.items", "min_version": "0.1.0"},
-    {"capability": "content.requirements", "min_version": "0.1.0"},
-    {"capability": "media.library", "min_version": "0.3.0"},
-    {"capability": "publication.execution", "min_version": "0.1.0"},
-    {"capability": "analytics.ingestion", "min_version": "0.1.0"}
+    {
+      "capability": "content.items",
+      "min_version": "0.1.0"
+    },
+    {
+      "capability": "content.requirements",
+      "min_version": "0.1.0"
+    },
+    {
+      "capability": "media.library",
+      "min_version": "0.3.0"
+    },
+    {
+      "capability": "publication.execution",
+      "min_version": "0.1.0"
+    },
+    {
+      "capability": "analytics.ingestion",
+      "min_version": "0.1.0"
+    }
   ],
   "config_schema": {
     "publication_options": {
       "default_visibility": "public",
-      "supported_visibility": ["public", "unlisted"]
+      "supported_visibility": [
+        "public",
+        "unlisted"
+      ]
     }
+  },
+  "schema_version": "1.0",
+  "plugin_type": "channel",
+  "sdk_contract_version": "1.0.0",
+  "framework_contract_versions": {
+    "media": "0.3",
+    "content": "0.1",
+    "execution": "0.1",
+    "analytics": "0.1",
+    "channel": "1.0"
+  },
+  "permissions": [
+    "outbound_network",
+    "secret_storage",
+    "media_read",
+    "media_materialization",
+    "analytics_ingestion",
+    "execution_reporting",
+    "account_configuration"
+  ],
+  "distribution": "builtin",
+  "maintainers": [
+    {
+      "name": "Core maintainers",
+      "role": "owner",
+      "contact_reference": "project repository"
+    }
+  ],
+  "license": "Proprietary local project",
+  "documentation": "docs/mastodon-channel-plugin.md",
+  "compatibility": {
+    "test_profiles": [
+      "channel.api_first",
+      "channel.text_publish",
+      "channel.image_publish",
+      "channel.metrics"
+    ]
   }
 }

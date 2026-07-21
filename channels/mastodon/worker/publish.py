@@ -14,7 +14,6 @@ from channel_store import (
     save_publish_job,
     save_published_post,
 )
-from media_store import get_media_asset
 from src.core.content import PublicationTargetStatus
 
 from ..client import MastodonApiClient
@@ -379,7 +378,10 @@ def _alt_text(library, relation_id: str, asset_id: str) -> str:
         relation_alt = str((relation.metadata or {}).get("alt_text") or "")
         if relation_alt:
             return relation_alt
-    asset = get_media_asset(asset_id)
+    try:
+        asset = library.get_asset(asset_id)
+    except Exception:
+        return ""
     return str((getattr(asset, "metadata", {}) or {}).get("alt_text") or "") if asset is not None else ""
 
 

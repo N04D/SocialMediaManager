@@ -1,1 +1,140 @@
-"""Small SDK surface for plugin authors."""
+"""Official public import boundary for Plugin SDK v1."""
+
+from .analytics import (
+    AnalyticsIngestionResult,
+    ChannelAnalyticsFacade,
+    ChannelMetricIngestionContext,
+    ChannelMetricObservationInput,
+)
+from .assets import ChannelMediaFacade, MediaMaterialization
+from .auth import PluginSecretService, SecretReference
+from .capabilities import (
+    CORE_CAPABILITIES,
+    CORE_PERMISSIONS,
+    capability_catalog,
+    validate_capability,
+    validate_permission,
+    validate_plugin_id,
+)
+from .channel import (
+    ChannelAccountIdentity,
+    ChannelAccountStatus,
+    ChannelConnectCallbackRequest,
+    ChannelConnectRequest,
+    ChannelConnectResult,
+    ChannelDisconnectRequest,
+    ChannelDisconnectResult,
+    ChannelHealth,
+    ChannelHealthRequest,
+    ChannelMetricsRequest,
+    ChannelMetricsResult,
+    ChannelPlugin,
+    ChannelPublishRequest,
+    ChannelPublishResult,
+    ChannelRuntime,
+    ChannelRuntimeBase,
+    ChannelRuntimeContext,
+    ChannelSessionCheckRequest,
+    ChannelSessionCheckResult,
+    ChannelStatusRequest,
+    PluginRegistrationContext,
+    ResolvedContent,
+    ResolvedMediaItem,
+)
+from .compatibility import PluginCompatibilityReport, build_compatibility_report, inspect_plugin, package_check
+from .content import ChannelContentFacade
+from .contracts import (
+    CHANNEL_PLUGIN_SDK_CONTRACT_VERSION,
+    MEDIA_PLUGIN_SDK_CONTRACT_VERSION,
+    PLUGIN_DOCTOR_CONTRACT_VERSION,
+    PLUGIN_FIXTURE_CONTRACT_VERSION,
+    PLUGIN_MANIFEST_SCHEMA_VERSION,
+    PLUGIN_SDK_VERSION,
+    PLUGIN_TESTKIT_CONTRACT_VERSION,
+    PROVIDER_PLUGIN_SDK_CONTRACT_VERSION,
+)
+from .errors import (
+    PluginCapabilityUnsupportedError,
+    PluginCompatibilityError,
+    PluginManifestValidationError,
+    PluginPermissionError,
+    PluginSDKError,
+    PluginSecurityError,
+)
+from .execution import ExecutionReporter
+from .fixtures import PluginDoctorCheck, PluginFixtureScenario
+from .health import PluginIntegrityFinding
+from .manifest import PluginMaintainer, PluginManifest, build_manifest, validate_manifest
+from .media import MediaPlugin
+from .provider import ProviderPlugin
+from .requirements import ChannelRequirementResolver
+
+__all__ = [
+    "AnalyticsIngestionResult",
+    "CHANNEL_PLUGIN_SDK_CONTRACT_VERSION",
+    "CORE_CAPABILITIES",
+    "CORE_PERMISSIONS",
+    "ChannelAccountIdentity",
+    "ChannelAccountStatus",
+    "ChannelAnalyticsFacade",
+    "ChannelConnectCallbackRequest",
+    "ChannelConnectRequest",
+    "ChannelConnectResult",
+    "ChannelContentFacade",
+    "ChannelDisconnectRequest",
+    "ChannelDisconnectResult",
+    "ChannelHealth",
+    "ChannelHealthRequest",
+    "ChannelMediaFacade",
+    "ChannelMetricIngestionContext",
+    "ChannelMetricObservationInput",
+    "ChannelMetricsRequest",
+    "ChannelMetricsResult",
+    "ChannelPlugin",
+    "ChannelPublishRequest",
+    "ChannelPublishResult",
+    "ChannelRequirementResolver",
+    "ChannelRuntime",
+    "ChannelRuntimeBase",
+    "ChannelRuntimeContext",
+    "ChannelSessionCheckRequest",
+    "ChannelSessionCheckResult",
+    "ChannelStatusRequest",
+    "ExecutionReporter",
+    "MEDIA_PLUGIN_SDK_CONTRACT_VERSION",
+    "MediaMaterialization",
+    "MediaPlugin",
+    "PLUGIN_DOCTOR_CONTRACT_VERSION",
+    "PLUGIN_FIXTURE_CONTRACT_VERSION",
+    "PLUGIN_MANIFEST_SCHEMA_VERSION",
+    "PLUGIN_SDK_VERSION",
+    "PLUGIN_TESTKIT_CONTRACT_VERSION",
+    "PluginCapabilityUnsupportedError",
+    "PluginCompatibilityError",
+    "PluginCompatibilityReport",
+    "PluginDoctorCheck",
+    "PluginFixtureScenario",
+    "PluginIntegrityFinding",
+    "PluginMaintainer",
+    "PluginManifest",
+    "PluginManifestValidationError",
+    "PluginPermissionError",
+    "PluginRegistrationContext",
+    "PluginSDKError",
+    "PluginSecretService",
+    "PluginSecurityError",
+    "PROVIDER_PLUGIN_SDK_CONTRACT_VERSION",
+    "ProviderPlugin",
+    "ResolvedContent",
+    "ResolvedMediaItem",
+    "SecretReference",
+    "build_compatibility_report",
+    "build_manifest",
+    "capability_catalog",
+    "inspect_plugin",
+    "package_check",
+    "validate_capability",
+    "validate_manifest",
+    "validate_permission",
+    "validate_plugin_id",
+]

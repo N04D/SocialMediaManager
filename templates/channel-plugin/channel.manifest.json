@@ -1,0 +1,56 @@
+{
+  "capabilities": [
+    "channel.status",
+    "channel.health",
+    "channel.publish.text",
+    "channel.publish.image",
+    "channel.metrics.collect"
+  ],
+  "compatibility": {
+    "test_profiles": [
+      "channel.api_first"
+    ]
+  },
+  "configuration_schema": {
+    "additionalProperties": false,
+    "type": "object"
+  },
+  "dependencies": [],
+  "description": "Example channel plugin.",
+  "distribution": "experimental",
+  "documentation": "docs/channel-plugin.md",
+  "entrypoint": "channel_example.plugin",
+  "framework_contract_versions": {
+    "channel": "1.0"
+  },
+  "health": {
+    "doctor": "channel_example.doctor"
+  },
+  "id": "channel.example",
+  "license": "MIT",
+  "maintainers": [
+    {
+      "contact_reference": "project issue tracker",
+      "name": "Plugin maintainer",
+      "role": "maintainer"
+    }
+  ],
+  "name": "Example",
+  "optional_dependencies": [],
+  "permissions": [
+    "account_configuration",
+    "analytics_ingestion",
+    "execution_reporting",
+    "media_materialization",
+    "media_read",
+    "outbound_network",
+    "secret_storage"
+  ],
+  "plugin_api_version": 1,
+  "plugin_type": "channel",
+  "repository": "",
+  "schema_version": "1.0",
+  "sdk_contract_version": "1.0.0",
+  "secrets": [],
+  "version": "0.1.0"
+}

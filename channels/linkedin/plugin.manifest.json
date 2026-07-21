@@ -9,18 +9,71 @@
   "capabilities": [
     "channel.connect",
     "channel.disconnect",
-    "channel.connection_status",
+    "channel.status",
     "channel.publish.text",
     "channel.publish.image",
-    "channel.read.posts",
-    "channel.read.metrics"
+    "channel.metrics.collect",
+    "channel.health"
   ],
   "dependencies": [
-    {"capability": "browser.session", "min_version": "0.1.0"},
-    {"capability": "browser.auth_profile", "min_version": "0.1.0"},
-    {"capability": "browser.navigation", "min_version": "0.1.0"},
-    {"capability": "browser.interaction", "min_version": "0.1.0"},
-    {"capability": "browser.human_takeover", "min_version": "0.1.0"}
+    {
+      "capability": "browser.session",
+      "min_version": "0.1.0"
+    },
+    {
+      "capability": "browser.auth_profile",
+      "min_version": "0.1.0"
+    },
+    {
+      "capability": "browser.navigation",
+      "min_version": "0.1.0"
+    },
+    {
+      "capability": "browser.interaction",
+      "min_version": "0.1.0"
+    },
+    {
+      "capability": "browser.human_takeover",
+      "min_version": "0.1.0"
+    }
   ],
-  "config_schema": {}
+  "config_schema": {},
+  "schema_version": "1.0",
+  "plugin_type": "channel",
+  "sdk_contract_version": "1.0.0",
+  "framework_contract_versions": {
+    "browser": "1.0",
+    "media": "0.3",
+    "content": "0.1",
+    "execution": "0.1",
+    "analytics": "0.1",
+    "channel": "1.0"
+  },
+  "permissions": [
+    "browser_session",
+    "secret_storage",
+    "media_read",
+    "media_materialization",
+    "analytics_ingestion",
+    "execution_reporting",
+    "account_configuration"
+  ],
+  "distribution": "builtin",
+  "maintainers": [
+    {
+      "name": "Core maintainers",
+      "role": "owner",
+      "contact_reference": "project repository"
+    }
+  ],
+  "license": "Proprietary local project",
+  "documentation": "channels/linkedin/README.md",
+  "compatibility": {
+    "test_profiles": [
+      "channel.browser_based",
+      "channel.text_publish",
+      "channel.image_publish",
+      "channel.metrics"
+    ]
+  }
 }
