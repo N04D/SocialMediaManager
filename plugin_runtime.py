@@ -7,12 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from channels.linkedin.runtime import LinkedInChannelRuntime
+from content_services import ContentService
 from media_library import MediaLibraryService
 from media_processing_runtime import MediaProcessingRuntime
 from media_runtime import MediaRuntime
 from plugins.providers.auto_browser import AutoBrowserProvider
 from plugins.providers.legacy_browser import LegacyBrowserProvider
 from plugins.providers.local_media_storage import LocalMediaStorageProvider
+from publication_planning import PublicationPlanningService
 from src.core.browser.contracts import (
     BROWSER_FRAMEWORK_VERSION,
     BROWSER_PROVIDER_CONTRACT_VERSION,
@@ -151,6 +153,72 @@ class ApplicationPluginRuntime:
             instance=service,
             status=PluginStatus.READY,
             services={"media_library_service": service},
+            health=service.health_check(),
+        )
+        return service
+
+    def content_service(self, config: Any):
+        runtime = self.runtimes.get("content.service")
+        if runtime is not None and runtime.services.get("content_service") is not None:
+            return runtime.services["content_service"]
+        service = ContentService(app_runtime=self, config=config)
+        try:
+            from channels.linkedin.content_requirements import register_linkedin_content_requirements
+
+            register_linkedin_content_requirements(service.requirement_registry)
+        except Exception as exc:
+            self.errors.append(f"LinkedIn content requirements were not registered: {exc}")
+        manifest = PluginManifest.from_dict(
+            {
+                "id": "content.service",
+                "name": "Content Service",
+                "version": "0.1.0",
+                "plugin_api_version": 1,
+                "type": "content",
+                "entrypoint": "content_service",
+                "capabilities": [
+                    "content.items",
+                    "content.revisions",
+                    "content.variants",
+                    "content.requirements",
+                ],
+                "dependencies": [{"capability": "media.library"}],
+                "config_schema": {},
+            }
+        )
+        self.runtimes[manifest.id] = PluginRuntime(
+            manifest=manifest,
+            instance=service,
+            status=PluginStatus.READY,
+            services={"content_service": service},
+            health=service.health_check(),
+        )
+        return service
+
+    def publication_planning_service(self, config: Any):
+        runtime = self.runtimes.get("publication.planning.service")
+        if runtime is not None and runtime.services.get("publication_planning_service") is not None:
+            return runtime.services["publication_planning_service"]
+        content_service = self.content_service(config)
+        service = PublicationPlanningService(app_runtime=self, config=config, content_service=content_service)
+        manifest = PluginManifest.from_dict(
+            {
+                "id": "publication.planning.service",
+                "name": "Publication Planning Service",
+                "version": "0.1.0",
+                "plugin_api_version": 1,
+                "type": "content",
+                "entrypoint": "publication_planning",
+                "capabilities": ["publication.plans", "publication.targets", "publication.queue"],
+                "dependencies": [{"capability": "content.items"}, {"capability": "media.library"}],
+                "config_schema": {},
+            }
+        )
+        self.runtimes[manifest.id] = PluginRuntime(
+            manifest=manifest,
+            instance=service,
+            status=PluginStatus.READY,
+            services={"publication_planning_service": service},
             health=service.health_check(),
         )
         return service
@@ -402,6 +470,8 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
     runtime.media_runtime(config)
     runtime.media_processing_runtime(config)
     runtime.media_library_service(config)
+    runtime.content_service(config)
+    runtime.publication_planning_service(config)
     runtime.errors = startup_errors
     if strict and startup_errors:
         raise RuntimeError("Plugin bootstrap failed: " + "; ".join(startup_errors))

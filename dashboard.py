@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import threading
+from dataclasses import asdict
 from datetime import datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -61,6 +62,7 @@ from channel_store import (
     ensure_channel_store_dirs,
     get_channel_connection,
     get_derivative,
+    get_publish_job,
     list_channel_job_logs,
     now_iso,
     save_channel_connection,
@@ -124,6 +126,7 @@ ROUTE_SCHEDULER = "/scheduler"
 ROUTE_INSTAGRAM = "/instagram"
 ROUTE_CONFIG = "/config"
 ROUTE_MEDIA = "/media-library"
+ROUTE_CONTENT_PLANS = "/content-plans"
 VALID_ROUTES = {
     ROUTE_EDITOR,
     ROUTE_DRAFTS,
@@ -133,6 +136,7 @@ VALID_ROUTES = {
     ROUTE_INSTAGRAM,
     ROUTE_CONFIG,
     ROUTE_MEDIA,
+    ROUTE_CONTENT_PLANS,
 }
 
 SIDEBAR_ITEMS = [
@@ -143,6 +147,7 @@ SIDEBAR_ITEMS = [
     (ROUTE_SCHEDULER, "scheduler", "Scheduler", "SC"),
     (ROUTE_STATS, "stats", "Stats", "ST"),
     (ROUTE_MEDIA, "media", "Media", "ML"),
+    (ROUTE_CONTENT_PLANS, "content", "Plans", "PL"),
     (ROUTE_CONFIG, "config", "Config", "CF"),
 ]
 
@@ -371,6 +376,109 @@ def _safe_usage_payload(usage) -> dict[str, Any]:
         "last_used_at": usage.last_used_at,
         "usage_count": usage.usage_count,
         "retained_until": usage.retained_until,
+    }
+
+
+def _safe_content_payload(item) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "workspace_id": item.workspace_id,
+        "content_type": item.content_type,
+        "title": item.title,
+        "body_preview": item.body[:280],
+        "summary": item.summary,
+        "language": item.language,
+        "status": item.status,
+        "current_revision_id": item.current_revision_id,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+        "source_type": item.source_type,
+    }
+
+
+def _safe_revision_payload(revision) -> dict[str, Any]:
+    return {
+        "id": revision.id,
+        "content_item_id": revision.content_item_id,
+        "workspace_id": revision.workspace_id,
+        "revision_number": revision.revision_number,
+        "title": revision.title,
+        "body_preview": revision.body[:280],
+        "summary": revision.summary,
+        "language": revision.language,
+        "checksum": revision.checksum[:16],
+        "created_at": revision.created_at,
+        "created_by": revision.created_by,
+        "change_reason": revision.change_reason,
+    }
+
+
+def _safe_variant_payload(variant) -> dict[str, Any]:
+    return {
+        "id": variant.id,
+        "workspace_id": variant.workspace_id,
+        "content_item_id": variant.content_item_id,
+        "source_revision_id": variant.source_revision_id,
+        "channel_plugin_id": variant.channel_plugin_id,
+        "capability": variant.capability,
+        "variant_type": variant.variant_type,
+        "title": variant.title,
+        "body_preview": variant.body[:280],
+        "hashtags": list(variant.hashtags or []),
+        "language": variant.language,
+        "status": variant.status,
+        "validation_status": variant.validation_status,
+        "requirement_version": variant.requirement_version,
+        "variant_checksum": variant.variant_checksum[:16],
+        "updated_at": variant.updated_at,
+    }
+
+
+def _safe_plan_payload(plan, targets: list[Any] | None = None) -> dict[str, Any]:
+    return {
+        "id": plan.id,
+        "workspace_id": plan.workspace_id,
+        "content_item_id": plan.content_item_id,
+        "source_revision_id": plan.source_revision_id,
+        "name": plan.name,
+        "status": plan.status,
+        "planned_start_at": plan.planned_start_at,
+        "timezone": plan.timezone,
+        "validation_status": plan.validation_status,
+        "snapshot_checksum": plan.snapshot_checksum[:16],
+        "created_at": plan.created_at,
+        "updated_at": plan.updated_at,
+        "targets": [_safe_target_payload(target) for target in targets or []],
+    }
+
+
+def _safe_target_payload(target) -> dict[str, Any]:
+    snapshot = dict((target.metadata or {}).get("snapshot") or {})
+    return {
+        "id": target.id,
+        "publication_plan_id": target.publication_plan_id,
+        "workspace_id": target.workspace_id,
+        "channel_plugin_id": target.channel_plugin_id,
+        "channel_account_id": target.channel_account_id,
+        "capability": target.capability,
+        "source_revision_id": target.source_revision_id,
+        "channel_variant_id": target.channel_variant_id,
+        "media_relation_ids": list(target.media_relation_ids or []),
+        "position": target.position,
+        "scheduled_at": target.scheduled_at,
+        "timezone": target.timezone,
+        "status": target.status,
+        "validation_status": target.validation_status,
+        "snapshot_checksum": target.snapshot_checksum[:16],
+        "job_id": target.job_id,
+        "snapshot": {
+            "content_item_id": snapshot.get("content_item_id", ""),
+            "revision_id": snapshot.get("revision_id", ""),
+            "variant_id": snapshot.get("variant_id", ""),
+            "media_relation_ids": list(snapshot.get("media_relation_ids") or []),
+            "media_requirement_version": snapshot.get("media_requirement_version", ""),
+            "content_requirement_version": snapshot.get("content_requirement_version", ""),
+        },
     }
 
 
@@ -1739,6 +1847,91 @@ def render_media_library_page(config: AppConfig, query: dict[str, list[str]] | N
     """
 
 
+def render_content_planning_page(config: AppConfig) -> str:
+    runtime = get_plugin_runtime(config, reset=True, strict=False)
+    content_service = runtime.content_service(config)
+    planning = runtime.publication_planning_service(config)
+    items = content_service.list_content()
+    plans = planning.plan_repository.list_all()
+    item_options = "".join(
+        f'<option value="{html.escape(item.id)}">{html.escape(item.title)} · {html.escape(item.status)}</option>'
+        for item in items
+    )
+    plan_rows = []
+    for plan in plans[:20]:
+        targets = planning.target_repository.list_by_plan(plan.id)
+        plan_rows.append(
+            f"""
+            <tr>
+              <td>{html.escape(plan.name)}</td>
+              <td><code>{html.escape(plan.id)}</code></td>
+              <td>{html.escape(plan.status)}</td>
+              <td>{len(targets)}</td>
+              <td><code>{html.escape(plan.snapshot_checksum[:16])}</code></td>
+              <td class="inline-actions">
+                <form method="post" action="/content-plans/validate"><input type="hidden" name="plan_id" value="{html.escape(plan.id)}" /><button type="submit" class="secondary">Validate</button></form>
+                <form method="post" action="/content-plans/prepare"><input type="hidden" name="plan_id" value="{html.escape(plan.id)}" /><button type="submit" class="secondary">Prepare</button></form>
+                <form method="post" action="/content-plans/queue"><input type="hidden" name="plan_id" value="{html.escape(plan.id)}" /><button type="submit">Queue</button></form>
+              </td>
+            </tr>
+            """
+        )
+    return f"""
+      <div class="page-grid">
+        <div class="stack">
+          <section class="card">
+            <div class="card-heading">
+              <div><h2>Canonical Content</h2><p class="meta">Content Framework v0.1 keeps source text, variants, media relations, and publication intent separate.</p></div>
+              <a class="button secondary" href="/api/content/requirements">Requirements</a>
+            </div>
+            <form method="post" action="/content-plans/create-content">
+              <label>Title<input name="title" placeholder="Canonical title" /></label>
+              <label>Body<textarea name="body" rows="8" placeholder="Canonical source body"></textarea></label>
+              <div class="editor-two-up">
+                <label>Workspace<input name="workspace_id" value="linkedin" /></label>
+                <label>Language<input name="language" placeholder="optional" /></label>
+              </div>
+              <button type="submit">Create content</button>
+            </form>
+          </section>
+          <section class="card">
+            <h2>Publication Plans</h2>
+            <table>
+              <thead><tr><th>Name</th><th>ID</th><th>Status</th><th>Targets</th><th>Snapshot</th><th>Actions</th></tr></thead>
+              <tbody>{"".join(plan_rows) or "<tr><td colspan='6'>No publication plans yet.</td></tr>"}</tbody>
+            </table>
+          </section>
+        </div>
+        <div class="stack">
+          <section class="card">
+            <h2>Create Plan</h2>
+            <form method="post" action="/content-plans/create-plan">
+              <label>Content<select name="content_item_id">{item_options}</select></label>
+              <label>Name<input name="name" placeholder="LinkedIn launch" /></label>
+              <div class="editor-two-up">
+                <label>Workspace<input name="workspace_id" value="linkedin" /></label>
+                <label>Timezone<input name="timezone" value="Europe/Amsterdam" /></label>
+              </div>
+              <button type="submit">Create plan</button>
+            </form>
+          </section>
+          <section class="card">
+            <h2>Add LinkedIn Target</h2>
+            <form method="post" action="/content-plans/add-target">
+              <label>Plan ID<input name="plan_id" /></label>
+              <label>Scheduled intent<input name="scheduled_at" placeholder="optional ISO timestamp" /></label>
+              <input type="hidden" name="workspace_id" value="linkedin" />
+              <input type="hidden" name="channel_plugin_id" value="channel.linkedin" />
+              <input type="hidden" name="channel_account_id" value="linkedin" />
+              <input type="hidden" name="capability" value="channel.publish.text" />
+              <button type="submit">Add target</button>
+            </form>
+          </section>
+        </div>
+      </div>
+    """
+
+
 def render_instagram_page() -> str:
     return f"""
       <div class=\"page-grid\"><div class=\"stack\">{render_placeholder_card("Instagram", "Instagram workflow will be configured here later.")}</div></div>
@@ -1859,6 +2052,12 @@ def render_main_content(
             "Media Library",
             "Shared product media, relations, usage, and retention",
             render_media_library_page(config),
+        )
+    if route == ROUTE_CONTENT_PLANS:
+        return (
+            "Content Plans",
+            "Canonical content, channel variants, and publication planning",
+            render_content_planning_page(config),
         )
     assert snapshot is not None
     return (
@@ -3095,6 +3294,137 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
             json_response(self, {"providers": providers})
             return
+        if parsed.path == "/api/content/items":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            service = runtime.content_service(self.config)
+            json_response(
+                self,
+                {
+                    "items": [
+                        _safe_content_payload(item)
+                        for item in service.list_content(
+                            workspace_id=query.get("workspace_id", [""])[0],
+                            include_deleted=query.get("include_deleted", [""])[0].lower() in {"1", "true"},
+                        )
+                    ]
+                },
+            )
+            return
+        if parsed.path.startswith("/api/content/items/"):
+            parts = [part for part in parsed.path.split("/") if part]
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            service = runtime.content_service(self.config)
+            query = parse_qs(parsed.query)
+            workspace_id = query.get("workspace_id", [""])[0]
+            content_id = parts[3] if len(parts) > 3 else ""
+            try:
+                item = service.get_content(content_id, workspace_id=workspace_id)
+            except Exception:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            if len(parts) == 4:
+                json_response(self, {"item": _safe_content_payload(item)})
+                return
+            if len(parts) == 5 and parts[4] == "revisions":
+                revisions = service.revision_repository.list_by_content(item.id)
+                json_response(self, {"revisions": [_safe_revision_payload(revision) for revision in revisions]})
+                return
+            if len(parts) == 5 and parts[4] == "variants":
+                variants = service.list_variants(item.id, workspace_id=item.workspace_id)
+                json_response(self, {"variants": [_safe_variant_payload(variant) for variant in variants]})
+                return
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        if parsed.path == "/api/content/requirements":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            requirements = runtime.content_service(self.config).requirement_registry.list_channel_requirements()
+            json_response(self, {"requirements": [asdict(item) for item in requirements]})
+            return
+        if parsed.path.startswith("/api/content/requirements/"):
+            channel_plugin_id = parsed.path.removeprefix("/api/content/requirements/")
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            requirements = runtime.content_service(self.config).requirement_registry.list_channel_requirements(
+                channel_plugin_id
+            )
+            json_response(self, {"requirements": [asdict(item) for item in requirements]})
+            return
+        if parsed.path == "/api/publication-plans":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            planning = runtime.publication_planning_service(self.config)
+            plans = planning.plan_repository.list_all(workspace_id=query.get("workspace_id", [""])[0])
+            json_response(
+                self,
+                {
+                    "plans": [
+                        _safe_plan_payload(plan, planning.target_repository.list_by_plan(plan.id)) for plan in plans
+                    ]
+                },
+            )
+            return
+        if parsed.path.startswith("/api/publication-plans/"):
+            parts = [part for part in parsed.path.split("/") if part]
+            if len(parts) < 3:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            plan_id = parts[2]
+            query = parse_qs(parsed.query)
+            workspace_id = query.get("workspace_id", [""])[0]
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            planning = runtime.publication_planning_service(self.config)
+            try:
+                plan = planning.plan_repository.get(plan_id)
+                if plan is None or (workspace_id and plan.workspace_id != workspace_id):
+                    raise KeyError(plan_id)
+                targets = planning.target_repository.list_by_plan(plan.id)
+            except Exception:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            if len(parts) == 3:
+                json_response(self, {"plan": _safe_plan_payload(plan, targets)})
+                return
+            if len(parts) == 4 and parts[3] == "evidence":
+                evidence = []
+                for target in targets:
+                    if target.job_id:
+                        job = get_publish_job(target.job_id)
+                        if job is not None:
+                            evidence.append(
+                                {
+                                    "target_id": target.id,
+                                    "job_id": job.id,
+                                    "snapshot_checksum": target.snapshot_checksum[:16],
+                                    "result_details": {
+                                        "content_publication_evidence": job.result_details_json.get(
+                                            "content_publication_evidence", {}
+                                        )
+                                    },
+                                }
+                            )
+                json_response(self, {"evidence": evidence})
+                return
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        if parsed.path == "/api/content/integrity":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            content_service = runtime.content_service(self.config)
+            planning = runtime.publication_planning_service(self.config)
+            issues = content_service.scan_integrity(workspace_id=query.get("workspace_id", [""])[0])
+            issues.extend(planning.scan_integrity(workspace_id=query.get("workspace_id", [""])[0]))
+            json_response(self, {"issues": [asdict(issue) for issue in issues]})
+            return
+        if parsed.path == "/api/content/health":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            json_response(
+                self,
+                {
+                    "content": runtime.content_service(self.config).health_check(),
+                    "planning": runtime.publication_planning_service(self.config).health_check(),
+                },
+            )
+            return
         if parsed.path == "/api/media/library/health":
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)
             json_response(self, {"health": runtime.media_library_service(self.config).health_check()})
@@ -3400,6 +3730,60 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length).decode("utf-8")
+        if path.startswith("/content-plans/"):
+            form = parse_qs(body)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            content_service = runtime.content_service(self.config)
+            planning = runtime.publication_planning_service(self.config)
+            try:
+                if path == "/content-plans/create-content":
+                    content_service.create_content(
+                        workspace_id=form.get("workspace_id", ["linkedin"])[0],
+                        title=form.get("title", ["Untitled"])[0],
+                        body=form.get("body", [""])[0],
+                        language=form.get("language", [""])[0],
+                        created_by="dashboard",
+                    )
+                elif path == "/content-plans/create-plan":
+                    planning.create_plan(
+                        workspace_id=form.get("workspace_id", ["linkedin"])[0],
+                        content_item_id=form.get("content_item_id", [""])[0],
+                        name=form.get("name", [""])[0],
+                        created_by="dashboard",
+                        timezone=form.get("timezone", ["UTC"])[0],
+                    )
+                elif path == "/content-plans/add-target":
+                    planning.add_target(
+                        form.get("plan_id", [""])[0],
+                        workspace_id=form.get("workspace_id", ["linkedin"])[0],
+                        channel_plugin_id=form.get("channel_plugin_id", ["channel.linkedin"])[0],
+                        channel_account_id=form.get("channel_account_id", ["linkedin"])[0],
+                        capability=form.get("capability", ["channel.publish.text"])[0],
+                        scheduled_at=form.get("scheduled_at", [""])[0],
+                    )
+                elif path == "/content-plans/validate":
+                    planning.validate_plan(form.get("plan_id", [""])[0], workspace_id="linkedin")
+                elif path == "/content-plans/prepare":
+                    planning.prepare_plan(form.get("plan_id", [""])[0], workspace_id="linkedin", actor="dashboard")
+                elif path == "/content-plans/queue":
+                    planning.queue_plan(
+                        form.get("plan_id", [""])[0],
+                        workspace_id="linkedin",
+                        actor="dashboard",
+                        confirmation=True,
+                    )
+                else:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+            except Exception:
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", ROUTE_CONTENT_PLANS)
+                self.end_headers()
+                return
+            self.send_response(HTTPStatus.SEE_OTHER)
+            self.send_header("Location", ROUTE_CONTENT_PLANS)
+            self.end_headers()
+            return
         if path.startswith("/api/browser-pilots"):
             try:
                 payload = json.loads(body) if body.strip() else {}
@@ -3473,6 +3857,188 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
             except Exception:
                 self.send_error(HTTPStatus.BAD_GATEWAY, "Pilot operation failed safely.")
+                return
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        if path.startswith("/api/content/") or path.startswith("/api/publication-"):
+            try:
+                payload = json.loads(body) if body.strip() else {}
+            except json.JSONDecodeError:
+                self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON payload.")
+                return
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            content_service = runtime.content_service(self.config)
+            planning = runtime.publication_planning_service(self.config)
+            try:
+                if path == "/api/content/items":
+                    item = content_service.create_content(
+                        workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                        title=str(payload.get("title") or "Untitled"),
+                        body=str(payload.get("body") or ""),
+                        summary=str(payload.get("summary") or ""),
+                        language=str(payload.get("language") or ""),
+                        content_type=str(payload.get("content_type") or "social_post"),
+                        created_by=str(payload.get("actor") or "api"),
+                        metadata=dict(payload.get("metadata") or {}),
+                    )
+                    json_response(self, {"item": _safe_content_payload(item)}, status=HTTPStatus.CREATED)
+                    return
+                if path.startswith("/api/content/items/"):
+                    parts = [part for part in path.split("/") if part]
+                    content_id = parts[3] if len(parts) > 3 else ""
+                    if len(parts) == 4:
+                        item = content_service.update_content(
+                            content_id,
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            title=payload.get("title"),
+                            body=payload.get("body"),
+                            summary=payload.get("summary"),
+                            language=payload.get("language"),
+                            metadata=payload.get("metadata") if "metadata" in payload else None,
+                            actor=str(payload.get("actor") or "api"),
+                            expected_revision_id=str(payload.get("expected_revision_id") or ""),
+                        )
+                        json_response(self, {"item": _safe_content_payload(item)})
+                        return
+                    if len(parts) == 7 and parts[4] == "revisions" and parts[6] == "restore":
+                        item = content_service.restore_revision(
+                            content_id,
+                            parts[5],
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            actor=str(payload.get("actor") or "api"),
+                            reason=str(payload.get("reason") or "api_restore"),
+                        )
+                        json_response(self, {"item": _safe_content_payload(item)})
+                        return
+                    if len(parts) == 5 and parts[4] == "variants":
+                        variant = content_service.create_variant(
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            content_item_id=content_id,
+                            source_revision_id=str(payload.get("source_revision_id") or ""),
+                            channel_plugin_id=str(payload.get("channel_plugin_id") or "channel.linkedin"),
+                            capability=str(payload.get("capability") or "channel.publish.text"),
+                            title=str(payload.get("title") or ""),
+                            body=str(payload.get("body") or ""),
+                            summary=str(payload.get("summary") or ""),
+                            hashtags=[str(item) for item in payload.get("hashtags", [])],
+                            mentions=[item for item in payload.get("mentions", []) if isinstance(item, dict)],
+                            call_to_action=str(payload.get("call_to_action") or ""),
+                            language=str(payload.get("language") or ""),
+                            variant_type=str(payload.get("variant_type") or "manual"),
+                            created_by=str(payload.get("actor") or "api"),
+                            metadata=dict(payload.get("metadata") or {}),
+                        )
+                        json_response(self, {"variant": _safe_variant_payload(variant)}, status=HTTPStatus.CREATED)
+                        return
+                if path.startswith("/api/content/variants/"):
+                    parts = [part for part in path.split("/") if part]
+                    variant_id = parts[3] if len(parts) > 3 else ""
+                    if len(parts) == 4:
+                        variant = content_service.update_variant(
+                            variant_id,
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            actor=str(payload.get("actor") or "api"),
+                            **{key: value for key, value in payload.items() if key not in {"workspace_id", "actor"}},
+                        )
+                        json_response(self, {"variant": _safe_variant_payload(variant)})
+                        return
+                    if len(parts) == 5 and parts[4] == "validate":
+                        result = content_service.validate_variant(
+                            variant_id, workspace_id=str(payload.get("workspace_id") or "linkedin")
+                        )
+                        json_response(self, {"result": asdict(result)})
+                        return
+                if path == "/api/publication-plans":
+                    plan = planning.create_plan(
+                        workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                        content_item_id=str(payload.get("content_item_id") or ""),
+                        name=str(payload.get("name") or ""),
+                        created_by=str(payload.get("actor") or "api"),
+                        planned_start_at=str(payload.get("planned_start_at") or ""),
+                        timezone=str(payload.get("timezone") or "UTC"),
+                        notes=str(payload.get("notes") or ""),
+                        follow_current_revision=bool(payload.get("follow_current_revision", False)),
+                    )
+                    json_response(self, {"plan": _safe_plan_payload(plan)}, status=HTTPStatus.CREATED)
+                    return
+                if path.startswith("/api/publication-plans/"):
+                    parts = [part for part in path.split("/") if part]
+                    plan_id = parts[2] if len(parts) > 2 else ""
+                    if len(parts) == 4 and parts[3] == "targets":
+                        target = planning.add_target(
+                            plan_id,
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            channel_plugin_id=str(payload.get("channel_plugin_id") or "channel.linkedin"),
+                            channel_account_id=str(payload.get("channel_account_id") or "linkedin"),
+                            capability=str(payload.get("capability") or "channel.publish.text"),
+                            channel_variant_id=str(payload.get("channel_variant_id") or ""),
+                            media_relation_ids=[str(item) for item in payload.get("media_relation_ids", [])],
+                            scheduled_at=str(payload.get("scheduled_at") or ""),
+                            timezone=str(payload.get("timezone") or "UTC"),
+                            position=int(payload.get("position") or 0),
+                            metadata=dict(payload.get("metadata") or {}),
+                        )
+                        json_response(self, {"target": _safe_target_payload(target)}, status=HTTPStatus.CREATED)
+                        return
+                    if len(parts) == 4 and parts[3] == "validate":
+                        result = planning.validate_plan(
+                            plan_id, workspace_id=str(payload.get("workspace_id") or "linkedin")
+                        )
+                        json_response(self, result)
+                        return
+                    if len(parts) == 4 and parts[3] == "prepare":
+                        plan = planning.prepare_plan(
+                            plan_id,
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            actor=str(payload.get("actor") or "api"),
+                        )
+                        json_response(self, {"plan": _safe_plan_payload(plan)})
+                        return
+                    if len(parts) == 4 and parts[3] == "queue":
+                        plan = planning.queue_plan(
+                            plan_id,
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            actor=str(payload.get("actor") or "api"),
+                            confirmation=bool(payload.get("confirmation")),
+                        )
+                        json_response(self, {"plan": _safe_plan_payload(plan)})
+                        return
+                    if len(parts) == 4 and parts[3] == "cancel":
+                        plan = planning.cancel_plan(
+                            plan_id,
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            actor=str(payload.get("actor") or "api"),
+                        )
+                        json_response(self, {"plan": _safe_plan_payload(plan)})
+                        return
+                if path.startswith("/api/publication-targets/"):
+                    parts = [part for part in path.split("/") if part]
+                    target_id = parts[2] if len(parts) > 2 else ""
+                    if len(parts) == 3:
+                        target = planning.update_target(
+                            target_id,
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            actor=str(payload.get("actor") or "api"),
+                            **{key: value for key, value in payload.items() if key not in {"workspace_id", "actor"}},
+                        )
+                        json_response(self, {"target": _safe_target_payload(target)})
+                        return
+                    if len(parts) == 4 and parts[3] == "queue":
+                        target = planning.queue_target(
+                            target_id,
+                            workspace_id=str(payload.get("workspace_id") or "linkedin"),
+                            actor=str(payload.get("actor") or "api"),
+                            confirmation=bool(payload.get("confirmation")),
+                            allow_stale=bool(payload.get("allow_stale", False)),
+                        )
+                        json_response(self, {"target": _safe_target_payload(target)})
+                        return
+            except Exception as exc:
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "content_api_error"), "message": str(exc)}},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
             return
@@ -4286,6 +4852,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_DELETE(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
+        if path.startswith("/api/publication-targets/"):
+            target_id = path.rsplit("/", maxsplit=1)[-1]
+            query = parse_qs(parsed.query)
+            try:
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                target = runtime.publication_planning_service(self.config).update_target(
+                    target_id,
+                    workspace_id=query.get("workspace_id", ["linkedin"])[0],
+                    actor=query.get("actor", ["api"])[0],
+                    status="cancelled",
+                )
+                json_response(self, {"target": _safe_target_payload(target)})
+                return
+            except Exception:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
         if path.startswith("/api/media/assets/"):
             asset_id = path.rsplit("/", maxsplit=1)[-1]
             query = parse_qs(parsed.query)
@@ -4303,6 +4885,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.send_error(HTTPStatus.BAD_REQUEST, "Media asset could not be deleted safely.")
                 return
         self.send_error(HTTPStatus.NOT_FOUND)
+
+    def do_PATCH(self) -> None:  # noqa: N802
+        self.do_POST()
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
         return

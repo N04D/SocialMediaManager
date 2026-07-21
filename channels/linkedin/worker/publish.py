@@ -181,6 +181,34 @@ def _media_assets_for_publish(config: Any, app_runtime, derivative) -> list[str]
     return imported
 
 
+def _content_publication_evidence(derivative, job: PublishJob) -> dict[str, Any]:
+    metadata = dict(derivative.generation_metadata_json or {})
+    snapshot = dict(metadata.get("snapshot") or {})
+    if not metadata.get("planned_from_content_framework"):
+        return {}
+    return {
+        "content_item_id": metadata.get("content_item_id", ""),
+        "content_revision_id": metadata.get("content_revision_id", ""),
+        "revision_checksum": metadata.get("revision_checksum", ""),
+        "channel_variant_id": metadata.get("channel_variant_id", ""),
+        "variant_checksum": metadata.get("variant_checksum", ""),
+        "publication_plan_id": metadata.get("publication_plan_id", ""),
+        "publication_target_id": metadata.get("publication_target_id", ""),
+        "snapshot_checksum": metadata.get("snapshot_checksum", ""),
+        "content_requirement_version": metadata.get("content_requirement_version", ""),
+        "media_relation_ids": list(metadata.get("media_relation_ids") or []),
+        "source_asset_ids": list(metadata.get("media_asset_ids") or []),
+        "media_variant_ids": list(snapshot.get("resolved_variant_ids") or []),
+        "media_requirement_version": metadata.get("media_requirement_version", ""),
+        "channel_account": job.channel_id,
+        "capability": snapshot.get("capability", "channel.publish.text"),
+        "scheduled_intent": metadata.get("scheduled_at", ""),
+        "queued_timestamp": job.requested_at,
+        "executed_timestamp": now_iso(),
+        "remote_verification_status": "",
+    }
+
+
 def _resolve_media_for_publish(config: Any, app_runtime, derivative, *, job_id: str):
     library = app_runtime.media_library_service(config)
     return library.resolve_owner_media(
@@ -392,6 +420,9 @@ def run_publish_job_with_runtime(
                 "final_submit_clicked": False,
                 "session_label": session_label,
             }
+            content_evidence = _content_publication_evidence(derivative, job)
+            if content_evidence:
+                dry_run_details["content_publication_evidence"] = content_evidence
             media_asset_ids = _media_assets_for_publish(config, app_runtime, derivative)
             resolution = _resolve_media_for_publish(config, app_runtime, derivative, job_id=job.id)
             if resolution.selected_items:
@@ -496,6 +527,7 @@ def run_publish_job_with_runtime(
                     "confirmation_seen": confirmed,
                     "confirmation_signal": confirmation_signal,
                     "session_label": session_label,
+                    "content_publication_evidence": dry_run_details.get("content_publication_evidence", {}),
                     "media_publication_evidence": dry_run_details.get("media_publication_evidence", []),
                 },
             )

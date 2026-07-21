@@ -1298,7 +1298,14 @@ class MediaLibraryService:
 
     def _owner_exists(self, owner_type: str, owner_id: str, *, workspace_id: str) -> bool:
         if owner_type == ContentMediaOwnerType.CONTENT.value:
-            return get_content_item(getattr(self.config, "content_dir", CONTENT_DRAFTS_DIR), owner_id) is not None
+            if get_content_item(getattr(self.config, "content_dir", CONTENT_DRAFTS_DIR), owner_id) is not None:
+                return True
+            try:
+                from content_services import ContentRepository
+
+                return ContentRepository().exists(owner_id, workspace_id=workspace_id)
+            except Exception:
+                return False
         if owner_type == ContentMediaOwnerType.DRAFT.value:
             derivative = get_derivative(owner_id)
             return derivative is not None and (not workspace_id or derivative.channel_id == workspace_id)
