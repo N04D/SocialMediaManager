@@ -15,6 +15,7 @@ class PluginType(StrEnum):
     CONTENT = "content"
     EXECUTION = "execution"
     SCHEDULING = "scheduling"
+    ANALYTICS = "analytics"
     MEDIA = "media"
     PROVIDER = "provider"
 

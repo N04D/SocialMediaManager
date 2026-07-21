@@ -331,6 +331,18 @@ def run_metric_job_with_runtime(
                 seconds_since_previous_snapshot=seconds_since_previous_snapshot,
             )
             save_metric_snapshot(snapshot)
+            try:
+                app_runtime.analytics_ingestion_service(config).ingest_metric_snapshot(
+                    snapshot=snapshot,
+                    published_post=post,
+                    source_run_id=f"analytics_run_{job.id}",
+                )
+            except Exception as exc:
+                snapshot.raw_metrics_json["analytics_ingestion"] = {
+                    "status": "failed",
+                    "safe_error_code": getattr(exc, "code", "analytics_ingestion_failed"),
+                }
+                save_metric_snapshot(snapshot)
             job.status = "success"
             job.finished_at = now_iso()
             job.updated_at = now_iso()

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from analytics_services import AnalyticsServiceBundle
 from channels.linkedin.runtime import LinkedInChannelRuntime
 from content_services import ContentService
 from media_library import MediaLibraryService
@@ -311,6 +312,63 @@ class ApplicationPluginRuntime:
         self.schedule_materialization_service(config)
         return self.get_plugin_service("publication.scheduling.service", "campaign_service")
 
+    def analytics_bundle(self, config: Any) -> AnalyticsServiceBundle:
+        runtime = self.runtimes.get("analytics.service")
+        if runtime is not None and runtime.services.get("analytics_bundle") is not None:
+            return runtime.services["analytics_bundle"]
+        bundle = AnalyticsServiceBundle(app_runtime=self, config=config)
+        try:
+            from channels.linkedin.metric_definitions import register_linkedin_metric_definitions
+
+            register_linkedin_metric_definitions(bundle.metric_registry)
+        except Exception as exc:
+            self.errors.append(f"LinkedIn metric definitions were not registered: {exc}")
+        manifest = PluginManifest.from_dict(
+            {
+                "id": "analytics.service",
+                "name": "Analytics Service",
+                "version": "0.1.0",
+                "plugin_api_version": 1,
+                "type": "analytics",
+                "entrypoint": "analytics_services",
+                "capabilities": [
+                    "analytics.definitions",
+                    "analytics.ingestion",
+                    "analytics.attribution",
+                    "analytics.readmodels",
+                    "analytics.integrity",
+                ],
+                "dependencies": [{"capability": "publication.plans"}],
+                "config_schema": {},
+            }
+        )
+        self.runtimes[manifest.id] = PluginRuntime(
+            manifest=manifest,
+            instance=bundle,
+            status=PluginStatus.READY,
+            services={
+                "analytics_bundle": bundle,
+                "analytics_ingestion_service": bundle.ingestion_service,
+                "analytics_attribution_service": bundle.attribution_service,
+                "analytics_read_model_service": bundle.read_model_service,
+                "analytics_integrity_service": bundle.integrity_service,
+            },
+            health=bundle.health_check(),
+        )
+        return bundle
+
+    def analytics_ingestion_service(self, config: Any):
+        return self.analytics_bundle(config).ingestion_service
+
+    def analytics_attribution_service(self, config: Any):
+        return self.analytics_bundle(config).attribution_service
+
+    def analytics_read_model_service(self, config: Any):
+        return self.analytics_bundle(config).read_model_service
+
+    def analytics_integrity_service(self, config: Any):
+        return self.analytics_bundle(config).integrity_service
+
     def get_plugin_service(self, plugin_id: str, service_name: str, *, require_ready: bool = True) -> Any:
         runtime = self.runtimes.get(plugin_id)
         if runtime is None:
@@ -562,6 +620,7 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
     runtime.publication_planning_service(config)
     runtime.publication_execution_service(config)
     runtime.schedule_materialization_service(config)
+    runtime.analytics_bundle(config)
     runtime.errors = startup_errors
     if strict and startup_errors:
         raise RuntimeError("Plugin bootstrap failed: " + "; ".join(startup_errors))

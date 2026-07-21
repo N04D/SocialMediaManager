@@ -64,6 +64,8 @@ from channel_store import (
     get_derivative,
     get_publish_job,
     list_channel_job_logs,
+    list_metric_snapshots,
+    list_published_posts,
     now_iso,
     save_channel_connection,
 )
@@ -128,6 +130,7 @@ ROUTE_CONFIG = "/config"
 ROUTE_MEDIA = "/media-library"
 ROUTE_CONTENT_PLANS = "/content-plans"
 ROUTE_CONTENT_CALENDAR = "/content-calendar"
+ROUTE_ANALYTICS = "/analytics"
 VALID_ROUTES = {
     ROUTE_EDITOR,
     ROUTE_DRAFTS,
@@ -139,6 +142,7 @@ VALID_ROUTES = {
     ROUTE_MEDIA,
     ROUTE_CONTENT_PLANS,
     ROUTE_CONTENT_CALENDAR,
+    ROUTE_ANALYTICS,
 }
 
 SIDEBAR_ITEMS = [
@@ -151,6 +155,7 @@ SIDEBAR_ITEMS = [
     (ROUTE_MEDIA, "media", "Media", "ML"),
     (ROUTE_CONTENT_PLANS, "content", "Plans", "PL"),
     (ROUTE_CONTENT_CALENDAR, "scheduler", "Calendar", "CA"),
+    (ROUTE_ANALYTICS, "stats", "Analytics", "AN"),
     (ROUTE_CONFIG, "config", "Config", "CF"),
 ]
 
@@ -630,6 +635,53 @@ def _safe_campaign_payload(campaign, members: list[Any] | None = None) -> dict[s
         "cancellation_reason": campaign.cancellation_reason,
         "members": [asdict(member) for member in members or []],
     }
+
+
+def _shorten_checksums(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _shorten_checksums(item) for key, item in value.items() if "path" not in key.lower()}
+    if isinstance(value, list):
+        return [_shorten_checksums(item) for item in value]
+    if isinstance(value, str) and len(value) >= 40 and all(char in "0123456789abcdef" for char in value.lower()):
+        return value[:16]
+    return value
+
+
+def _safe_analytics_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    blocked = {
+        "contentbody",
+        "content_body",
+        "browser_session_id",
+        "takeover_url",
+        "storage_reference",
+        "materialized_path",
+        "screenshot_path",
+        "cookies",
+        "html",
+    }
+    return {
+        key: _shorten_checksums(value)
+        for key, value in payload.items()
+        if key not in blocked and not any(fragment in key.lower() for fragment in ("path", "cookie", "secret"))
+    }
+
+
+def _safe_observation_payload(observation) -> dict[str, Any]:
+    payload = asdict(observation)
+    payload["observation_key"] = str(payload.get("observation_key") or "")[:16]
+    payload["source_evidence_reference"] = "available" if payload.get("source_evidence_reference") else ""
+    payload["metadata"] = {
+        key: value
+        for key, value in dict(payload.get("metadata") or {}).items()
+        if not any(fragment in key.lower() for fragment in ("path", "cookie", "secret", "html"))
+    }
+    return _safe_analytics_payload(payload)
+
+
+def _safe_attribution_payload(attribution) -> dict[str, Any]:
+    payload = asdict(attribution)
+    payload["attribution_checksum"] = str(payload.get("attribution_checksum") or "")[:16]
+    return _safe_analytics_payload(payload)
 
 
 def _query_filters(query: dict[str, list[str]]) -> dict[str, Any]:
@@ -2246,6 +2298,153 @@ def render_instagram_page() -> str:
     """
 
 
+def render_analytics_page(config: AppConfig) -> str:
+    runtime = get_plugin_runtime(config, reset=True, strict=False)
+    bundle = runtime.analytics_bundle(config)
+    readmodels = bundle.read_model_service
+    workspace_id = "linkedin"
+    definitions = bundle.metric_registry.list_definitions("channel.linkedin")
+    runs = bundle.collection_run_repository.list_all(workspace_id=workspace_id)[:8]
+    attributions = bundle.attribution_repository.list_all(workspace_id=workspace_id)[:20]
+    observations = bundle.observation_repository.list_all(workspace_id=workspace_id)[-30:]
+    publications = list_published_posts(channel_id=workspace_id)[:20]
+    publication_rows = []
+    for post in publications:
+        try:
+            perf = readmodels.publication_performance(post.id, workspace_id=workspace_id)
+            latest = perf.get("latest_metrics", {})
+            publication_rows.append(
+                f"""
+                <tr>
+                  <td><code>{html.escape(post.id)}</code></td>
+                  <td>{html.escape(post.external_id or "missing")}</td>
+                  <td>{html.escape(str(perf.get("content_item_id") or ""))}</td>
+                  <td>{html.escape(str(perf.get("revision_id") or ""))}</td>
+                  <td>{html.escape(str(perf.get("attribution_status") or ""))}</td>
+                  <td>{html.escape(str(perf.get("freshness") or "unknown"))}</td>
+                  <td>{html.escape(", ".join(sorted(latest.keys())) or "none")}</td>
+                </tr>
+                """
+            )
+        except Exception:
+            publication_rows.append(
+                f"""
+                <tr>
+                  <td><code>{html.escape(post.id)}</code></td>
+                  <td>{html.escape(post.external_id or "missing")}</td>
+                  <td colspan="5">Attribution pending</td>
+                </tr>
+                """
+            )
+    definition_rows = "".join(
+        f"""
+        <tr>
+          <td>{html.escape(item.metric_key)}</td>
+          <td>{html.escape(item.version)}</td>
+          <td>{html.escape(item.semantic_type)}</td>
+          <td>{html.escape(item.comparable_group)}</td>
+          <td>{html.escape(item.aggregation_type)}</td>
+        </tr>
+        """
+        for item in definitions
+    )
+    observation_rows = "".join(
+        f"""
+        <tr>
+          <td>{html.escape(item.metric_key)}</td>
+          <td>{html.escape(str(item.observed_value))}</td>
+          <td>{html.escape(item.observed_at)}</td>
+          <td><code>{html.escape(item.publication_id)}</code></td>
+          <td>{html.escape(item.status)}</td>
+        </tr>
+        """
+        for item in observations
+    )
+    attribution_rows = "".join(
+        f"""
+        <tr>
+          <td><code>{html.escape(item.publication_id)}</code></td>
+          <td>{html.escape(item.status)}</td>
+          <td>{html.escape(item.content_revision_id)}</td>
+          <td>{html.escape(item.channel_variant_id or "direct")}</td>
+          <td>{html.escape(item.campaign_id or "-")}</td>
+          <td><code>{html.escape(item.attribution_checksum[:16])}</code></td>
+        </tr>
+        """
+        for item in attributions
+    )
+    run_rows = "".join(
+        f"""
+        <tr>
+          <td><code>{html.escape(run.id)}</code></td>
+          <td>{html.escape(run.status)}</td>
+          <td>{run.publication_count}</td>
+          <td>{run.observation_count}</td>
+          <td>{run.duplicate_count}</td>
+          <td>{run.failure_count}</td>
+          <td>{html.escape(run.started_at)}</td>
+        </tr>
+        """
+        for run in runs
+    )
+    return f"""
+      <div class="page-grid">
+        <div class="stack">
+          <section class="card">
+            <div class="card-heading">
+              <div>
+                <h2>Analytics</h2>
+                <p class="meta">Publication-level observations tied to content revisions, variants, media, schedules, and campaigns.</p>
+              </div>
+              <div class="inline-actions">
+                <a class="button secondary" href="/api/analytics/health">Health</a>
+                <a class="button secondary" href="/api/analytics/integrity?workspace_id=linkedin">Integrity</a>
+              </div>
+            </div>
+            <form method="post" action="/analytics/collect" class="inline-actions">
+              <button type="submit">Ingest existing snapshots</button>
+              <a class="button secondary" href="/api/analytics/definitions/channel.linkedin">Definitions</a>
+            </form>
+            <table>
+              <thead><tr><th>Publication</th><th>Remote ID</th><th>Content</th><th>Revision</th><th>Attribution</th><th>Freshness</th><th>Metrics</th></tr></thead>
+              <tbody>{"".join(publication_rows) or "<tr><td colspan='7'>No analytics-ready publications yet.</td></tr>"}</tbody>
+            </table>
+          </section>
+          <section class="card">
+            <h2>Observations</h2>
+            <table>
+              <thead><tr><th>Metric</th><th>Value</th><th>Observed</th><th>Publication</th><th>Status</th></tr></thead>
+              <tbody>{observation_rows or "<tr><td colspan='5'>No observations yet.</td></tr>"}</tbody>
+            </table>
+          </section>
+        </div>
+        <div class="stack">
+          <section class="card">
+            <h2>LinkedIn definitions</h2>
+            <table>
+              <thead><tr><th>Key</th><th>Version</th><th>Semantic</th><th>Comparable</th><th>Aggregation</th></tr></thead>
+              <tbody>{definition_rows or "<tr><td colspan='5'>No definitions registered.</td></tr>"}</tbody>
+            </table>
+          </section>
+          <section class="card">
+            <h2>Attribution</h2>
+            <table>
+              <thead><tr><th>Publication</th><th>Status</th><th>Revision</th><th>Variant</th><th>Campaign</th><th>Checksum</th></tr></thead>
+              <tbody>{attribution_rows or "<tr><td colspan='6'>No attribution records yet.</td></tr>"}</tbody>
+            </table>
+          </section>
+          <section class="card">
+            <h2>Collection runs</h2>
+            <table>
+              <thead><tr><th>Run</th><th>Status</th><th>Publications</th><th>Created</th><th>Duplicates</th><th>Failures</th><th>Started</th></tr></thead>
+              <tbody>{run_rows or "<tr><td colspan='7'>No collection runs yet.</td></tr>"}</tbody>
+            </table>
+          </section>
+        </div>
+      </div>
+    """
+
+
 def render_stats_page(content_items: list[ContentItem]) -> str:
     publications = list_publications()
     snapshots = list_stats_snapshots()
@@ -2372,6 +2571,12 @@ def render_main_content(
             "Execution Calendar",
             "Recurring schedules, occurrences, and campaign coordination",
             render_content_calendar_page(config),
+        )
+    if route == ROUTE_ANALYTICS:
+        return (
+            "Analytics",
+            "Content-aware publication attribution and performance readmodels",
+            render_analytics_page(config),
         )
     assert snapshot is not None
     return (
@@ -3891,6 +4096,158 @@ class DashboardHandler(BaseHTTPRequestHandler):
             )
             json_response(self, {"issues": issues})
             return
+        if parsed.path == "/api/analytics/health":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            json_response(self, {"health": runtime.analytics_bundle(self.config).health_check()})
+            return
+        if parsed.path == "/api/analytics/definitions":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            definitions = runtime.analytics_bundle(self.config).metric_registry.list_definitions()
+            json_response(self, {"definitions": [asdict(item) for item in definitions]})
+            return
+        if parsed.path.startswith("/api/analytics/definitions/"):
+            channel_plugin_id = parsed.path.removeprefix("/api/analytics/definitions/")
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            definitions = runtime.analytics_bundle(self.config).metric_registry.list_definitions(channel_plugin_id)
+            json_response(self, {"definitions": [asdict(item) for item in definitions]})
+            return
+        if parsed.path == "/api/analytics/collection-runs":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            runs = runtime.analytics_bundle(self.config).collection_run_repository.list_all(
+                workspace_id=query.get("workspace_id", [""])[0]
+            )
+            json_response(self, {"collection_runs": [asdict(run) for run in runs[:100]]})
+            return
+        if parsed.path.startswith("/api/analytics/collection-runs/"):
+            run_id = parsed.path.rsplit("/", maxsplit=1)[-1]
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            run = next(
+                (
+                    item
+                    for item in runtime.analytics_bundle(self.config).collection_run_repository.list_all()
+                    if item.id == run_id
+                ),
+                None,
+            )
+            if run is None:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            json_response(self, {"collection_run": asdict(run)})
+            return
+        if parsed.path == "/api/analytics/publications":
+            query = parse_qs(parsed.query)
+            workspace_id = query.get("workspace_id", ["linkedin"])[0]
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            service = runtime.analytics_read_model_service(self.config)
+            page_size = min(int(query.get("page_size", ["50"])[0] or 50), 100)
+            performances = []
+            for post in list_published_posts(channel_id=workspace_id)[:page_size]:
+                try:
+                    performances.append(
+                        _safe_analytics_payload(service.publication_performance(post.id, workspace_id=workspace_id))
+                    )
+                except Exception:
+                    performances.append({"publication_id": post.id, "completeness": {"status": "insufficient"}})
+            json_response(self, {"publications": performances})
+            return
+        if parsed.path.startswith("/api/analytics/publications/"):
+            publication_id = parsed.path.rsplit("/", maxsplit=1)[-1]
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            try:
+                payload = runtime.analytics_read_model_service(self.config).publication_performance(
+                    publication_id, workspace_id=query.get("workspace_id", [""])[0]
+                )
+            except Exception:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            json_response(self, {"publication": _safe_analytics_payload(payload)})
+            return
+        if parsed.path.startswith("/api/analytics/content/"):
+            parts = [part for part in parsed.path.split("/") if part]
+            content_item_id = parts[2] if len(parts) > 2 else ""
+            query = parse_qs(parsed.query)
+            workspace_id = query.get("workspace_id", [""])[0]
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            service = runtime.analytics_read_model_service(self.config)
+            if len(parts) == 3:
+                json_response(
+                    self,
+                    {
+                        "content": _safe_analytics_payload(
+                            service.content_performance(content_item_id, workspace_id=workspace_id)
+                        )
+                    },
+                )
+                return
+            if len(parts) == 4 and parts[3] == "revisions":
+                json_response(
+                    self,
+                    {
+                        "revisions": _safe_analytics_payload(
+                            service.revision_performance(content_item_id, workspace_id=workspace_id)
+                        )
+                    },
+                )
+                return
+            if len(parts) == 4 and parts[3] == "variants":
+                json_response(
+                    self,
+                    {
+                        "variants": _safe_analytics_payload(
+                            service.variant_performance(content_item_id, workspace_id=workspace_id)
+                        )
+                    },
+                )
+                return
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        if parsed.path.startswith("/api/analytics/media/"):
+            asset_id = parsed.path.rsplit("/", maxsplit=1)[-1]
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            payload = runtime.analytics_read_model_service(self.config).media_performance(
+                asset_id, workspace_id=query.get("workspace_id", [""])[0]
+            )
+            json_response(self, {"media": _safe_analytics_payload(payload)})
+            return
+        if parsed.path.startswith("/api/analytics/campaigns/"):
+            campaign_id = parsed.path.rsplit("/", maxsplit=1)[-1]
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            payload = runtime.analytics_read_model_service(self.config).campaign_performance(
+                campaign_id, workspace_id=query.get("workspace_id", [""])[0]
+            )
+            json_response(self, {"campaign": _safe_analytics_payload(payload)})
+            return
+        if parsed.path == "/api/analytics/channels":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            payload = runtime.analytics_read_model_service(self.config).channel_performance(
+                workspace_id=query.get("workspace_id", [""])[0],
+                channel_plugin_id=query.get("channel_plugin_id", [""])[0],
+            )
+            json_response(self, {"channel": _safe_analytics_payload(payload)})
+            return
+        if parsed.path.startswith("/api/analytics/accounts/"):
+            account_id = parsed.path.rsplit("/", maxsplit=1)[-1]
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            payload = runtime.analytics_read_model_service(self.config).channel_performance(
+                workspace_id=query.get("workspace_id", [""])[0],
+                channel_account_id=account_id,
+            )
+            json_response(self, {"account": _safe_analytics_payload(payload)})
+            return
+        if parsed.path == "/api/analytics/integrity":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            issues = runtime.analytics_integrity_service(self.config).scan(
+                workspace_id=query.get("workspace_id", [""])[0]
+            )
+            json_response(self, {"issues": issues})
+            return
         if parsed.path == "/api/media/library/health":
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)
             json_response(self, {"health": runtime.media_library_service(self.config).health_check()})
@@ -4560,6 +4917,70 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         return
             except Exception as exc:
                 self.send_error(HTTPStatus.BAD_REQUEST, getattr(exc, "code", str(exc)))
+                return
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        if path == "/analytics/collect":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            ingestion = runtime.analytics_ingestion_service(self.config)
+            for post in list_published_posts(channel_id="linkedin")[:25]:
+                snapshot = next(iter(list_metric_snapshots(post.id)), None)
+                if snapshot is not None:
+                    ingestion.ingest_metric_snapshot(snapshot=snapshot, published_post=post)
+            self.send_response(HTTPStatus.SEE_OTHER)
+            self.send_header("Location", ROUTE_ANALYTICS)
+            self.end_headers()
+            return
+        if path.startswith("/api/analytics/"):
+            try:
+                payload = json.loads(body) if body.strip() else {}
+            except json.JSONDecodeError:
+                self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON payload.")
+                return
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            bundle = runtime.analytics_bundle(self.config)
+            workspace_id = str(payload.get("workspace_id") or "linkedin")
+            try:
+                if path == "/api/analytics/collect":
+                    created = []
+                    for post in list_published_posts(channel_id=workspace_id)[: int(payload.get("batch_size") or 25)]:
+                        snapshot = next(iter(list_metric_snapshots(post.id)), None)
+                        if snapshot is None:
+                            continue
+                        created.append(
+                            bundle.ingestion_service.ingest_metric_snapshot(
+                                snapshot=snapshot,
+                                published_post=post,
+                                source_run_id=str(payload.get("source_run_id") or ""),
+                            )
+                        )
+                    json_response(self, {"runs": [_safe_analytics_payload(item["run"]) for item in created]})
+                    return
+                if path.startswith("/api/analytics/observations/") and path.endswith("/correct"):
+                    observation_id = path.split("/")[-2]
+                    correction = bundle.ingestion_service.correct_observation(
+                        observation_id,
+                        corrected_value=payload.get("corrected_value"),
+                        actor=str(payload.get("actor") or ""),
+                        reason_code=str(payload.get("reason_code") or "manual_correction"),
+                        reason=str(payload.get("reason") or ""),
+                    )
+                    json_response(self, {"correction": asdict(correction)})
+                    return
+                if path == "/api/analytics/attribution/backfill":
+                    result = bundle.attribution_service.backfill(
+                        workspace_id=workspace_id,
+                        batch_size=int(payload.get("batch_size") or 25),
+                        dry_run=bool(payload.get("dry_run", True)),
+                    )
+                    json_response(self, result)
+                    return
+            except Exception as exc:
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "analytics_api_error"), "message": str(exc)}},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
             return
