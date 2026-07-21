@@ -3687,6 +3687,61 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if parsed.path.startswith("/api/channels/mastodon"):
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            mastodon = runtime.get_plugin_service("channel.mastodon", "channel_runtime", require_ready=False)
+            query = parse_qs(parsed.query)
+            try:
+                if parsed.path == "/api/channels/mastodon/health":
+                    json_response(self, {"health": mastodon.health_check()})
+                    return
+                if parsed.path == "/api/channels/mastodon/integrity":
+                    json_response(self, mastodon.integrity())
+                    return
+                if parsed.path == "/api/channels/mastodon/oauth/callback":
+                    account_id = query.get("channel_account_id", [""])[0]
+                    workspace_id = query.get("workspace_id", ["mastodon"])[0]
+                    payload = mastodon.complete_connect(
+                        code=query.get("code", [""])[0],
+                        state=query.get("state", [""])[0],
+                        workspace_id=workspace_id,
+                        channel_account_id=account_id,
+                    )
+                    json_response(self, {"account": payload})
+                    return
+                marker = "/api/channels/mastodon/accounts/"
+                if parsed.path.startswith(marker):
+                    suffix = parsed.path.removeprefix(marker)
+                    parts = suffix.split("/")
+                    account_id = parts[0]
+                    action = parts[1] if len(parts) > 1 else "status"
+                    if action == "status":
+                        json_response(self, {"account": mastodon.status(channel_account_id=account_id)})
+                        return
+                    if action == "requirements":
+                        json_response(
+                            self,
+                            {
+                                "content": mastodon.resolve_content_requirements(channel_account_id=account_id),
+                                "media": mastodon.resolve_media_requirements(channel_account_id=account_id),
+                            },
+                        )
+                        return
+                    if action == "health":
+                        json_response(self, {"health": mastodon.health_check(channel_account_id=account_id)})
+                        return
+            except Exception as exc:
+                json_response(
+                    self,
+                    {
+                        "error": {
+                            "code": getattr(exc, "code", "mastodon_api_error"),
+                            "message": str(getattr(exc, "safe_message", str(exc))),
+                        }
+                    },
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
         if parsed.path == "/api/plugins/health":
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)
             body = json.dumps(runtime.health_payload(), ensure_ascii=False).encode("utf-8")
@@ -4553,6 +4608,60 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length).decode("utf-8")
+        if path.startswith("/api/channels/mastodon"):
+            form = parse_qs(body)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            mastodon = runtime.get_plugin_service("channel.mastodon", "channel_runtime", require_ready=False)
+            try:
+                if path == "/api/channels/mastodon/discover":
+                    snapshot = mastodon.discover(form_value(form, "instance_origin"))
+                    json_response(self, {"instance": mastodon.safe_instance_payload(snapshot)})
+                    return
+                if path == "/api/channels/mastodon/connect":
+                    payload = mastodon.start_connect(
+                        workspace_id=form_value(form, "workspace_id", "mastodon"),
+                        channel_account_id=form_value(form, "channel_account_id"),
+                        instance_origin=form_value(form, "instance_origin"),
+                        redirect_uri=form_value(form, "redirect_uri"),
+                        force_login=form_value(form, "force_login") == "true",
+                    )
+                    json_response(self, payload)
+                    return
+                marker = "/api/channels/mastodon/accounts/"
+                if path.startswith(marker):
+                    suffix = path.removeprefix(marker)
+                    parts = suffix.split("/")
+                    account_id = parts[0]
+                    action = parts[1] if len(parts) > 1 else ""
+                    if action == "disconnect":
+                        json_response(
+                            self, {"account": mastodon.disconnect(channel_account_id=account_id, actor="dashboard")}
+                        )
+                        return
+                    if action == "verify":
+                        json_response(self, {"account": mastodon.check_session(channel_account_id=account_id)})
+                        return
+                    if action == "collect-metrics":
+                        job_id = form_value(form, "metric_job_id")
+                        json_response(self, {"job": mastodon.collect_metrics(job_id).__dict__})
+                        return
+                    if action == "requirements":
+                        json_response(
+                            self, {"requirements": mastodon.refresh_requirements(channel_account_id=account_id)}
+                        )
+                        return
+            except Exception as exc:
+                json_response(
+                    self,
+                    {
+                        "error": {
+                            "code": getattr(exc, "code", "mastodon_api_error"),
+                            "message": str(getattr(exc, "safe_message", str(exc))),
+                        }
+                    },
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
         if path.startswith("/content-plans/"):
             form = parse_qs(body)
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)
@@ -4586,13 +4695,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         scheduled_at=form.get("scheduled_at", [""])[0],
                     )
                 elif path == "/content-plans/validate":
-                    planning.validate_plan(form.get("plan_id", [""])[0], workspace_id="linkedin")
+                    planning.validate_plan(
+                        form.get("plan_id", [""])[0], workspace_id=form.get("workspace_id", ["linkedin"])[0]
+                    )
                 elif path == "/content-plans/prepare":
-                    planning.prepare_plan(form.get("plan_id", [""])[0], workspace_id="linkedin", actor="dashboard")
+                    planning.prepare_plan(
+                        form.get("plan_id", [""])[0],
+                        workspace_id=form.get("workspace_id", ["linkedin"])[0],
+                        actor="dashboard",
+                    )
                 elif path == "/content-plans/queue":
                     planning.queue_plan(
                         form.get("plan_id", [""])[0],
-                        workspace_id="linkedin",
+                        workspace_id=form.get("workspace_id", ["linkedin"])[0],
                         actor="dashboard",
                         confirmation=True,
                     )

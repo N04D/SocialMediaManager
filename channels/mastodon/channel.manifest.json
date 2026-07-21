@@ -1,0 +1,28 @@
+{
+  "id": "mastodon",
+  "name": "Mastodon",
+  "version": "0.1.0",
+  "description": "API-first Mastodon channel for text, image publishing, and status metrics.",
+  "status": "pilot",
+  "mode": "api_oauth_pkce",
+  "capabilities": {
+    "canGenerate": false,
+    "canPreview": true,
+    "canPublish": true,
+    "canFetchMetrics": true,
+    "canReadComments": false,
+    "requiresApproval": true
+  },
+  "connection": {
+    "canConnect": true,
+    "canDisconnect": true,
+    "canCheckStatus": true
+  },
+  "outputTypes": ["mastodon_status"],
+  "metrics": {
+    "mode": "api",
+    "supportsManualRefresh": true,
+    "supportsScheduledRefresh": true,
+    "defaultRefreshWindows": ["1h", "24h"]
+  }
+}

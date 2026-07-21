@@ -129,10 +129,9 @@ def _save_channel_heartbeat(
 
 
 def _channel_runtime_service(config: AppConfig, channel_id: str):
-    if channel_id != "linkedin":
-        raise ValueError(f"Unsupported channel runtime: {channel_id}")
     runtime = get_plugin_runtime(config, reset=False, strict=True)
-    return runtime.get_plugin_service("channel.linkedin", "channel_runtime")
+    plugin_id = channel_id if channel_id.startswith("channel.") else f"channel.{channel_id}"
+    return runtime.get_plugin_service(plugin_id, "channel_runtime")
 
 
 def run_channel_action(
@@ -143,7 +142,10 @@ def run_channel_action(
         service.connect(channel_id=channel_id, action_id=action_id, worker_id=worker_id, started_at=started_at)
         return 1
     if action == "check_session":
-        service.check_session(channel_id=channel_id, worker_id=worker_id, started_at=started_at)
+        if channel_id == "linkedin":
+            service.check_session(channel_id=channel_id, worker_id=worker_id, started_at=started_at)
+        else:
+            service.check_session(channel_account_id=channel_id, worker_id=worker_id, started_at=started_at)
         return 1
     raise ValueError(f"Unsupported channel action: {action}")
 

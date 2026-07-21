@@ -8,6 +8,7 @@ from typing import Any
 
 from analytics_services import AnalyticsServiceBundle
 from channels.linkedin.runtime import LinkedInChannelRuntime
+from channels.mastodon.runtime import MastodonChannelRuntime
 from content_services import ContentService
 from media_library import MediaLibraryService
 from media_processing_runtime import MediaProcessingRuntime
@@ -32,6 +33,7 @@ from src.core.plugins.runtime import PluginRuntime, ProviderResolver
 
 ROOT_DIR = Path(__file__).resolve().parent
 LINKEDIN_PLUGIN_MANIFEST = ROOT_DIR / "channels" / "linkedin" / "plugin.manifest.json"
+MASTODON_PLUGIN_MANIFEST = ROOT_DIR / "channels" / "mastodon" / "plugin.manifest.json"
 LEGACY_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "legacy_browser" / "plugin.manifest.json"
 AUTO_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "auto_browser" / "plugin.manifest.json"
 LOCAL_MEDIA_STORAGE_MANIFEST = ROOT_DIR / "plugins" / "providers" / "local_media_storage" / "plugin.manifest.json"
@@ -103,8 +105,11 @@ class ApplicationPluginRuntime:
             from channels.linkedin.media_requirements import register_linkedin_media_requirements
 
             register_linkedin_media_requirements(service.requirement_registry)
+            from channels.mastodon.media_requirements import register_mastodon_media_requirements
+
+            register_mastodon_media_requirements(service.requirement_registry)
         except Exception as exc:
-            self.errors.append(f"LinkedIn media requirements were not registered: {exc}")
+            self.errors.append(f"Channel media requirements were not registered: {exc}")
         manifest = PluginManifest.from_dict(
             {
                 "id": "media.processing.runtime",
@@ -169,8 +174,11 @@ class ApplicationPluginRuntime:
             from channels.linkedin.content_requirements import register_linkedin_content_requirements
 
             register_linkedin_content_requirements(service.requirement_registry)
+            from channels.mastodon.content_requirements import register_mastodon_content_requirements
+
+            register_mastodon_content_requirements(service.requirement_registry)
         except Exception as exc:
-            self.errors.append(f"LinkedIn content requirements were not registered: {exc}")
+            self.errors.append(f"Channel content requirements were not registered: {exc}")
         manifest = PluginManifest.from_dict(
             {
                 "id": "content.service",
@@ -321,8 +329,11 @@ class ApplicationPluginRuntime:
             from channels.linkedin.metric_definitions import register_linkedin_metric_definitions
 
             register_linkedin_metric_definitions(bundle.metric_registry)
+            from channels.mastodon.metric_definitions import register_mastodon_metric_definitions
+
+            register_mastodon_metric_definitions(bundle.metric_registry)
         except Exception as exc:
-            self.errors.append(f"LinkedIn metric definitions were not registered: {exc}")
+            self.errors.append(f"Channel metric definitions were not registered: {exc}")
         manifest = PluginManifest.from_dict(
             {
                 "id": "analytics.service",
@@ -528,6 +539,7 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
         AUTO_BROWSER_MANIFEST,
         LOCAL_MEDIA_STORAGE_MANIFEST,
         LINKEDIN_PLUGIN_MANIFEST,
+        MASTODON_PLUGIN_MANIFEST,
     ]:
         try:
             manifest = runtime.registry.register(load_plugin_manifest(path))
@@ -611,6 +623,23 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
                 linkedin.instance = channel_service
                 linkedin.register_service("channel_runtime", channel_service)
                 linkedin.health = channel_service.health_check()
+
+    mastodon = runtime.runtimes.get("channel.mastodon")
+    if mastodon is not None:
+        try:
+            mastodon_service = MastodonChannelRuntime(
+                manifest=mastodon.manifest,
+                app_runtime=runtime,
+                config=config,
+            )
+            mastodon.instance = mastodon_service
+            mastodon.register_service("channel_runtime", mastodon_service)
+            mastodon.health = mastodon_service.health_check()
+            mastodon.status = PluginStatus.READY
+        except Exception as exc:
+            mastodon.status = PluginStatus.ERROR
+            mastodon.health = {"status": "error", "message": str(exc)}
+            startup_errors.append(str(exc))
 
     runtime.resolver = ProviderResolver(runtime.registry, runtime.runtimes)
     runtime.media_runtime(config)

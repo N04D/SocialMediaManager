@@ -902,20 +902,37 @@ class AnalyticsReadModelService:
 
     def compare_publications(self, publication_ids: list[str]) -> dict[str, Any]:
         performances = [self.publication_performance(publication_id) for publication_id in publication_ids[:10]]
-        groups = {
-            metric_key: {
-                perf["publication_id"]: perf["latest_metrics"][metric_key]["value"]
-                for perf in performances
-                if metric_key in perf["latest_metrics"]
-            }
-            for metric_key in sorted({key for perf in performances for key in perf["latest_metrics"]})
-        }
+        groups: dict[str, dict[str, Any]] = {}
+        unavailable: dict[str, list[str]] = {}
+        for perf in performances:
+            for metric_key, metric in perf["latest_metrics"].items():
+                definition = self.metric_registry.latest(perf["channel_plugin_id"], metric_key)
+                comparable_group = definition.comparable_group if definition else metric_key
+                groups.setdefault(comparable_group, {})[perf["publication_id"]] = {
+                    "metric_key": metric_key,
+                    "value": metric["value"],
+                    "channel_plugin_id": perf["channel_plugin_id"],
+                }
+            if perf["channel_plugin_id"] == "channel.mastodon":
+                unavailable[perf["publication_id"]] = ["impressions", "reach", "views", "clicks"]
         validity = "valid" if len({perf["channel_plugin_id"] for perf in performances}) <= 1 else "valid_with_warnings"
+        warnings = ["observational_not_causal"] if performances else []
+        if validity == "valid_with_warnings":
+            warnings.extend(
+                [
+                    "platform_interactions_have_different_user_context",
+                    "measurement_windows_may_differ",
+                    "mastodon_has_no_impressions_or_reach_denominator",
+                    "absolute_counts_are_observational",
+                    "no_causality_claim",
+                ]
+            )
         return {
             "comparison_validity": validity,
             "publications": performances,
             "compatible_metric_values": groups,
-            "warnings": ["observational_not_causal"] if performances else [],
+            "unavailable_by_channel": unavailable,
+            "warnings": warnings,
         }
 
     def rebuild_read_model(
@@ -970,12 +987,16 @@ class AnalyticsReadModelService:
             ]
             denominator = denominator_values[0] if denominator_values else None
             if denominator is None or denominator < definition.minimum_denominator:
+                reason = "denominator_unavailable" if denominator is None else "missing_or_zero_denominator"
                 derived[definition.metric_key] = {
                     "value": None,
                     "version": definition.version,
-                    "warning": "missing_or_zero_denominator",
+                    "warning": reason,
+                    "reason": reason,
                 }
-                warnings.append(f"{definition.metric_key}:missing_or_zero_denominator")
+                warnings.append(f"{definition.metric_key}:{reason}")
+                if reason == "denominator_unavailable":
+                    warnings.append(f"{definition.metric_key}:missing_or_zero_denominator")
                 continue
             derived[definition.metric_key] = {
                 "value": (numerator / denominator) * definition.multiplier,

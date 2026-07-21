@@ -1,0 +1,31 @@
+{
+  "id": "channel.mastodon",
+  "name": "Mastodon",
+  "version": "0.1.0",
+  "plugin_api_version": 1,
+  "type": "channel",
+  "entrypoint": "channels.mastodon",
+  "status": "ready",
+  "capabilities": [
+    "channel.connect",
+    "channel.disconnect",
+    "channel.status",
+    "channel.publish.text",
+    "channel.publish.image",
+    "channel.metrics.collect",
+    "channel.health"
+  ],
+  "dependencies": [
+    {"capability": "content.items", "min_version": "0.1.0"},
+    {"capability": "content.requirements", "min_version": "0.1.0"},
+    {"capability": "media.library", "min_version": "0.3.0"},
+    {"capability": "publication.execution", "min_version": "0.1.0"},
+    {"capability": "analytics.ingestion", "min_version": "0.1.0"}
+  ],
+  "config_schema": {
+    "publication_options": {
+      "default_visibility": "public",
+      "supported_visibility": ["public", "unlisted"]
+    }
+  }
+}

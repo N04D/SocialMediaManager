@@ -336,6 +336,28 @@ class PublicationPlanningService:
         media = self._resolve_media(plan, target, workspace_id=workspace_id)
         if media.get("errors"):
             violations.extend(media["errors"])
+        if target.channel_plugin_id == "channel.mastodon":
+            mastodon_requirements = self._mastodon_target_requirements(target)
+            if mastodon_requirements.get("stale"):
+                violations.append(
+                    {
+                        "code": "mastodon.requirements_stale",
+                        "message": "Mastodon requirements snapshot is stale.",
+                        "field": "requirements",
+                    }
+                )
+            limit = int(
+                mastodon_requirements.get("max_body_length") or mastodon_requirements.get("content_length_limit") or 0
+            )
+            resolved_body = (variant.body if variant else revision.body) if revision else ""
+            if limit and len(resolved_body.replace("\r\n", "\n").strip()) > limit:
+                violations.append(
+                    {
+                        "code": "mastodon.body_too_long",
+                        "message": "Body exceeds the Mastodon instance text limit.",
+                        "field": "body",
+                    }
+                )
         valid = not violations
         target.validation_status = "valid" if valid else "invalid"
         target.status = PublicationTargetStatus.READY.value if valid else PublicationTargetStatus.INVALID.value
@@ -395,6 +417,8 @@ class PublicationPlanningService:
         snapshot = self._build_snapshot(
             plan, target, revision=revision, variant=variant, content_result=content_result, media=media
         )
+        if target.channel_plugin_id == "channel.mastodon":
+            snapshot = snapshot | self._mastodon_snapshot_metadata(target)
         checksum = snapshot_checksum(snapshot)
         target.snapshot_checksum = checksum
         target.metadata = {**dict(target.metadata or {}), "snapshot": snapshot, "confirmation_required": True}
@@ -508,6 +532,14 @@ class PublicationPlanningService:
             if relation is None or not relation.active:
                 reasons.append("media_relation_changed")
                 break
+        if target.channel_plugin_id == "channel.mastodon":
+            mastodon_requirements = self._mastodon_target_requirements(target)
+            if mastodon_requirements.get("stale"):
+                reasons.append("mastodon_requirements_stale")
+            if snapshot.get("mastodon_requirements_checksum") and mastodon_requirements.get(
+                "requirement_version"
+            ) != snapshot.get("mastodon_requirements_checksum"):
+                reasons.append("mastodon_requirements_changed")
         recalculated = snapshot_checksum(snapshot)
         if recalculated != target.snapshot_checksum:
             reasons.append("snapshot_checksum_mismatch")
@@ -608,6 +640,29 @@ class PublicationPlanningService:
             "capability": target.capability,
             "scheduled_at": target.scheduled_at,
             "timezone": target.timezone,
+        }
+
+    def _mastodon_target_requirements(self, target: PublicationTarget) -> dict[str, Any]:
+        try:
+            runtime = self.app_runtime.get_plugin_service("channel.mastodon", "channel_runtime")
+            return runtime.resolve_content_requirements(channel_account_id=target.channel_account_id)
+        except Exception:
+            return {"stale": True, "safe_error_code": "mastodon.requirements_unavailable"}
+
+    def _mastodon_snapshot_metadata(self, target: PublicationTarget) -> dict[str, Any]:
+        try:
+            runtime = self.app_runtime.get_plugin_service("channel.mastodon", "channel_runtime")
+            content_req = runtime.resolve_content_requirements(channel_account_id=target.channel_account_id)
+            media_req = runtime.resolve_media_requirements(channel_account_id=target.channel_account_id)
+        except Exception:
+            return {"mastodon_requirements_stale": True}
+        return {
+            "mastodon_requirements_checksum": str(
+                content_req.get("requirement_version") or media_req.get("requirement_version") or ""
+            ),
+            "mastodon_content_requirements": content_req,
+            "mastodon_media_requirements": media_req,
+            "mastodon_options": dict((target.metadata or {}).get("mastodon_options") or {}),
         }
 
     def _save_derivative_for_target(self, plan: PublicationPlan, target: PublicationTarget) -> ContentDerivative:
