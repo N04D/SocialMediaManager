@@ -1,0 +1,4 @@
+{
+  "fixture": true,
+  "scenario": "delegated_namespace_conflict"
+}

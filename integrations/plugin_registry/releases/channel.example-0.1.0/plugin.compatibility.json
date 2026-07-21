@@ -1,0 +1,48 @@
+{
+  "capabilities": [
+    "channel.status",
+    "channel.health",
+    "channel.publish.text",
+    "channel.publish.image",
+    "channel.metrics.collect"
+  ],
+  "compatibility_status": "compatible",
+  "compatible": true,
+  "declared_contract_versions": {
+    "channel": "1.0"
+  },
+  "distribution": "experimental",
+  "doctor_status": "present",
+  "failed_contract_suites": [],
+  "fixture_status": "present",
+  "forbidden_imports": [],
+  "generated_at": "2026-07-21T22:40:18.251316+00:00",
+  "manifest_schema_version": "1.0",
+  "passed_contract_suites": [
+    "boundary",
+    "secrets",
+    "manifest",
+    "channel.minimal",
+    "channel.text_publish",
+    "channel.image_publish",
+    "channel.metrics",
+    "entrypoint"
+  ],
+  "permissions": [
+    "account_configuration",
+    "analytics_ingestion",
+    "execution_reporting",
+    "media_materialization",
+    "media_read",
+    "outbound_network",
+    "secret_storage"
+  ],
+  "plugin_id": "channel.example",
+  "plugin_version": "0.1.0",
+  "required_contract_versions": {
+    "channel": "1.0"
+  },
+  "sdk_version": "1.0.0",
+  "secret_findings": [],
+  "warnings": []
+}

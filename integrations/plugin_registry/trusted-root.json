@@ -1,0 +1,9 @@
+{
+  "expires": "2036-07-18T22:40:18.253449+00:00",
+  "keys": {
+    "fixture-root-key": "TEST-ONLY"
+  },
+  "role": "root",
+  "threshold": 1,
+  "version": 1
+}

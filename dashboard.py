@@ -115,6 +115,13 @@ from scheduler import (
     worker_run_summary,
 )
 from src.core.media import MediaInput, MediaValidationError
+from src.core.plugin_distribution import (
+    PluginDistributionIntegrityService,
+    PluginInstallationService,
+    PluginRegistryService,
+    PluginRegistrySource,
+)
+from src.core.plugin_distribution.contracts import PLUGIN_DISTRIBUTION_FRAMEWORK_VERSION
 from src.plugin_sdk.compatibility import build_compatibility_report
 from src.plugin_sdk.contracts import PLUGIN_SDK_VERSION
 from studio_models import ContentItem
@@ -2570,14 +2577,113 @@ def plugin_compatibility_payload(plugin_id: str | None = None) -> dict[str, Any]
     return {"plugins": [_safe_plugin_report_payload(pid, path) for pid, path in plugin_paths.items()]}
 
 
+def _plugin_distribution_root() -> Path:
+    return Path.home() / ".local" / "share" / "socialmediamanager" / "plugins"
+
+
+def _plugin_distribution_cache() -> Path:
+    return Path.home() / ".cache" / "socialmediamanager" / "plugin-registry"
+
+
+def _plugin_quarantine_root() -> Path:
+    return Path.home() / ".cache" / "socialmediamanager" / "plugin-quarantine"
+
+
+def _fixture_registry_source() -> PluginRegistrySource:
+    root = ROOT_DIR / "integrations" / "plugin_registry"
+    return PluginRegistrySource(
+        id="fixture",
+        name="Community registry fixture",
+        metadata_base_url=str(root / "metadata"),
+        targets_base_url=str(root / "targets"),
+        trusted_root_path=str(root / "trusted-root.json"),
+        enabled=True,
+        official=False,
+        allow_download=True,
+        allow_install=True,
+        status="configured",
+    )
+
+
+def plugin_distribution_health_payload() -> dict[str, Any]:
+    health = PluginDistributionIntegrityService(_plugin_distribution_root(), _plugin_quarantine_root()).health()
+    return {
+        "health": asdict(health),
+        "labels": [
+            "Registry metadata verified",
+            "Artifact hash verified",
+            "Signature valid",
+            "Publisher identity matched",
+            "SDK compatible",
+            "Static checks passed",
+            "Installed disabled",
+            "Enabled",
+            "Community maintained",
+            "Official/builtin",
+        ],
+        "warning": "signed != safe; compatible != trustworthy; installed != enabled; enabled != official",
+    }
+
+
+def plugin_distribution_integrity_payload() -> dict[str, Any]:
+    service = PluginDistributionIntegrityService(_plugin_distribution_root(), _plugin_quarantine_root())
+    return {"issues": [asdict(item) for item in service.scan_installs() + service.scan_cache()]}
+
+
+def plugin_registry_payload(plugin_id: str | None = None) -> dict[str, Any]:
+    service = PluginRegistryService(_fixture_registry_source(), _plugin_distribution_cache())
+    entries = service.list_plugins()
+    if plugin_id:
+        entries = [item for item in entries if item.plugin_id == plugin_id]
+        return {"plugin": asdict(entries[0]) if entries else None}
+    return {"plugins": [asdict(item) for item in entries]}
+
+
+def plugin_installed_payload(plugin_id: str | None = None) -> dict[str, Any]:
+    rows = PluginInstallationService(_plugin_distribution_root()).list_installed()
+    safe_rows = [
+        {
+            "plugin_id": row.get("plugin_id"),
+            "plugin_version": row.get("plugin_version"),
+            "release_id": row.get("release_id"),
+            "install_status": row.get("install_status"),
+            "permissions": row.get("permissions", []),
+            "installed_at": row.get("installed_at"),
+            "enabled_at": row.get("enabled_at"),
+            "artifact_sha256": str(row.get("artifact_sha256", ""))[:16],
+        }
+        for row in rows
+        if not plugin_id or row.get("plugin_id") == plugin_id
+    ]
+    return {"plugins": safe_rows} if not plugin_id else {"plugin": safe_rows}
+
+
 def render_plugins_page() -> str:
-    payload = plugin_compatibility_payload()
-    cards = []
-    for plugin in payload["plugins"]:
+    builtin_payload = plugin_compatibility_payload()
+    registry_payload = plugin_registry_payload()
+    installed_payload = plugin_installed_payload()
+    health = plugin_distribution_health_payload()["health"]
+    sections = [
+        "<nav class='tabs'><span>installed</span><span>available</span><span>updates</span><span>quarantined</span><span>registry health</span></nav>",
+        f"<article class='panel'><h3>Distribution</h3><p>{html.escape(health['status'])} · framework {html.escape(PLUGIN_DISTRIBUTION_FRAMEWORK_VERSION)}</p><p>signed != safe · installed != enabled · activation requires restart</p></article>",
+    ]
+    for row in installed_payload["plugins"]:
+        perms = "".join(
+            f"<span class='pill muted'>{html.escape(str(perm))}</span>" for perm in row.get("permissions", [])
+        )
+        sections.append(
+            "<article class='panel plugin-card'>"
+            f"<h3>{html.escape(str(row['plugin_id']))}</h3>"
+            f"<p>{html.escape(str(row['plugin_version']))} · {html.escape(str(row['install_status']))} · artifact {html.escape(str(row['artifact_sha256']))}</p>"
+            f"<div class='pill-row'>{perms}</div>"
+            "<p>Actions remain separate: download and verify, review, install disabled, enable after restart.</p>"
+            "</article>"
+        )
+    for plugin in builtin_payload["plugins"]:
         caps = "".join(f"<span class='pill'>{html.escape(cap)}</span>" for cap in plugin["capabilities"])
         perms = "".join(f"<span class='pill muted'>{html.escape(perm)}</span>" for perm in plugin["permissions"])
         warnings = ", ".join(plugin["warnings"]) or "none"
-        cards.append(
+        sections.append(
             "<article class='panel plugin-card'>"
             f"<h3>{html.escape(plugin['plugin_id'])}</h3>"
             f"<p>{html.escape(plugin['version'])} · {html.escape(plugin['distribution'])} · {html.escape(plugin['compatibility'])}</p>"
@@ -2587,7 +2693,17 @@ def render_plugins_page() -> str:
             f"<p>Warnings: {html.escape(warnings)}</p>"
             "</article>"
         )
-    return "<section class='stack plugin-admin'>" + "".join(cards) + "</section>"
+    for entry in registry_payload["plugins"]:
+        caps = "".join(f"<span class='pill'>{html.escape(cap)}</span>" for cap in entry["capabilities"])
+        sections.append(
+            "<article class='panel plugin-card'>"
+            f"<h3>{html.escape(entry['plugin_id'])}</h3>"
+            f"<p>{html.escape(entry['latest_version'])} · {html.escape(entry['distribution_status'])} · {html.escape(entry['sdk_compatibility'])}</p>"
+            f"<div class='pill-row'>{caps}</div>"
+            f"<p>Publisher identity: {html.escape(entry['signer_identity_summary'])}</p>"
+            "</article>"
+        )
+    return "<section class='stack plugin-admin'>" + "".join(sections) + "</section>"
 
 
 def render_main_content(
@@ -3812,6 +3928,48 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     status=HTTPStatus.BAD_REQUEST,
                 )
                 return
+        if parsed.path == "/api/plugin-distribution/health":
+            json_response(self, plugin_distribution_health_payload())
+            return
+        if parsed.path == "/api/plugin-distribution/integrity":
+            json_response(self, plugin_distribution_integrity_payload())
+            return
+        if parsed.path == "/api/plugin-registry/sources":
+            json_response(self, {"sources": [asdict(_fixture_registry_source())]})
+            return
+        if parsed.path == "/api/plugin-registry/plugins":
+            json_response(self, plugin_registry_payload())
+            return
+        if parsed.path.startswith("/api/plugin-registry/plugins/"):
+            suffix = parsed.path.removeprefix("/api/plugin-registry/plugins/")
+            if suffix.endswith("/releases"):
+                plugin_id = suffix.removesuffix("/releases")
+                payload = plugin_registry_payload(plugin_id)
+                versions = payload.get("plugin", {}).get("available_versions", []) if payload.get("plugin") else []
+                json_response(self, {"releases": versions})
+                return
+            json_response(self, plugin_registry_payload(suffix))
+            return
+        if parsed.path.startswith("/api/plugin-registry/releases/") and parsed.path.endswith("/verification"):
+            release_id = parsed.path.removeprefix("/api/plugin-registry/releases/").removesuffix("/verification")
+            json_response(self, {"release_id": release_id, "status": "metadata_only", "code_imported": False})
+            return
+        if parsed.path.startswith("/api/plugin-registry/downloads/"):
+            json_response(
+                self,
+                {
+                    "download_id": parsed.path.rsplit("/", maxsplit=1)[-1],
+                    "status": "metadata_only",
+                    "code_imported": False,
+                },
+            )
+            return
+        if parsed.path == "/api/plugins/installed":
+            json_response(self, plugin_installed_payload())
+            return
+        if parsed.path.startswith("/api/plugins/installed/"):
+            json_response(self, plugin_installed_payload(parsed.path.removeprefix("/api/plugins/installed/")))
+            return
         if parsed.path == "/api/plugin-sdk/version":
             json_response(self, plugin_sdk_version_payload())
             return
@@ -4690,6 +4848,126 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length).decode("utf-8")
+        if path == "/api/plugin-registry/refresh":
+            try:
+                payload = PluginRegistryService(_fixture_registry_source(), _plugin_distribution_cache()).refresh()
+                json_response(self, {"status": "refreshed", "roles": sorted(k for k in payload if k != "refreshed_at")})
+            except Exception as exc:
+                json_response(
+                    self,
+                    {
+                        "error": {
+                            "code": getattr(exc, "code", "plugin.registry.error"),
+                            "message": str(getattr(exc, "safe_message", str(exc))),
+                        }
+                    },
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            return
+        if path.startswith("/api/plugin-registry/releases/") and path.endswith("/download"):
+            release_id = path.removeprefix("/api/plugin-registry/releases/").removesuffix("/download")
+            try:
+                artifact = PluginRegistryService(
+                    _fixture_registry_source(), _plugin_distribution_cache()
+                ).download_to_quarantine(release_id, _plugin_quarantine_root())
+                json_response(
+                    self,
+                    {
+                        "download_id": release_id,
+                        "status": "downloaded_quarantined",
+                        "artifact_hash_prefix": artifact.name.removeprefix("artifact-").removesuffix(".whl"),
+                    },
+                )
+            except Exception as exc:
+                json_response(
+                    self,
+                    {
+                        "error": {
+                            "code": getattr(exc, "code", "plugin.download.error"),
+                            "message": str(getattr(exc, "safe_message", str(exc))),
+                        }
+                    },
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            return
+        if path.startswith("/api/plugin-registry/downloads/"):
+            json_response(self, {"download_id": path.rsplit("/", maxsplit=1)[-1], "status": "metadata_only"})
+            return
+        if path == "/api/plugins/install":
+            form = parse_qs(body)
+            release_id = form_value(form, "release_id")
+            actor = form_value(form, "actor", "dashboard")
+            reason = form_value(form, "reason", "explicit dashboard install")
+            confirmed = form_value(form, "permission_confirmed") == "true"
+            release_dir = ROOT_DIR / "integrations" / "plugin_registry" / "releases" / release_id
+            try:
+                record = PluginInstallationService(_plugin_distribution_root()).install_verified_release(
+                    release_dir, actor=actor, reason=reason, permission_confirmed=confirmed
+                )
+                json_response(self, {"install": asdict(record)})
+            except Exception as exc:
+                json_response(
+                    self,
+                    {
+                        "error": {
+                            "code": getattr(exc, "code", "plugin.install.error"),
+                            "message": str(getattr(exc, "safe_message", str(exc))),
+                        }
+                    },
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            return
+        if path.startswith("/api/plugins/"):
+            suffix = path.removeprefix("/api/plugins/")
+            parts = suffix.split("/")
+            plugin_id = parts[0]
+            action = parts[1] if len(parts) > 1 else ""
+            form = parse_qs(body)
+            actor = form_value(form, "actor", "dashboard")
+            reason = form_value(form, "reason", "explicit dashboard action")
+            service = PluginInstallationService(_plugin_distribution_root())
+            try:
+                if action == "enable":
+                    version = form_value(form, "version")
+                    payload = service.request_activation(
+                        plugin_id,
+                        version,
+                        actor=actor,
+                        reason=reason,
+                        permission_confirmed=form_value(form, "permission_confirmed") == "true",
+                    )
+                    json_response(self, payload)
+                    return
+                if action == "disable":
+                    json_response(self, service.disable(plugin_id, actor=actor, reason=reason))
+                    return
+                if action == "rollback":
+                    json_response(
+                        self, service.rollback(plugin_id, form_value(form, "version"), actor=actor, reason=reason)
+                    )
+                    return
+                if action == "uninstall":
+                    json_response(
+                        self, service.uninstall(plugin_id, form_value(form, "version"), actor=actor, reason=reason)
+                    )
+                    return
+                if action == "verify":
+                    json_response(
+                        self, {"verified": service.verify_installed_files(plugin_id, form_value(form, "version"))}
+                    )
+                    return
+            except Exception as exc:
+                json_response(
+                    self,
+                    {
+                        "error": {
+                            "code": getattr(exc, "code", "plugin.action.error"),
+                            "message": str(getattr(exc, "safe_message", str(exc))),
+                        }
+                    },
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
         if path.startswith("/api/channels/mastodon"):
             form = parse_qs(body)
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)

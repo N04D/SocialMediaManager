@@ -1,0 +1,57 @@
+{
+  "expires": "2036-07-18T22:40:18.253449+00:00",
+  "role": "targets",
+  "targets": [
+    {
+      "artifacttype": "wheel",
+      "capabilities": [
+        "channel.status",
+        "channel.health",
+        "channel.publish.text",
+        "channel.publish.image",
+        "channel.metrics.collect"
+      ],
+      "description": "Fixture community channel plugin.",
+      "distribution_status": "experimental",
+      "hashes": {
+        "compatibility_report_sha256": "59f559f992cab29440e0a4bf7864d8114d0727fd2d0590dc79202a02b207a49c",
+        "release_metadata_sha256": "39d500be45bf1a4383eab32cb628cdbc95cb91babcb1853b6adcd8e2fb29ebe2",
+        "sbom_sha256": "ffc7856df93d9c8357e1b459fc5bf71583688f217e826ec46ad8cdecb8ae8571",
+        "sigstore_sha256": "95f89218709aa81ac75249c1168575446342b2cb53193864287ae40258d754ed"
+      },
+      "license": "MIT",
+      "maintainers": [
+        {
+          "contact_reference": "project issue tracker",
+          "name": "Plugin maintainer",
+          "role": "maintainer"
+        }
+      ],
+      "name": "Example",
+      "path": "channel_example-0.1.0-py3-none-any.whl",
+      "permissions": [
+        "account_configuration",
+        "analytics_ingestion",
+        "execution_reporting",
+        "media_materialization",
+        "media_read",
+        "outbound_network",
+        "secret_storage"
+      ],
+      "plugin_id": "channel.example",
+      "plugin_version": "0.1.0",
+      "published_at": "2026-07-21T22:40:18.228144+00:00",
+      "release_channel": "experimental",
+      "release_id": "channel.example-0.1.0",
+      "revoked": false,
+      "sdk_compatibility": "compatible",
+      "sdk_version": "1.0.0",
+      "sha256": "4e738d98273b2e474a8e65d0acc533b3c79a79d37a9f3ae7fe55636394e5c1cb",
+      "signer_identity_summary": "GitHub Actions fixture identity",
+      "signer_policy": "fixture-policy",
+      "size": 8120,
+      "yanked": false
+    }
+  ],
+  "version": 1
+}

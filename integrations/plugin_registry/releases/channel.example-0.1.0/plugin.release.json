@@ -1,0 +1,62 @@
+{
+  "capabilities": [
+    "channel.status",
+    "channel.health",
+    "channel.publish.text",
+    "channel.publish.image",
+    "channel.metrics.collect"
+  ],
+  "compatibility_report_sha256": "2bfead2f4f4c10f40eb50f06606043aa50dbba2f308814f5184120888647c92f",
+  "distribution_name": "channel_example",
+  "distribution_status": "experimental",
+  "distribution_version": "0.1.0",
+  "entrypoint_group": "social_media_manager.plugins",
+  "entrypoint_name": "channel.example",
+  "entrypoint_object": "channel_example.plugin:create_plugin",
+  "framework_contract_versions": {
+    "channel": "1.0"
+  },
+  "maintainers": [
+    {
+      "contact_reference": "project issue tracker",
+      "name": "Plugin maintainer",
+      "role": "maintainer"
+    }
+  ],
+  "manifest_sha256": "934ebd81f0d839bacaa2849cc45f912a5aa3d42b24369818e93e949b8d4f71aa",
+  "maximum_host_version": "",
+  "maximum_readable_state_version": "1.0",
+  "metadata": {},
+  "migration_required": false,
+  "minimum_host_version": "",
+  "minimum_readable_state_version": "1.0",
+  "permissions": [
+    "account_configuration",
+    "analytics_ingestion",
+    "execution_reporting",
+    "media_materialization",
+    "media_read",
+    "outbound_network",
+    "secret_storage"
+  ],
+  "plugin_id": "channel.example",
+  "plugin_sdk_version": "1.0.0",
+  "plugin_version": "0.1.0",
+  "published_at": "2026-07-21T22:40:18.228144+00:00",
+  "python_requires": ">=3.12",
+  "release_channel": "experimental",
+  "release_id": "channel.example-0.1.0",
+  "revoked_at": "",
+  "rollback_supported": true,
+  "sbom_sha256": "ffc7856df93d9c8357e1b459fc5bf71583688f217e826ec46ad8cdecb8ae8571",
+  "schema_version": "1.0",
+  "signer_policy_id": "fixture-policy",
+  "state_schema_version": "1.0",
+  "wheel_filename": "channel_example-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "4e738d98273b2e474a8e65d0acc533b3c79a79d37a9f3ae7fe55636394e5c1cb",
+  "wheel_size": 8120,
+  "wheel_tags": [
+    "py3-none-any"
+  ],
+  "yanked_at": ""
+}

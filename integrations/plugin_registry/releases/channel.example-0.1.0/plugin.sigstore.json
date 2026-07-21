@@ -1,0 +1,8 @@
+{
+  "artifact_sha256": "4e738d98273b2e474a8e65d0acc533b3c79a79d37a9f3ae7fe55636394e5c1cb",
+  "certificate_identity": "https://github.com/example/channel-example/.github/workflows/release.yml@refs/tags/v0.1.0",
+  "certificate_issuer": "https://token.actions.githubusercontent.com",
+  "schema_version": "fixture.sigstore.v1",
+  "signed_timestamp_verified": true,
+  "transparency_log_verified": true
+}
