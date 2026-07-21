@@ -252,6 +252,16 @@ def dispatch_due_publication_targets(config: AppConfig, *, worker_id: str) -> in
     return len(result.get("dispatched", []))
 
 
+def materialize_due_publication_schedules(config: AppConfig) -> int:
+    runtime = get_plugin_runtime(config, reset=False, strict=True)
+    result = runtime.schedule_materialization_service(config).materialize_due_horizon(
+        batch_size=25,
+        dry_run=False,
+        actor="worker",
+    )
+    return len(result.get("materialized", []))
+
+
 def process_queue(config: AppConfig) -> int:
     records = load_schedule()
     due_record = next_due_record(records, datetime.now())
@@ -383,7 +393,8 @@ def main() -> int:
             )
             return 0
         if args.once:
-            processed = dispatch_due_publication_targets(config, worker_id=worker_id)
+            processed = materialize_due_publication_schedules(config)
+            processed += dispatch_due_publication_targets(config, worker_id=worker_id)
             processed += process_channel_jobs(
                 config,
                 channel_id=args.channel_id or None,
@@ -404,7 +415,8 @@ def main() -> int:
                     status="idle",
                     started_at=started_at,
                 )
-            processed = dispatch_due_publication_targets(config, worker_id=worker_id)
+            processed = materialize_due_publication_schedules(config)
+            processed += dispatch_due_publication_targets(config, worker_id=worker_id)
             processed += process_channel_jobs(
                 config,
                 channel_id=args.channel_id or None,

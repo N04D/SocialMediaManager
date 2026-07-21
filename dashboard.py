@@ -127,6 +127,7 @@ ROUTE_INSTAGRAM = "/instagram"
 ROUTE_CONFIG = "/config"
 ROUTE_MEDIA = "/media-library"
 ROUTE_CONTENT_PLANS = "/content-plans"
+ROUTE_CONTENT_CALENDAR = "/content-calendar"
 VALID_ROUTES = {
     ROUTE_EDITOR,
     ROUTE_DRAFTS,
@@ -137,6 +138,7 @@ VALID_ROUTES = {
     ROUTE_CONFIG,
     ROUTE_MEDIA,
     ROUTE_CONTENT_PLANS,
+    ROUTE_CONTENT_CALENDAR,
 }
 
 SIDEBAR_ITEMS = [
@@ -148,6 +150,7 @@ SIDEBAR_ITEMS = [
     (ROUTE_STATS, "stats", "Stats", "ST"),
     (ROUTE_MEDIA, "media", "Media", "ML"),
     (ROUTE_CONTENT_PLANS, "content", "Plans", "PL"),
+    (ROUTE_CONTENT_CALENDAR, "scheduler", "Calendar", "CA"),
     (ROUTE_CONFIG, "config", "Config", "CF"),
 ]
 
@@ -507,6 +510,125 @@ def _safe_attempt_payload(attempt) -> dict[str, Any]:
         "mutation_state": attempt.mutation_state,
         "remote_verification_state": attempt.remote_verification_state,
         "cleanup_state": attempt.cleanup_state,
+    }
+
+
+def _safe_schedule_payload(schedule) -> dict[str, Any]:
+    return {
+        "id": schedule.id,
+        "workspace_id": schedule.workspace_id,
+        "name": schedule.name,
+        "description": schedule.description,
+        "status": schedule.status,
+        "timezone": schedule.timezone,
+        "starts_at_local": schedule.starts_at_local,
+        "starts_at_utc": schedule.starts_at_utc,
+        "recurrence_rule_id": schedule.recurrence_rule_id,
+        "schedule_policy_id": schedule.schedule_policy_id,
+        "template_snapshot_id": schedule.template_snapshot_id,
+        "authorization_id": schedule.authorization_id,
+        "campaign_id": schedule.campaign_id,
+        "next_occurrence_at": schedule.next_occurrence_at,
+        "last_occurrence_at": schedule.last_occurrence_at,
+        "materialized_until": schedule.materialized_until,
+        "generation_version": schedule.generation_version,
+        "created_at": schedule.created_at,
+        "updated_at": schedule.updated_at,
+        "paused_at": schedule.paused_at,
+        "pause_reason": schedule.pause_reason,
+        "cancelled_at": schedule.cancelled_at,
+        "cancellation_reason": schedule.cancellation_reason,
+    }
+
+
+def _safe_occurrence_payload(occurrence) -> dict[str, Any]:
+    return {
+        "id": occurrence.id,
+        "workspace_id": occurrence.workspace_id,
+        "schedule_id": occurrence.schedule_id,
+        "campaign_id": occurrence.campaign_id,
+        "occurrence_key": occurrence.occurrence_key[:16],
+        "generation_version": occurrence.generation_version,
+        "sequence_number": occurrence.sequence_number,
+        "scheduled_at_local": occurrence.scheduled_at_local,
+        "timezone": occurrence.timezone,
+        "scheduled_at_utc": occurrence.scheduled_at_utc,
+        "status": occurrence.status,
+        "source_template_snapshot_id": occurrence.source_template_snapshot_id,
+        "template_snapshot_checksum": occurrence.template_snapshot_checksum[:16],
+        "publication_plan_id": occurrence.publication_plan_id,
+        "publication_target_ids": list(occurrence.publication_target_ids or []),
+        "authorization_id": occurrence.authorization_id,
+        "materialized_at": occurrence.materialized_at,
+        "completed_at": occurrence.completed_at,
+        "skipped_at": occurrence.skipped_at,
+        "skip_reason": occurrence.skip_reason,
+        "blocked_reason": occurrence.blocked_reason,
+    }
+
+
+def _safe_authorization_payload(authorization) -> dict[str, Any]:
+    return {
+        "id": authorization.id,
+        "workspace_id": authorization.workspace_id,
+        "schedule_id": authorization.schedule_id,
+        "template_snapshot_checksum": authorization.template_snapshot_checksum[:16],
+        "authorized_by": authorization.authorized_by,
+        "authorized_at": authorization.authorized_at,
+        "valid_from": authorization.valid_from,
+        "valid_until": authorization.valid_until,
+        "maximum_occurrences": authorization.maximum_occurrences,
+        "consumed_occurrences": authorization.consumed_occurrences,
+        "allowed_channel_account_ids": list(authorization.allowed_channel_account_ids or []),
+        "allowed_capabilities": list(authorization.allowed_capabilities or []),
+        "status": authorization.status,
+        "revoked_at": authorization.revoked_at,
+        "revoke_reason": authorization.revoke_reason,
+    }
+
+
+def _safe_calendar_entry_payload(entry) -> dict[str, Any]:
+    return {
+        "id": entry.id,
+        "workspace_id": entry.workspace_id,
+        "entry_type": entry.entry_type,
+        "starts_at": entry.starts_at,
+        "ends_at": entry.ends_at,
+        "timezone": entry.timezone,
+        "title": entry.title,
+        "status": entry.status,
+        "channel_plugin_id": entry.channel_plugin_id,
+        "channel_account_id": entry.channel_account_id,
+        "campaign_id": entry.campaign_id,
+        "schedule_id": entry.schedule_id,
+        "occurrence_id": entry.occurrence_id,
+        "plan_id": entry.plan_id,
+        "target_id": entry.target_id,
+        "attempt_id": entry.attempt_id,
+        "attention_required": entry.attention_required,
+        "blockers": list(entry.blockers or []),
+        "safe_summary": entry.safe_summary,
+    }
+
+
+def _safe_campaign_payload(campaign, members: list[Any] | None = None) -> dict[str, Any]:
+    return {
+        "id": campaign.id,
+        "workspace_id": campaign.workspace_id,
+        "name": campaign.name,
+        "description": campaign.description,
+        "status": campaign.status,
+        "starts_at": campaign.starts_at,
+        "ends_at": campaign.ends_at,
+        "timezone": campaign.timezone,
+        "coordination_policy_id": campaign.coordination_policy_id,
+        "created_at": campaign.created_at,
+        "updated_at": campaign.updated_at,
+        "paused_at": campaign.paused_at,
+        "pause_reason": campaign.pause_reason,
+        "cancelled_at": campaign.cancelled_at,
+        "cancellation_reason": campaign.cancellation_reason,
+        "members": [asdict(member) for member in members or []],
     }
 
 
@@ -1978,6 +2100,146 @@ def render_content_planning_page(config: AppConfig) -> str:
     """
 
 
+def render_content_calendar_page(config: AppConfig) -> str:
+    runtime = get_plugin_runtime(config, reset=True, strict=False)
+    scheduling = runtime.schedule_materialization_service(config)
+    calendar_service = runtime.execution_calendar_service(config)
+    campaign_service = runtime.campaign_service(config)
+    workspace_id = "linkedin"
+    now = datetime.now().astimezone()
+    start = (now - timedelta(days=7)).isoformat(timespec="seconds")
+    end = (now + timedelta(days=45)).isoformat(timespec="seconds")
+    schedules = scheduling.schedule_repository.list_all(workspace_id=workspace_id)
+    campaigns = campaign_service.campaign_repository.list_all(workspace_id=workspace_id)
+    entries = calendar_service.list_calendar_entries(
+        workspace_id=workspace_id,
+        start=start,
+        end=end,
+        timezone="Europe/Amsterdam",
+        limit=100,
+    )
+    schedule_rows = "".join(
+        f"""
+        <tr>
+          <td>{html.escape(schedule.name)}</td>
+          <td><code>{html.escape(schedule.id)}</code></td>
+          <td>{html.escape(schedule.status)}</td>
+          <td>{html.escape(schedule.next_occurrence_at or schedule.starts_at_utc)}</td>
+          <td>{html.escape(schedule.timezone)}</td>
+          <td class="inline-actions">
+            <form method="post" action="/content-calendar/materialize"><input type="hidden" name="schedule_id" value="{html.escape(schedule.id)}" /><button type="submit">Materialize</button></form>
+            <form method="post" action="/content-calendar/pause"><input type="hidden" name="schedule_id" value="{html.escape(schedule.id)}" /><button type="submit" class="secondary">Pause</button></form>
+            <form method="post" action="/content-calendar/resume"><input type="hidden" name="schedule_id" value="{html.escape(schedule.id)}" /><button type="submit" class="secondary">Resume</button></form>
+            <form method="post" action="/content-calendar/cancel"><input type="hidden" name="schedule_id" value="{html.escape(schedule.id)}" /><button type="submit" class="danger">Cancel</button></form>
+          </td>
+        </tr>
+        """
+        for schedule in schedules[:25]
+    )
+    entry_rows = "".join(
+        f"""
+        <tr>
+          <td>{html.escape(entry.starts_at)}</td>
+          <td>{html.escape(entry.entry_type)}</td>
+          <td>{html.escape(entry.title)}</td>
+          <td>{html.escape(entry.status)}</td>
+          <td>{"yes" if entry.attention_required else "no"}</td>
+          <td><code>{html.escape(entry.schedule_id or entry.plan_id or entry.target_id)}</code></td>
+        </tr>
+        """
+        for entry in entries
+    )
+    campaign_rows = "".join(
+        f"""
+        <tr>
+          <td>{html.escape(campaign.name)}</td>
+          <td><code>{html.escape(campaign.id)}</code></td>
+          <td>{html.escape(campaign.status)}</td>
+          <td class="inline-actions">
+            <form method="post" action="/content-calendar/campaign-pause"><input type="hidden" name="campaign_id" value="{html.escape(campaign.id)}" /><button type="submit" class="secondary">Pause</button></form>
+            <form method="post" action="/content-calendar/campaign-resume"><input type="hidden" name="campaign_id" value="{html.escape(campaign.id)}" /><button type="submit" class="secondary">Resume</button></form>
+            <form method="post" action="/content-calendar/campaign-cancel"><input type="hidden" name="campaign_id" value="{html.escape(campaign.id)}" /><button type="submit" class="danger">Cancel</button></form>
+          </td>
+        </tr>
+        """
+        for campaign in campaigns[:25]
+    )
+    plan_options = "".join(
+        f'<option value="{html.escape(plan.id)}">{html.escape(plan.name)} · {html.escape(plan.status)}</option>'
+        for plan in runtime.publication_planning_service(config).plan_repository.list_all(workspace_id=workspace_id)
+    )
+    schedule_options = "".join(
+        f'<option value="{html.escape(schedule.id)}">{html.escape(schedule.name)} · {html.escape(schedule.status)}</option>'
+        for schedule in schedules
+    )
+    campaign_options = "".join(
+        f'<option value="{html.escape(campaign.id)}">{html.escape(campaign.name)} · {html.escape(campaign.status)}</option>'
+        for campaign in campaigns
+    )
+    return f"""
+      <div class="page-grid">
+        <div class="stack">
+          <section class="card">
+            <div class="card-heading">
+              <div><h2>Execution Calendar</h2><p class="meta">Read-only range view for occurrences, targets, execution status, and campaign context.</p></div>
+              <div class="inline-actions">
+                <a class="button secondary" href="/api/scheduling/health">Health</a>
+                <a class="button secondary" href="/api/execution-calendar?workspace_id=linkedin">API</a>
+              </div>
+            </div>
+            <table>
+              <thead><tr><th>Starts</th><th>Type</th><th>Title</th><th>Status</th><th>Attention</th><th>Source</th></tr></thead>
+              <tbody>{entry_rows or "<tr><td colspan='6'>No calendar entries in range.</td></tr>"}</tbody>
+            </table>
+          </section>
+          <section class="card">
+            <h2>Schedules</h2>
+            <table>
+              <thead><tr><th>Name</th><th>ID</th><th>Status</th><th>Next</th><th>Timezone</th><th>Actions</th></tr></thead>
+              <tbody>{schedule_rows or "<tr><td colspan='6'>No schedules yet.</td></tr>"}</tbody>
+            </table>
+          </section>
+        </div>
+        <div class="stack">
+          <section class="card">
+            <h2>Create Schedule</h2>
+            <form method="post" action="/content-calendar/create-schedule">
+              <label>Template plan<select name="source_publication_plan_id">{plan_options}</select></label>
+              <label>Name<input name="name" placeholder="Weekly LinkedIn post" /></label>
+              <div class="editor-two-up">
+                <label>Start local<input name="starts_at_local" value="{html.escape(now.replace(hour=9, minute=0, second=0, microsecond=0).isoformat(timespec="seconds"))}" /></label>
+                <label>Timezone<input name="timezone" value="Europe/Amsterdam" /></label>
+              </div>
+              <div class="editor-two-up">
+                <label>Frequency<select name="frequency"><option>daily</option><option>weekly</option><option>monthly</option><option>once</option></select></label>
+                <label>Count<input name="count" type="number" min="1" max="100" value="5" /></label>
+              </div>
+              <label><input type="checkbox" name="bounded_authorization" value="1" /> bounded schedule authorization</label>
+              <button type="submit">Create schedule</button>
+            </form>
+          </section>
+          <section class="card">
+            <h2>Campaigns</h2>
+            <table>
+              <thead><tr><th>Name</th><th>ID</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>{campaign_rows or "<tr><td colspan='4'>No campaigns yet.</td></tr>"}</tbody>
+            </table>
+            <form method="post" action="/content-calendar/create-campaign">
+              <label>Name<input name="name" placeholder="Campaign name" /></label>
+              <button type="submit">Create campaign</button>
+            </form>
+            <form method="post" action="/content-calendar/add-campaign-member">
+              <label>Campaign<select name="campaign_id">{campaign_options}</select></label>
+              <label>Schedule<select name="member_id">{schedule_options}</select></label>
+              <input type="hidden" name="member_type" value="publication_schedule" />
+              <button type="submit" class="secondary">Add schedule</button>
+            </form>
+          </section>
+        </div>
+      </div>
+    """
+
+
 def render_instagram_page() -> str:
     return f"""
       <div class=\"page-grid\"><div class=\"stack\">{render_placeholder_card("Instagram", "Instagram workflow will be configured here later.")}</div></div>
@@ -2104,6 +2366,12 @@ def render_main_content(
             "Content Plans",
             "Canonical content, channel variants, and publication planning",
             render_content_planning_page(config),
+        )
+    if route == ROUTE_CONTENT_CALENDAR:
+        return (
+            "Execution Calendar",
+            "Recurring schedules, occurrences, and campaign coordination",
+            render_content_calendar_page(config),
         )
     assert snapshot is not None
     return (
@@ -3500,6 +3768,129 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
             json_response(self, {"attempt": _safe_attempt_payload(attempt)})
             return
+        if parsed.path == "/api/publication-schedules":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            service = runtime.schedule_materialization_service(self.config)
+            schedules = service.schedule_repository.list_all(workspace_id=query.get("workspace_id", [""])[0])
+            json_response(self, {"schedules": [_safe_schedule_payload(schedule) for schedule in schedules]})
+            return
+        if parsed.path.startswith("/api/publication-schedules/"):
+            parts = [part for part in parsed.path.split("/") if part]
+            query = parse_qs(parsed.query)
+            workspace_id = query.get("workspace_id", ["linkedin"])[0]
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            service = runtime.schedule_materialization_service(self.config)
+            schedule_id = parts[2] if len(parts) > 2 else ""
+            schedule = service.schedule_repository.get(schedule_id)
+            if schedule is None or schedule.workspace_id != workspace_id:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            if len(parts) == 3:
+                authorization = service.authorization_repository.get(schedule.authorization_id)
+                json_response(
+                    self,
+                    {
+                        "schedule": _safe_schedule_payload(schedule),
+                        "authorization": _safe_authorization_payload(authorization) if authorization else {},
+                    },
+                )
+                return
+            if len(parts) == 4 and parts[3] == "occurrences":
+                occurrences = service.occurrence_repository.list_by_schedule(schedule.id)
+                json_response(self, {"occurrences": [_safe_occurrence_payload(item) for item in occurrences]})
+                return
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        if parsed.path.startswith("/api/publication-occurrences/"):
+            occurrence_id = parsed.path.rsplit("/", maxsplit=1)[-1]
+            query = parse_qs(parsed.query)
+            workspace_id = query.get("workspace_id", ["linkedin"])[0]
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            occurrence = runtime.schedule_materialization_service(self.config).occurrence_repository.get(occurrence_id)
+            if occurrence is None or occurrence.workspace_id != workspace_id:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            json_response(self, {"occurrence": _safe_occurrence_payload(occurrence)})
+            return
+        if parsed.path == "/api/campaigns":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            campaign_service = runtime.campaign_service(self.config)
+            campaigns = campaign_service.campaign_repository.list_all(workspace_id=query.get("workspace_id", [""])[0])
+            json_response(
+                self,
+                {
+                    "campaigns": [
+                        _safe_campaign_payload(
+                            campaign, campaign_service.member_repository.list_by_campaign(campaign.id)
+                        )
+                        for campaign in campaigns
+                    ]
+                },
+            )
+            return
+        if parsed.path.startswith("/api/campaigns/"):
+            parts = [part for part in parsed.path.split("/") if part]
+            query = parse_qs(parsed.query)
+            workspace_id = query.get("workspace_id", ["linkedin"])[0]
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            campaign_service = runtime.campaign_service(self.config)
+            campaign_id = parts[1] if len(parts) > 1 else ""
+            campaign = campaign_service.campaign_repository.get(campaign_id)
+            if campaign is None or campaign.workspace_id != workspace_id:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            json_response(
+                self,
+                {
+                    "campaign": _safe_campaign_payload(
+                        campaign, campaign_service.member_repository.list_by_campaign(campaign.id)
+                    )
+                },
+            )
+            return
+        if parsed.path == "/api/execution-calendar":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            calendar_service = runtime.execution_calendar_service(self.config)
+            now = datetime.now().astimezone()
+            entries = calendar_service.list_calendar_entries(
+                workspace_id=query.get("workspace_id", ["linkedin"])[0],
+                start=query.get("start", [(now - timedelta(days=7)).isoformat(timespec="seconds")])[0],
+                end=query.get("end", [(now + timedelta(days=45)).isoformat(timespec="seconds")])[0],
+                timezone=query.get("timezone", ["UTC"])[0],
+                channel_plugin_id=query.get("channel_plugin_id", [""])[0],
+                campaign_id=query.get("campaign_id", [""])[0],
+                status=query.get("status", [""])[0],
+                attention_required=(
+                    query.get("attention_required", [""])[0].lower() in {"1", "true"}
+                    if query.get("attention_required", [""])[0]
+                    else None
+                ),
+                limit=int(query.get("limit", ["200"])[0] or 200),
+            )
+            json_response(self, {"entries": [_safe_calendar_entry_payload(entry) for entry in entries]})
+            return
+        if parsed.path == "/api/scheduling/health":
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            json_response(
+                self,
+                {
+                    "scheduling": runtime.schedule_materialization_service(self.config).health_check(),
+                    "calendar": runtime.execution_calendar_service(self.config).health_check(),
+                    "campaigns": runtime.campaign_service(self.config).health_check(),
+                },
+            )
+            return
+        if parsed.path == "/api/scheduling/integrity":
+            query = parse_qs(parsed.query)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            issues = runtime.schedule_materialization_service(self.config).scan_integrity(
+                workspace_id=query.get("workspace_id", [""])[0]
+            )
+            json_response(self, {"issues": issues})
+            return
         if parsed.path == "/api/media/library/health":
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)
             json_response(self, {"health": runtime.media_library_service(self.config).health_check()})
@@ -3864,6 +4255,313 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_response(HTTPStatus.SEE_OTHER)
             self.send_header("Location", ROUTE_CONTENT_PLANS)
             self.end_headers()
+            return
+        if path.startswith("/content-calendar/"):
+            form = parse_qs(body)
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            scheduling = runtime.schedule_materialization_service(self.config)
+            campaigns = runtime.campaign_service(self.config)
+            workspace_id = form.get("workspace_id", ["linkedin"])[0]
+            try:
+                if path == "/content-calendar/create-schedule":
+                    policy = {}
+                    if form.get("bounded_authorization", [""])[0]:
+                        policy["authorization_policy"] = "bounded_schedule_authorization"
+                    frequency = form.get("frequency", ["daily"])[0]
+                    recurrence = {
+                        "frequency": frequency,
+                        "interval": int(form.get("interval", ["1"])[0] or 1),
+                        "count": int(form.get("count", ["5"])[0] or 5),
+                    }
+                    if frequency == "weekly":
+                        recurrence["by_weekday"] = [
+                            datetime.fromisoformat(form.get("starts_at_local", [""])[0]).weekday()
+                        ]
+                    if frequency == "monthly":
+                        recurrence["by_month_day"] = [datetime.fromisoformat(form.get("starts_at_local", [""])[0]).day]
+                    schedule = scheduling.create_schedule(
+                        workspace_id=workspace_id,
+                        name=form.get("name", [""])[0],
+                        starts_at_local=form.get("starts_at_local", [""])[0],
+                        timezone=form.get("timezone", ["UTC"])[0],
+                        recurrence=recurrence,
+                        source_publication_plan_id=form.get("source_publication_plan_id", [""])[0],
+                        created_by="dashboard",
+                        policy=policy,
+                    )
+                    scheduling.activate_schedule(schedule.id, workspace_id=workspace_id, actor="dashboard")
+                elif path == "/content-calendar/materialize":
+                    scheduling.materialize_schedule(
+                        form.get("schedule_id", [""])[0],
+                        workspace_id=workspace_id,
+                        batch_size=25,
+                        actor="dashboard",
+                    )
+                elif path == "/content-calendar/pause":
+                    scheduling.pause_schedule(
+                        form.get("schedule_id", [""])[0],
+                        workspace_id=workspace_id,
+                        actor="dashboard",
+                        reason="dashboard",
+                    )
+                elif path == "/content-calendar/resume":
+                    scheduling.resume_schedule(
+                        form.get("schedule_id", [""])[0],
+                        workspace_id=workspace_id,
+                        actor="dashboard",
+                    )
+                elif path == "/content-calendar/cancel":
+                    scheduling.cancel_schedule(
+                        form.get("schedule_id", [""])[0],
+                        workspace_id=workspace_id,
+                        actor="dashboard",
+                        reason="dashboard",
+                    )
+                elif path == "/content-calendar/create-campaign":
+                    campaigns.create_campaign(
+                        workspace_id=workspace_id,
+                        name=form.get("name", ["Campaign"])[0],
+                        created_by="dashboard",
+                    )
+                elif path == "/content-calendar/add-campaign-member":
+                    campaigns.add_member(
+                        form.get("campaign_id", [""])[0],
+                        workspace_id=workspace_id,
+                        member_type=form.get("member_type", ["publication_schedule"])[0],
+                        member_id=form.get("member_id", [""])[0],
+                    )
+                elif path == "/content-calendar/campaign-pause":
+                    campaigns.pause_campaign(
+                        form.get("campaign_id", [""])[0],
+                        workspace_id=workspace_id,
+                        actor="dashboard",
+                        reason="dashboard",
+                    )
+                elif path == "/content-calendar/campaign-resume":
+                    campaigns.resume_campaign(
+                        form.get("campaign_id", [""])[0],
+                        workspace_id=workspace_id,
+                        actor="dashboard",
+                    )
+                elif path == "/content-calendar/campaign-cancel":
+                    campaigns.cancel_campaign(
+                        form.get("campaign_id", [""])[0],
+                        workspace_id=workspace_id,
+                        actor="dashboard",
+                        reason="dashboard",
+                    )
+                else:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+            except Exception:
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", ROUTE_CONTENT_CALENDAR)
+                self.end_headers()
+                return
+            self.send_response(HTTPStatus.SEE_OTHER)
+            self.send_header("Location", ROUTE_CONTENT_CALENDAR)
+            self.end_headers()
+            return
+        if (
+            path.startswith("/api/publication-schedules")
+            or path.startswith("/api/campaigns")
+            or path.startswith("/api/scheduling")
+        ):
+            try:
+                payload = json.loads(body) if body.strip() else {}
+            except json.JSONDecodeError:
+                self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON payload.")
+                return
+            runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+            scheduling = runtime.schedule_materialization_service(self.config)
+            campaigns = runtime.campaign_service(self.config)
+            workspace_id = str(payload.get("workspace_id") or "linkedin")
+            try:
+                if path == "/api/publication-schedules/preview":
+                    preview = scheduling.preview_recurrence(
+                        starts_at_local=str(payload.get("starts_at_local") or ""),
+                        timezone=str(payload.get("timezone") or "UTC"),
+                        recurrence=dict(payload.get("recurrence") or {}),
+                        policy=dict(payload.get("policy") or {}),
+                        maximum=int(payload.get("maximum") or 20),
+                    )
+                    json_response(self, {"preview": preview})
+                    return
+                if path == "/api/publication-schedules":
+                    schedule = scheduling.create_schedule(
+                        workspace_id=workspace_id,
+                        name=str(payload.get("name") or ""),
+                        description=str(payload.get("description") or ""),
+                        starts_at_local=str(payload.get("starts_at_local") or ""),
+                        timezone=str(payload.get("timezone") or "UTC"),
+                        recurrence=dict(payload.get("recurrence") or {}),
+                        source_publication_plan_id=str(payload.get("source_publication_plan_id") or ""),
+                        created_by=str(payload.get("actor") or "api"),
+                        policy=dict(payload.get("policy") or {}),
+                        campaign_id=str(payload.get("campaign_id") or ""),
+                    )
+                    json_response(self, {"schedule": _safe_schedule_payload(schedule)}, status=HTTPStatus.CREATED)
+                    return
+                if path.startswith("/api/publication-schedules/"):
+                    parts = [part for part in path.split("/") if part]
+                    schedule_id = parts[2] if len(parts) > 2 else ""
+                    action = parts[3] if len(parts) > 3 else ""
+                    if len(parts) == 3:
+                        schedule = scheduling.schedule_repository.get(schedule_id)
+                        if schedule is None or schedule.workspace_id != workspace_id:
+                            self.send_error(HTTPStatus.NOT_FOUND)
+                            return
+                        if "status" in payload:
+                            schedule.status = str(payload.get("status") or schedule.status)
+                        if "name" in payload:
+                            schedule.name = str(payload.get("name") or schedule.name)
+                        schedule.generation_version += 1
+                        schedule.updated_at = now_iso()
+                        scheduling.schedule_repository.save(schedule)
+                        json_response(self, {"schedule": _safe_schedule_payload(schedule)})
+                        return
+                    if action == "validate":
+                        json_response(self, scheduling.validate_schedule(schedule_id, workspace_id=workspace_id))
+                        return
+                    if action == "activate":
+                        schedule = scheduling.activate_schedule(
+                            schedule_id, workspace_id=workspace_id, actor=str(payload.get("actor") or "api")
+                        )
+                        json_response(self, {"schedule": _safe_schedule_payload(schedule)})
+                        return
+                    if action == "pause":
+                        schedule = scheduling.pause_schedule(
+                            schedule_id,
+                            workspace_id=workspace_id,
+                            actor=str(payload.get("actor") or "api"),
+                            reason=str(payload.get("reason") or ""),
+                        )
+                        json_response(self, {"schedule": _safe_schedule_payload(schedule)})
+                        return
+                    if action == "resume":
+                        schedule = scheduling.resume_schedule(
+                            schedule_id, workspace_id=workspace_id, actor=str(payload.get("actor") or "api")
+                        )
+                        json_response(self, {"schedule": _safe_schedule_payload(schedule)})
+                        return
+                    if action == "cancel":
+                        schedule = scheduling.cancel_schedule(
+                            schedule_id,
+                            workspace_id=workspace_id,
+                            actor=str(payload.get("actor") or "api"),
+                            reason=str(payload.get("reason") or ""),
+                        )
+                        json_response(self, {"schedule": _safe_schedule_payload(schedule)})
+                        return
+                    if action == "materialize":
+                        json_response(
+                            self,
+                            scheduling.materialize_schedule(
+                                schedule_id,
+                                workspace_id=workspace_id,
+                                batch_size=int(payload.get("batch_size") or 25),
+                                dry_run=bool(payload.get("dry_run", False)),
+                                actor=str(payload.get("actor") or "api"),
+                            ),
+                        )
+                        return
+                    if action == "authorize":
+                        authorization = scheduling.authorize_schedule(
+                            schedule_id,
+                            workspace_id=workspace_id,
+                            actor=str(payload.get("actor") or "api"),
+                            valid_until=str(payload.get("valid_until") or ""),
+                            maximum_occurrences=int(payload.get("maximum_occurrences") or 0),
+                        )
+                        json_response(self, {"authorization": _safe_authorization_payload(authorization)})
+                        return
+                    if action == "revoke-authorization":
+                        authorization = scheduling.revoke_authorization(
+                            schedule_id,
+                            workspace_id=workspace_id,
+                            actor=str(payload.get("actor") or "api"),
+                            reason=str(payload.get("reason") or ""),
+                        )
+                        json_response(self, {"authorization": _safe_authorization_payload(authorization)})
+                        return
+                if path == "/api/campaigns":
+                    campaign = campaigns.create_campaign(
+                        workspace_id=workspace_id,
+                        name=str(payload.get("name") or "Campaign"),
+                        description=str(payload.get("description") or ""),
+                        timezone=str(payload.get("timezone") or "UTC"),
+                        created_by=str(payload.get("actor") or "api"),
+                    )
+                    json_response(self, {"campaign": _safe_campaign_payload(campaign)}, status=HTTPStatus.CREATED)
+                    return
+                if path.startswith("/api/campaigns/"):
+                    parts = [part for part in path.split("/") if part]
+                    campaign_id = parts[1] if len(parts) > 1 else ""
+                    if len(parts) == 2:
+                        campaign = campaigns.campaign_repository.get(campaign_id)
+                        if campaign is None or campaign.workspace_id != workspace_id:
+                            self.send_error(HTTPStatus.NOT_FOUND)
+                            return
+                        if "name" in payload:
+                            campaign.name = str(payload.get("name") or campaign.name)
+                        campaign.updated_at = now_iso()
+                        campaigns.campaign_repository.save(campaign)
+                        json_response(self, {"campaign": _safe_campaign_payload(campaign)})
+                        return
+                    action = parts[2] if len(parts) > 2 else ""
+                    if action == "members" and len(parts) == 3:
+                        member = campaigns.add_member(
+                            campaign_id,
+                            workspace_id=workspace_id,
+                            member_type=str(payload.get("member_type") or "publication_schedule"),
+                            member_id=str(payload.get("member_id") or ""),
+                            position=int(payload.get("position") or 0),
+                            required=bool(payload.get("required", True)),
+                        )
+                        json_response(self, {"member": asdict(member)}, status=HTTPStatus.CREATED)
+                        return
+                    if action == "validate":
+                        campaign = campaigns.derive_status(campaign_id, workspace_id=workspace_id)
+                        json_response(self, {"campaign": _safe_campaign_payload(campaign)})
+                        return
+                    if action == "activate":
+                        campaign = campaigns.activate_campaign(
+                            campaign_id, workspace_id=workspace_id, actor=str(payload.get("actor") or "api")
+                        )
+                        json_response(self, {"campaign": _safe_campaign_payload(campaign)})
+                        return
+                    if action == "pause":
+                        campaign = campaigns.pause_campaign(
+                            campaign_id,
+                            workspace_id=workspace_id,
+                            actor=str(payload.get("actor") or "api"),
+                            reason=str(payload.get("reason") or ""),
+                        )
+                        json_response(self, {"campaign": _safe_campaign_payload(campaign)})
+                        return
+                    if action == "resume":
+                        campaign = campaigns.resume_campaign(
+                            campaign_id, workspace_id=workspace_id, actor=str(payload.get("actor") or "api")
+                        )
+                        json_response(self, {"campaign": _safe_campaign_payload(campaign)})
+                        return
+                    if action == "cancel":
+                        campaign = campaigns.cancel_campaign(
+                            campaign_id,
+                            workspace_id=workspace_id,
+                            actor=str(payload.get("actor") or "api"),
+                            reason=str(payload.get("reason") or ""),
+                        )
+                        json_response(self, {"campaign": _safe_campaign_payload(campaign)})
+                        return
+                    if action == "members" and len(parts) == 4:
+                        campaigns.remove_member(campaign_id, parts[3], workspace_id=workspace_id)
+                        json_response(self, {"removed": True})
+                        return
+            except Exception as exc:
+                self.send_error(HTTPStatus.BAD_REQUEST, getattr(exc, "code", str(exc)))
+                return
+            self.send_error(HTTPStatus.NOT_FOUND)
             return
         if path.startswith("/api/browser-pilots"):
             try:
@@ -5001,6 +5699,21 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_DELETE(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
+        if path.startswith("/api/campaigns/") and "/members/" in path:
+            parts = [part for part in path.split("/") if part]
+            query = parse_qs(parsed.query)
+            try:
+                runtime = get_plugin_runtime(self.config, reset=True, strict=False)
+                runtime.campaign_service(self.config).remove_member(
+                    parts[2],
+                    parts[4],
+                    workspace_id=query.get("workspace_id", ["linkedin"])[0],
+                )
+                json_response(self, {"removed": True})
+                return
+            except Exception:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
         if path.startswith("/api/publication-targets/"):
             target_id = path.rsplit("/", maxsplit=1)[-1]
             query = parse_qs(parsed.query)

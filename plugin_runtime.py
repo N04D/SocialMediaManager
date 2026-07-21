@@ -16,6 +16,7 @@ from plugins.providers.legacy_browser import LegacyBrowserProvider
 from plugins.providers.local_media_storage import LocalMediaStorageProvider
 from publication_execution import PublicationExecutionService
 from publication_planning import PublicationPlanningService
+from publication_scheduling import CampaignService, ExecutionCalendarService, ScheduleMaterializationService
 from src.core.browser.contracts import (
     BROWSER_FRAMEWORK_VERSION,
     BROWSER_PROVIDER_CONTRACT_VERSION,
@@ -256,6 +257,59 @@ class ApplicationPluginRuntime:
             health=service.health_check(),
         )
         return service
+
+    def schedule_materialization_service(self, config: Any):
+        runtime = self.runtimes.get("publication.scheduling.service")
+        if runtime is not None and runtime.services.get("schedule_materialization_service") is not None:
+            return runtime.services["schedule_materialization_service"]
+        planning_service = self.publication_planning_service(config)
+        service = ScheduleMaterializationService(
+            app_runtime=self,
+            config=config,
+            planning_service=planning_service,
+        )
+        calendar_service = ExecutionCalendarService(scheduling_service=service)
+        campaign_service = CampaignService(scheduling_service=service, calendar_service=calendar_service)
+        calendar_service.campaign_service = campaign_service
+        manifest = PluginManifest.from_dict(
+            {
+                "id": "publication.scheduling.service",
+                "name": "Publication Scheduling Service",
+                "version": "0.1.0",
+                "plugin_api_version": 1,
+                "type": "scheduling",
+                "entrypoint": "publication_scheduling",
+                "capabilities": [
+                    "publication.schedules",
+                    "publication.recurrence",
+                    "publication.occurrences",
+                    "publication.calendar",
+                    "publication.campaigns",
+                ],
+                "dependencies": [{"capability": "publication.plans"}, {"capability": "publication.execution"}],
+                "config_schema": {},
+            }
+        )
+        self.runtimes[manifest.id] = PluginRuntime(
+            manifest=manifest,
+            instance=service,
+            status=PluginStatus.READY,
+            services={
+                "schedule_materialization_service": service,
+                "execution_calendar_service": calendar_service,
+                "campaign_service": campaign_service,
+            },
+            health=service.health_check(),
+        )
+        return service
+
+    def execution_calendar_service(self, config: Any):
+        self.schedule_materialization_service(config)
+        return self.get_plugin_service("publication.scheduling.service", "execution_calendar_service")
+
+    def campaign_service(self, config: Any):
+        self.schedule_materialization_service(config)
+        return self.get_plugin_service("publication.scheduling.service", "campaign_service")
 
     def get_plugin_service(self, plugin_id: str, service_name: str, *, require_ready: bool = True) -> Any:
         runtime = self.runtimes.get(plugin_id)
@@ -507,6 +561,7 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
     runtime.content_service(config)
     runtime.publication_planning_service(config)
     runtime.publication_execution_service(config)
+    runtime.schedule_materialization_service(config)
     runtime.errors = startup_errors
     if strict and startup_errors:
         raise RuntimeError("Plugin bootstrap failed: " + "; ".join(startup_errors))
