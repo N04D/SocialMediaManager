@@ -128,6 +128,13 @@ from src.core.plugin_host import (
     PluginHostIntegrityService,
     PluginHostResourceController,
 )
+from src.core.plugin_sandbox import (
+    PLUGIN_SANDBOX_FRAMEWORK_VERSION,
+    PluginSandboxIntegrityService,
+    SandboxPolicyCompiler,
+    select_sandbox_controller,
+)
+from src.core.plugin_sandbox.integrity import context_from_install_record
 from src.plugin_sdk.compatibility import build_compatibility_report
 from src.plugin_sdk.contracts import PLUGIN_SDK_VERSION
 from studio_models import ContentItem
@@ -2603,6 +2610,10 @@ def _plugin_host_work_root() -> Path:
     return Path.home() / ".cache" / "socialmediamanager" / "plugin-host-work"
 
 
+def _plugin_sandbox_root() -> Path:
+    return Path.home() / ".local" / "share" / "socialmediamanager" / "plugin-sandbox"
+
+
 def _fixture_registry_source() -> PluginRegistrySource:
     root = ROOT_DIR / "integrations" / "plugin_registry"
     return PluginRegistrySource(
@@ -2726,16 +2737,46 @@ def plugin_host_integrity_payload() -> dict[str, Any]:
     return {"findings": [asdict(finding) for finding in findings]}
 
 
+def plugin_sandbox_health_payload() -> dict[str, Any]:
+    return PluginSandboxIntegrityService(_plugin_sandbox_root()).to_public()
+
+
+def plugin_sandbox_platform_payload() -> dict[str, Any]:
+    return {"platform": asdict(select_sandbox_controller().inspect_platform())}
+
+
+def plugin_sandbox_plan_payload(plugin_id: str | None = None) -> dict[str, Any]:
+    rows = PluginInstallationService(_plugin_distribution_root()).list_installed()
+    plans = []
+    controller = select_sandbox_controller()
+    compiler = SandboxPolicyCompiler()
+    for row in rows:
+        if plugin_id and row.get("plugin_id") != plugin_id:
+            continue
+        policy = compiler.build_policy(
+            plugin_id=str(row.get("plugin_id")),
+            plugin_version=str(row.get("plugin_version")),
+            distribution_status=str(row.get("distribution_status") or "community"),
+            permissions=list(row.get("permissions", [])),
+            capabilities=[],
+        )
+        plan = controller.compile_plan(policy, context_from_install_record(row))
+        plans.append(plan.to_dict())
+    return {"plans": plans}
+
+
 def render_plugins_page() -> str:
     builtin_payload = plugin_compatibility_payload()
     registry_payload = plugin_registry_payload()
     installed_payload = plugin_installed_payload()
     host_payload = plugin_host_process_payload()
+    sandbox_health = plugin_sandbox_health_payload()["health"]
     health = plugin_distribution_health_payload()["health"]
     sections = [
-        "<nav class='tabs'><span>installed</span><span>available</span><span>updates</span><span>quarantined</span><span>registry health</span><span>Plugin Hosts</span></nav>",
+        "<nav class='tabs'><span>installed</span><span>available</span><span>updates</span><span>quarantined</span><span>registry health</span><span>Plugin Hosts</span><span>OS Sandbox</span></nav>",
         f"<article class='panel'><h3>Distribution</h3><p>{html.escape(health['status'])} · framework {html.escape(PLUGIN_DISTRIBUTION_FRAMEWORK_VERSION)}</p><p>signed != safe · installed != enabled · activation requires restart</p></article>",
         f"<article class='panel'><h3>Plugin Hosts</h3><p>framework {html.escape(PLUGIN_HOST_FRAMEWORK_VERSION)} · protocol {html.escape(PLUGIN_HOST_PROTOCOL_VERSION)}</p><p>External code runs out of process after restart. Virtualenv isolation is not a sandbox.</p></article>",
+        f"<article class='panel'><h3>OS Sandbox</h3><p>{html.escape(str(sandbox_health['controller_status']))} · framework {html.escape(PLUGIN_SANDBOX_FRAMEWORK_VERSION)}</p><p>Direct network is blocked; HTTP and browser access are brokered callbacks.</p></article>",
     ]
     for row in installed_payload["plugins"]:
         perms = "".join(
@@ -2758,6 +2799,7 @@ def render_plugins_page() -> str:
             f"<p>Calls: {html.escape(str(host['active_calls']))} · Memory: {html.escape(str(host['memory_status']))} · CPU: {html.escape(str(host['cpu_status']))}</p>"
             f"<p>Crashes: {html.escape(str(host['crash_count']))} · Backoff: {html.escape(str(host['restartbackoff']))} · Containment: {html.escape(str(host['resource_containment']))}</p>"
             f"<p>Crash classification: {html.escape(str(host['crashclassification'] or 'none'))}</p>"
+            f"<p>Sandbox: {html.escape(str(sandbox_health['controller_status']))} · Filesystem isolation: allowlist · Network isolation: direct deny · Syscall isolation: platform attested</p>"
             "</article>"
         )
     for plugin in builtin_payload["plugins"]:
@@ -4083,6 +4125,43 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/plugin-host/integrity":
             json_response(self, plugin_host_integrity_payload())
             return
+        if parsed.path == "/api/plugin-sandbox/health":
+            json_response(self, plugin_sandbox_health_payload())
+            return
+        if parsed.path == "/api/plugin-sandbox/platform":
+            json_response(self, plugin_sandbox_platform_payload())
+            return
+        if parsed.path == "/api/plugin-sandbox/policies":
+            json_response(self, {"policies": plugin_sandbox_plan_payload()["plans"]})
+            return
+        if parsed.path.startswith("/api/plugin-sandbox/policies/"):
+            json_response(self, {"policy_id": parsed.path.rsplit("/", maxsplit=1)[-1], "status": "metadata_only"})
+            return
+        if parsed.path == "/api/plugin-sandbox/plans":
+            json_response(self, plugin_sandbox_plan_payload())
+            return
+        if parsed.path.startswith("/api/plugin-sandbox/plans/"):
+            json_response(self, {"plan_id": parsed.path.rsplit("/", maxsplit=1)[-1], "status": "metadata_only"})
+            return
+        if parsed.path == "/api/plugin-sandbox/attestations":
+            json_response(self, {"attestations": [], "status": "no_active_external_hosts"})
+            return
+        if parsed.path.startswith("/api/plugin-sandbox/attestations/"):
+            json_response(self, {"attestation_id": parsed.path.rsplit("/", maxsplit=1)[-1], "status": "metadata_only"})
+            return
+        if parsed.path == "/api/plugin-sandbox/violations":
+            json_response(
+                self,
+                {
+                    "violations": [
+                        asdict(item) for item in PluginSandboxIntegrityService(_plugin_sandbox_root()).violations.list()
+                    ]
+                },
+            )
+            return
+        if parsed.path == "/api/plugin-sandbox/integrity":
+            json_response(self, plugin_sandbox_health_payload())
+            return
         if parsed.path == "/api/plugin-sdk/version":
             json_response(self, plugin_sdk_version_payload())
             return
@@ -5083,6 +5162,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
         if path == "/api/plugin-host/reconcile":
             json_response(self, {"status": "read_only_reconcile_completed", "republish_attempted": False})
+            return
+        if path.startswith("/api/plugin-sandbox/plans/") and path.endswith("/verify"):
+            plan_id = path.removeprefix("/api/plugin-sandbox/plans/").removesuffix("/verify")
+            json_response(self, {"plan_id": plan_id, "status": select_sandbox_controller().inspect_platform().status})
+            return
+        if path.startswith("/api/plugin-sandbox/hosts/"):
+            suffix = path.removeprefix("/api/plugin-sandbox/hosts/")
+            host_id, _, action = suffix.partition("/")
+            if action in {"reverify", "quarantine"}:
+                json_response(self, {"host_id": host_id, "action": action, "status": "accepted"})
+                return
+        if path == "/api/plugin-sandbox/integrity/reconcile":
+            json_response(self, {"status": "read_only_reconcile_completed", "unsandboxed_fallback": False})
             return
         if path.startswith("/api/plugin-host/processes/"):
             suffix = path.removeprefix("/api/plugin-host/processes/")

@@ -11,6 +11,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from src.core.plugin_sandbox import (
+    PluginHostProcessSpec,
+    SandboxCompilationContext,
+    SandboxPolicyCompiler,
+    select_sandbox_controller,
+)
 from src.plugin_sdk.contracts import PLUGIN_SDK_VERSION
 
 from .contracts import PLUGIN_HOST_FRAMEWORK_VERSION, PLUGIN_HOST_PROTOCOL_VERSION
@@ -52,6 +58,7 @@ class PluginHostProcess:
         host_workdir: str | Path,
         repo_root: str | Path,
         policy: PluginHostResourcePolicy | None = None,
+        sandbox_development_override: bool = False,
     ) -> None:
         self.plugin_id = plugin_id
         self.plugin_version = plugin_version
@@ -59,6 +66,9 @@ class PluginHostProcess:
         self.host_workdir = Path(host_workdir)
         self.repo_root = Path(repo_root)
         self.policy = policy or PluginHostResourcePolicy()
+        self.sandbox_development_override = sandbox_development_override
+        self.sandbox_controller = select_sandbox_controller(development_override=sandbox_development_override)
+        self.sandbox_attestation = None
         self.resources = PluginHostResourceController(self.policy)
         self.host_id = f"{plugin_id}:{plugin_version}:{uuid.uuid4().hex[:12]}"
         self.process: subprocess.Popen[bytes] | None = None
@@ -86,20 +96,43 @@ class PluginHostProcess:
                     "SMM_PLUGIN_VERSION": self.plugin_version,
                 }
             )
-            self.process = subprocess.Popen(
-                self.environment_manager.start_command(spec),
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=str(self.host_workdir),
-                env=env,
-                shell=False,
-                close_fds=True,
-                preexec_fn=self.resources.preexec_fn(),
-                creationflags=self.resources.creationflags(),
+            self.record.environment_status = spec.status
+            sandbox_policy = SandboxPolicyCompiler().build_policy(
+                plugin_id=self.plugin_id,
+                plugin_version=self.plugin_version,
+                distribution_status="community",
+                permissions=permissions,
+                capabilities=capabilities,
+                development_override=self.sandbox_development_override,
             )
+            sandbox_plan = self.sandbox_controller.compile_plan(
+                sandbox_policy,
+                SandboxCompilationContext(
+                    install_record_id=f"{self.plugin_id}:{self.plugin_version}",
+                    environment_id=spec.environment_checksum,
+                    artifact_checksum=spec.artifact_sha256,
+                    environment_checksum=spec.environment_checksum,
+                    distribution_status="community",
+                    development_override=self.sandbox_development_override,
+                ),
+            )
+            self.sandbox_controller.prepare(sandbox_plan)
+            sandboxed = self.sandbox_controller.launch(
+                sandbox_plan,
+                PluginHostProcessSpec(
+                    argv=self.environment_manager.start_command(spec),
+                    cwd=str(self.host_workdir),
+                    env=env,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                ),
+            )
+            self.sandbox_attestation = self.sandbox_controller.attest(sandboxed, sandbox_plan)
+            self.process = sandboxed.process
             self.record.environment_status = spec.status
             self.record.process_status = "starting"
+            self.record.warnings.extend(list(self.sandbox_attestation.warnings))
             request = PluginHostHandshake(
                 protocol_version=PLUGIN_HOST_PROTOCOL_VERSION,
                 host_runtime_version=PLUGIN_HOST_FRAMEWORK_VERSION,
@@ -262,11 +295,18 @@ class PluginHostProcess:
 
 class PluginHostSupervisor:
     def __init__(
-        self, install_root: str | Path, environment_root: str | Path, host_workdir: str | Path, repo_root: str | Path
+        self,
+        install_root: str | Path,
+        environment_root: str | Path,
+        host_workdir: str | Path,
+        repo_root: str | Path,
+        *,
+        sandbox_development_override: bool = False,
     ):
         self.environment_manager = PluginHostEnvironmentManager(install_root, environment_root)
         self.host_workdir = Path(host_workdir)
         self.repo_root = Path(repo_root)
+        self.sandbox_development_override = sandbox_development_override
         self.hosts: dict[str, PluginHostProcess] = {}
 
     def host_key(self, plugin_id: str, plugin_version: str) -> str:
@@ -294,6 +334,7 @@ class PluginHostSupervisor:
                 environment_manager=self.environment_manager,
                 host_workdir=self.host_workdir / plugin_id / plugin_version,
                 repo_root=self.repo_root,
+                sandbox_development_override=self.sandbox_development_override,
             )
         host = self.hosts[key]
         if host.record.process_status in {"stopped", "not_started"}:

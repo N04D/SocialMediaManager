@@ -1,5 +1,5 @@
 {
-  "expires": "2036-07-21T19:30:51.303228+00:00",
+  "expires": "2036-07-21T21:45:21.004638+00:00",
   "role": "targets",
   "targets": [
     {
@@ -14,10 +14,10 @@
       "description": "Fixture community channel plugin.",
       "distribution_status": "experimental",
       "hashes": {
-        "compatibility_report_sha256": "0aaf3848363e1c25e7a93956869ba2424775b26acb79c9cabc74f18611b077df",
-        "release_metadata_sha256": "69512e77d347b5d72a2068471868bab2394042fecb1987b1249d5c035dbbd960",
-        "sbom_sha256": "cfc5dd85ac2a72dab3ed87602d1fb927d0378b3f3e3f4000dfa38fcbfaaab4e5",
-        "sigstore_sha256": "351e6e50ad9567f99ef322bfcb3a5141f4caadbb4dca4607a2eb2e52ded76500"
+        "compatibility_report_sha256": "b789575da8fe464c3a92e20b04e5995673c55f2d3f088224af0196da7c46ee05",
+        "release_metadata_sha256": "5621e0763dc38390ffa3e23756dd821f0ab4b8ecd7b89eccbe2110bba310e5d4",
+        "sbom_sha256": "dda661e96219fcf93918b0762708f20a3e1f9d58b3d3b7540ea8962a15d17153",
+        "sigstore_sha256": "73994311e606daa8261d7d11c48af95c1ed0eec1b29a0194de1fb44f6e27fc27"
       },
       "license": "MIT",
       "maintainers": [
@@ -40,16 +40,16 @@
       ],
       "plugin_id": "channel.example",
       "plugin_version": "0.1.0",
-      "published_at": "2026-07-24T19:30:51.286687+00:00",
+      "published_at": "2026-07-24T21:45:20.990179+00:00",
       "release_channel": "experimental",
       "release_id": "channel.example-0.1.0",
       "revoked": false,
       "sdk_compatibility": "compatible",
       "sdk_version": "1.0.0",
-      "sha256": "540dc53f96abff89d8f3a0db8ad44bb6d351e8e56bb06778aaf49386aca00107",
+      "sha256": "01e8db95df5e01f4bff513f35dae4c0d38b64bfee3e9d976e3b4e2830f85d7f8",
       "signer_identity_summary": "GitHub Actions fixture identity",
       "signer_policy": "fixture-policy",
-      "size": 8179,
+      "size": 8382,
       "yanked": false
     }
   ],

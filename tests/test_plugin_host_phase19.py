@@ -105,7 +105,9 @@ class PluginHostPhase19Tests(unittest.TestCase):
         active["activation_status"] = "enabled"
         active["plugin_id"] = "channel.example"
         (plugin_root / "active.json").write_text(json.dumps(active))
-        supervisor = PluginHostSupervisor(self.install_root, self.root / "envs", self.root / "work", ROOT)
+        supervisor = PluginHostSupervisor(
+            self.install_root, self.root / "envs", self.root / "work", ROOT, sandbox_development_override=True
+        )
         host = supervisor.ensure_host(
             "channel.example",
             "0.1.0",
@@ -133,7 +135,9 @@ class PluginHostPhase19Tests(unittest.TestCase):
         host.shutdown()
 
     def test_identity_mismatch_quarantines_handshake(self) -> None:
-        supervisor = PluginHostSupervisor(self.install_root, self.root / "envs", self.root / "work", ROOT)
+        supervisor = PluginHostSupervisor(
+            self.install_root, self.root / "envs", self.root / "work", ROOT, sandbox_development_override=True
+        )
         host = supervisor.ensure_host(
             "channel.example",
             "0.1.0",
@@ -322,11 +326,14 @@ class PluginHostPhase19Tests(unittest.TestCase):
 
     def test_process_start_contract_uses_shell_false(self) -> None:
         source = (ROOT / "src/core/plugin_host/supervisor.py").read_text()
-        self.assertIn("shell=False", source)
+        sandbox_source = (ROOT / "src/core/plugin_sandbox/linux/controller.py").read_text()
+        unsupported_source = (ROOT / "src/core/plugin_sandbox/controller.py").read_text()
+        self.assertIn("shell=False", sandbox_source)
+        self.assertIn("shell=False", unsupported_source)
         self.assertIn("stdin=subprocess.PIPE", source)
         self.assertIn("stdout=subprocess.PIPE", source)
         self.assertIn("stderr=subprocess.PIPE", source)
-        self.assertIn("close_fds=True", source)
+        self.assertIn("close_fds=True", sandbox_source)
 
     def test_no_framework_contract_changes(self) -> None:
         result = subprocess.run(

@@ -7,3 +7,7 @@ Core SDK files require core maintainer review. Channel plugin changes require a 
 ## Phase 18 distribution
 
 Package releases as pure-Python wheels only. Do not include native extensions, source distributions, bundled SDK copies, production credentials, or runtime dependency installation. Registry browsing and package verification must not import plugin code. Installation is disabled by default; activation is a separate operator decision and requires restart. Signed does not mean safe.
+
+## Phase 20 sandbox review
+
+Reviewers must verify permission-to-policy mapping, sandbox plan checksum binding, platform attestation, direct network denial, filesystem allowlist, violation handling, and development override audit behavior before approving community activation.

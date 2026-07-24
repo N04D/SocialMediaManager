@@ -16,7 +16,7 @@
   "failed_contract_suites": [],
   "fixture_status": "present",
   "forbidden_imports": [],
-  "generated_at": "2026-07-24T19:30:51.300346+00:00",
+  "generated_at": "2026-07-24T21:45:21.002029+00:00",
   "manifest_schema_version": "1.0",
   "passed_contract_suites": [
     "boundary",

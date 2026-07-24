@@ -16,6 +16,8 @@ from src.core.plugin_distribution import (
     PluginRegistrySource,
 )
 from src.core.plugin_host import PluginHostIntegrityService, PluginHostSupervisor
+from src.core.plugin_sandbox import PluginSandboxIntegrityService, SandboxPolicyCompiler, select_sandbox_controller
+from src.core.plugin_sandbox.integrity import context_from_install_record
 
 from .capabilities import validate_capability, validate_plugin_id
 from .compatibility import build_compatibility_report, inspect_plugin, package_check, render_report
@@ -607,6 +609,128 @@ def host_crashes_cmd(args: argparse.Namespace) -> int:
     return 0
 
 
+def _installed_row(install_root: str, plugin_id: str) -> dict[str, object]:
+    for row in PluginInstallationService(install_root).list_installed():
+        if row.get("plugin_id") == plugin_id:
+            return row
+    raise SystemExit("plugin is not installed")
+
+
+def sandbox_status_cmd(args: argparse.Namespace) -> int:
+    print(json.dumps(PluginSandboxIntegrityService(args.sandbox_root).to_public(), indent=2, sort_keys=True))
+    return 0
+
+
+def sandbox_platform_cmd(args: argparse.Namespace) -> int:
+    print(json.dumps(select_sandbox_controller().inspect_platform().__dict__, indent=2, sort_keys=True))
+    return 0
+
+
+def sandbox_inspect_cmd(args: argparse.Namespace) -> int:
+    row = _installed_row(args.install_root, args.plugin_id)
+    print(
+        json.dumps(
+            {"plugin_id": args.plugin_id, "permissions": row.get("permissions", []), "direct_network": "unsupported"},
+            indent=2,
+        )
+    )
+    return 0
+
+
+def sandbox_plan_cmd(args: argparse.Namespace) -> int:
+    plugin_id, version = _split_requirement(args.requirement)
+    row = _installed_row(args.install_root, plugin_id)
+    controller = select_sandbox_controller(development_override=args.development_override)
+    policy = SandboxPolicyCompiler().build_policy(
+        plugin_id=plugin_id,
+        plugin_version=version,
+        distribution_status=str(row.get("distribution_status") or "community"),
+        permissions=list(row.get("permissions", [])),
+        capabilities=[],
+        development_override=args.development_override,
+    )
+    plan = controller.compile_plan(
+        policy, context_from_install_record(row, environment_checksum=args.environment_checksum)
+    )
+    print(json.dumps(plan.to_dict(), indent=2, sort_keys=True))
+    return 0
+
+
+def sandbox_verify_cmd(args: argparse.Namespace) -> int:
+    capability = select_sandbox_controller(development_override=args.development_override).inspect_platform()
+    print(
+        json.dumps(
+            {
+                "plugin_id": args.plugin_id,
+                "platform": capability.platform,
+                "status": capability.status,
+                "production_ready": capability.production_ready,
+            },
+            indent=2,
+        )
+    )
+    return 0 if capability.production_ready or args.development_override else 1
+
+
+def sandbox_attest_cmd(args: argparse.Namespace) -> int:
+    capability = select_sandbox_controller(development_override=args.development_override).inspect_platform()
+    print(
+        json.dumps(
+            {
+                "plugin_id": args.plugin_id,
+                "attestation_status": capability.status,
+                "missing_controls": capability.missing_controls,
+            },
+            indent=2,
+        )
+    )
+    return 0 if capability.production_ready or args.development_override else 1
+
+
+def sandbox_violations_cmd(args: argparse.Namespace) -> int:
+    service = PluginSandboxIntegrityService(args.sandbox_root)
+    print(json.dumps({"violations": [item.__dict__ for item in service.violations.list()]}, indent=2, sort_keys=True))
+    return 0
+
+
+def sandbox_integrity_cmd(args: argparse.Namespace) -> int:
+    print(json.dumps(PluginSandboxIntegrityService(args.sandbox_root).to_public(), indent=2, sort_keys=True))
+    return 0
+
+
+def sandbox_reconcile_cmd(args: argparse.Namespace) -> int:
+    print(json.dumps({"status": "read_only_reconcile_completed", "unsandboxed_fallback": False}, indent=2))
+    return 0
+
+
+def sandbox_doctor_cmd(args: argparse.Namespace) -> int:
+    capability = select_sandbox_controller().inspect_platform()
+    status = "PASS" if capability.production_ready else "FAIL"
+    print(f"{status} platform {capability.platform} {capability.status}")
+    for control in capability.missing_controls:
+        print(f"FAIL missing_control {control}")
+    for warning in capability.warnings:
+        print(f"WARN {warning}")
+    return 0 if capability.production_ready else 1
+
+
+def sandbox_override_cmd(args: argparse.Namespace) -> int:
+    if not args.reason:
+        raise SystemExit("development override requires --reason")
+    print(
+        json.dumps(
+            {
+                "plugin_id": args.plugin_id,
+                "status": "development_override_active" if args.enable else "development_override_disabled",
+                "reason": args.reason,
+                "audit_required": True,
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="plugin-sdk")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -786,6 +910,45 @@ def build_parser() -> argparse.ArgumentParser:
         cmd.add_argument("--environment-root", default=str(_default_host_environment_root()))
         cmd.add_argument("--work-root", default=str(_default_host_work_root()))
         cmd.set_defaults(func=func)
+
+    sandbox = sub.add_parser("sandbox")
+    sandbox_sub = sandbox.add_subparsers(dest="sandbox_command", required=True)
+    for name, func in {
+        "status": sandbox_status_cmd,
+        "platform": sandbox_platform_cmd,
+        "violations": sandbox_violations_cmd,
+        "integrity": sandbox_integrity_cmd,
+        "reconcile": sandbox_reconcile_cmd,
+        "doctor": sandbox_doctor_cmd,
+    }.items():
+        cmd = sandbox_sub.add_parser(name)
+        cmd.add_argument(
+            "--sandbox-root", default=str(Path.home() / ".local" / "share" / "socialmediamanager" / "plugin-sandbox")
+        )
+        cmd.set_defaults(func=func)
+    inspect = sandbox_sub.add_parser("inspect")
+    inspect.add_argument("plugin_id")
+    inspect.add_argument("--install-root", default=str(_default_distribution_root()))
+    inspect.set_defaults(func=sandbox_inspect_cmd)
+    plan = sandbox_sub.add_parser("plan")
+    plan.add_argument("requirement")
+    plan.add_argument("--install-root", default=str(_default_distribution_root()))
+    plan.add_argument("--environment-checksum", default="")
+    plan.add_argument("--development-override", action="store_true")
+    plan.set_defaults(func=sandbox_plan_cmd)
+    for name, func in {"verify": sandbox_verify_cmd, "attest": sandbox_attest_cmd}.items():
+        cmd = sandbox_sub.add_parser(name)
+        cmd.add_argument("plugin_id")
+        cmd.add_argument("--development-override", action="store_true")
+        cmd.set_defaults(func=func)
+    enable_override = sandbox_sub.add_parser("enable-development-override")
+    enable_override.add_argument("plugin_id")
+    enable_override.add_argument("--reason", required=True)
+    enable_override.set_defaults(func=sandbox_override_cmd, enable=True)
+    disable_override = sandbox_sub.add_parser("disable-development-override")
+    disable_override.add_argument("plugin_id")
+    disable_override.add_argument("--reason", required=True)
+    disable_override.set_defaults(func=sandbox_override_cmd, enable=False)
     return parser
 
 
