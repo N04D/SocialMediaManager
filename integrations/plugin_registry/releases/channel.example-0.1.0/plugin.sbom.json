@@ -62,7 +62,7 @@
     },
     {
       "path": "src/channel_example/plugin.py",
-      "sha256": "c3f8745331c4d9dc3e3637a5dda91e72107c5a52208581aa38fa45076c095c87"
+      "sha256": "d9ef99dbf9ba4981c5450c1a05a48568a8c8910d3d9d0e5a79c93979dbe33e06"
     },
     {
       "path": "src/channel_example/runtime.py",

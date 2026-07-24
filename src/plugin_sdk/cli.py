@@ -15,6 +15,7 @@ from src.core.plugin_distribution import (
     PluginRegistryService,
     PluginRegistrySource,
 )
+from src.core.plugin_host import PluginHostIntegrityService, PluginHostSupervisor
 
 from .capabilities import validate_capability, validate_plugin_id
 from .compatibility import build_compatibility_report, inspect_plugin, package_check, render_report
@@ -130,7 +131,12 @@ from .runtime import ExampleChannelRuntime
 class ExampleChannelPlugin:
     @property
     def manifest(self) -> PluginManifest:
-        return PluginManifest.from_path(Path(__file__).resolve().parents[2] / "channel.manifest.json")
+        current = Path(__file__).resolve()
+        for parent in current.parents:
+            candidate = parent / "channel.manifest.json"
+            if candidate.exists():
+                return PluginManifest.from_path(candidate)
+        raise RuntimeError("channel manifest is missing")
 
     def register(self, context: PluginRegistrationContext) -> None:
         context.register_runtime_factory(self.manifest.id, self.create_runtime)
@@ -257,6 +263,23 @@ def package_check_cmd(args: argparse.Namespace) -> int:
 
 def _default_distribution_root() -> Path:
     return Path.home() / ".local" / "share" / "socialmediamanager" / "plugins"
+
+
+def _default_host_environment_root() -> Path:
+    return Path.home() / ".local" / "share" / "socialmediamanager" / "plugin-host-envs"
+
+
+def _default_host_work_root() -> Path:
+    return Path.home() / ".cache" / "socialmediamanager" / "plugin-host-work"
+
+
+def _host_supervisor(args: argparse.Namespace) -> PluginHostSupervisor:
+    return PluginHostSupervisor(
+        getattr(args, "install_root", str(_default_distribution_root())),
+        getattr(args, "environment_root", str(_default_host_environment_root())),
+        getattr(args, "work_root", str(_default_host_work_root())),
+        Path.cwd(),
+    )
 
 
 def _fixture_registry_source() -> PluginRegistrySource:
@@ -487,6 +510,103 @@ def plugin_verify_installed_cmd(args: argparse.Namespace) -> int:
     return 0
 
 
+def _split_requirement(requirement: str) -> tuple[str, str]:
+    if "==" not in requirement:
+        raise SystemExit("expected <plugin-id>==<version>")
+    return tuple(requirement.split("==", maxsplit=1))  # type: ignore[return-value]
+
+
+def host_list_cmd(args: argparse.Namespace) -> int:
+    rows = PluginInstallationService(args.install_root).list_installed()
+    processes = [
+        {
+            "plugin_id": row.get("plugin_id"),
+            "plugin_version": row.get("plugin_version"),
+            "execution_mode": "external_process",
+            "environment_status": "prepared"
+            if row.get("install_status") in {"installed_disabled", "enabled"}
+            else "missing",
+            "process_status": "stopped",
+            "restart_required": row.get("activation_status") == "activation_pending",
+        }
+        for row in rows
+    ]
+    print(json.dumps({"processes": processes}, indent=2, sort_keys=True))
+    return 0
+
+
+def host_show_cmd(args: argparse.Namespace) -> int:
+    rows = [
+        row
+        for row in PluginInstallationService(args.install_root).list_installed()
+        if row.get("plugin_id") == args.plugin_id
+    ]
+    print(json.dumps({"plugin_id": args.plugin_id, "hosts": rows}, indent=2, sort_keys=True, default=str))
+    return 0
+
+
+def host_prepare_cmd(args: argparse.Namespace) -> int:
+    plugin_id, version = _split_requirement(args.requirement)
+    print(json.dumps(_host_supervisor(args).prepare(plugin_id, version), indent=2, sort_keys=True))
+    return 0
+
+
+def host_verify_cmd(args: argparse.Namespace) -> int:
+    plugin_id, version = _split_requirement(args.requirement)
+    print(json.dumps(_host_supervisor(args).verify(plugin_id, version), indent=2, sort_keys=True))
+    return 0
+
+
+def host_start_cmd(args: argparse.Namespace) -> int:
+    rows = [
+        row
+        for row in PluginInstallationService(args.install_root).list_installed()
+        if row.get("plugin_id") == args.plugin_id
+    ]
+    if not rows:
+        raise SystemExit("plugin is not installed")
+    row = rows[-1]
+    host = _host_supervisor(args).ensure_host(
+        args.plugin_id,
+        str(row.get("plugin_version")),
+        capabilities=list(row.get("permissions", [])),
+        permissions=list(row.get("permissions", [])),
+    )
+    print(json.dumps(host.record.to_public(), indent=2, sort_keys=True))
+    return 0
+
+
+def host_stop_cmd(args: argparse.Namespace) -> int:
+    print(json.dumps({"plugin_id": args.plugin_id, "status": "stop_requested", "restart_required": True}, indent=2))
+    return 0
+
+
+def host_restart_cmd(args: argparse.Namespace) -> int:
+    print(json.dumps({"plugin_id": args.plugin_id, "status": "restart_requested", "hot_swap": False}, indent=2))
+    return 0
+
+
+def host_health_cmd(args: argparse.Namespace) -> int:
+    print(json.dumps(_host_supervisor(args).health(), indent=2, sort_keys=True))
+    return 0
+
+
+def host_integrity_cmd(args: argparse.Namespace) -> int:
+    findings = PluginHostIntegrityService(args.install_root, args.environment_root, args.work_root).scan()
+    print(json.dumps({"findings": [finding.__dict__ for finding in findings]}, indent=2, sort_keys=True))
+    return 0
+
+
+def host_reconcile_cmd(args: argparse.Namespace) -> int:
+    print(json.dumps({"status": "read_only_reconcile_completed", "republish_attempted": False}, indent=2))
+    return 0
+
+
+def host_crashes_cmd(args: argparse.Namespace) -> int:
+    print(json.dumps({"plugin_id": args.plugin_id, "crashes": []}, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="plugin-sdk")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -632,6 +752,40 @@ def build_parser() -> argparse.ArgumentParser:
     verify_installed.add_argument("--version", default="")
     verify_installed.add_argument("--install-root", default=str(_default_distribution_root()))
     verify_installed.set_defaults(func=plugin_verify_installed_cmd)
+
+    host = sub.add_parser("host")
+    host_sub = host.add_subparsers(dest="host_command", required=True)
+    for name, func in {
+        "list": host_list_cmd,
+        "health": host_health_cmd,
+        "integrity": host_integrity_cmd,
+        "reconcile": host_reconcile_cmd,
+    }.items():
+        cmd = host_sub.add_parser(name)
+        cmd.add_argument("--install-root", default=str(_default_distribution_root()))
+        cmd.add_argument("--environment-root", default=str(_default_host_environment_root()))
+        cmd.add_argument("--work-root", default=str(_default_host_work_root()))
+        cmd.set_defaults(func=func)
+    for name, func in {
+        "show": host_show_cmd,
+        "start": host_start_cmd,
+        "stop": host_stop_cmd,
+        "restart": host_restart_cmd,
+        "crashes": host_crashes_cmd,
+    }.items():
+        cmd = host_sub.add_parser(name)
+        cmd.add_argument("plugin_id")
+        cmd.add_argument("--install-root", default=str(_default_distribution_root()))
+        cmd.add_argument("--environment-root", default=str(_default_host_environment_root()))
+        cmd.add_argument("--work-root", default=str(_default_host_work_root()))
+        cmd.set_defaults(func=func)
+    for name, func in {"prepare": host_prepare_cmd, "verify": host_verify_cmd}.items():
+        cmd = host_sub.add_parser(name)
+        cmd.add_argument("requirement")
+        cmd.add_argument("--install-root", default=str(_default_distribution_root()))
+        cmd.add_argument("--environment-root", default=str(_default_host_environment_root()))
+        cmd.add_argument("--work-root", default=str(_default_host_work_root()))
+        cmd.set_defaults(func=func)
     return parser
 
 

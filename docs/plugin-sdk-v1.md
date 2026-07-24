@@ -9,3 +9,7 @@ Lifecycle: discovered -> manifest_validated -> compatibility_checked -> dependen
 ## Phase 18 distribution
 
 Package releases as pure-Python wheels only. Do not include native extensions, source distributions, bundled SDK copies, production credentials, or runtime dependency installation. Registry browsing and package verification must not import plugin code. Installation is disabled by default; activation is a separate operator decision and requires restart. Signed does not mean safe.
+
+## Phase 19 host runtime
+
+The SDK contract remains unchanged. External plugin calls are carried over JSON-RPC to a child process, and application services are exposed through scoped callbacks.

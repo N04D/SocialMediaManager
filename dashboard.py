@@ -122,6 +122,12 @@ from src.core.plugin_distribution import (
     PluginRegistrySource,
 )
 from src.core.plugin_distribution.contracts import PLUGIN_DISTRIBUTION_FRAMEWORK_VERSION
+from src.core.plugin_host import (
+    PLUGIN_HOST_FRAMEWORK_VERSION,
+    PLUGIN_HOST_PROTOCOL_VERSION,
+    PluginHostIntegrityService,
+    PluginHostResourceController,
+)
 from src.plugin_sdk.compatibility import build_compatibility_report
 from src.plugin_sdk.contracts import PLUGIN_SDK_VERSION
 from studio_models import ContentItem
@@ -2589,6 +2595,14 @@ def _plugin_quarantine_root() -> Path:
     return Path.home() / ".cache" / "socialmediamanager" / "plugin-quarantine"
 
 
+def _plugin_host_environment_root() -> Path:
+    return Path.home() / ".local" / "share" / "socialmediamanager" / "plugin-host-envs"
+
+
+def _plugin_host_work_root() -> Path:
+    return Path.home() / ".cache" / "socialmediamanager" / "plugin-host-work"
+
+
 def _fixture_registry_source() -> PluginRegistrySource:
     root = ROOT_DIR / "integrations" / "plugin_registry"
     return PluginRegistrySource(
@@ -2658,14 +2672,70 @@ def plugin_installed_payload(plugin_id: str | None = None) -> dict[str, Any]:
     return {"plugins": safe_rows} if not plugin_id else {"plugin": safe_rows}
 
 
+def plugin_host_process_payload(host_id: str | None = None) -> dict[str, Any]:
+    installed = plugin_installed_payload()["plugins"]
+    processes = []
+    containment = PluginHostResourceController().containment_status()
+    for row in installed:
+        plugin_id = str(row.get("plugin_id") or "")
+        version = str(row.get("plugin_version") or "")
+        current_host_id = f"{plugin_id}=={version}"
+        if host_id and host_id != current_host_id:
+            continue
+        processes.append(
+            {
+                "host_id": current_host_id,
+                "plugin_id": plugin_id,
+                "plugin_version": version,
+                "execution_mode": "external_process",
+                "environment_status": "prepared" if row.get("install_status") else "not_prepared",
+                "process_status": "stopped",
+                "protocol": PLUGIN_HOST_PROTOCOL_VERSION,
+                "heartbeat": "not_started",
+                "active_calls": 0,
+                "memory_status": "not_sampled",
+                "cpu_status": "not_sampled",
+                "crash_count": 0,
+                "restartbackoff": 0,
+                "crashclassification": "",
+                "resource_containment": containment,
+                "warnings": ["venv is not an OS sandbox"],
+            }
+        )
+    return {"processes": processes} if host_id is None else {"process": processes[0] if processes else None}
+
+
+def plugin_host_health_payload() -> dict[str, Any]:
+    processes = plugin_host_process_payload()["processes"]
+    degraded = sum(1 for row in processes if row["resource_containment"] != "enforced")
+    return {
+        "status": "ready" if not degraded else "degraded",
+        "framework_version": PLUGIN_HOST_FRAMEWORK_VERSION,
+        "protocol_version": PLUGIN_HOST_PROTOCOL_VERSION,
+        "active_hosts": len(processes),
+        "degraded_hosts": degraded,
+        "resource_containment": PluginHostResourceController().containment_status(),
+        "warning": "process isolation contains crashes; it is not a full OS sandbox",
+    }
+
+
+def plugin_host_integrity_payload() -> dict[str, Any]:
+    findings = PluginHostIntegrityService(
+        _plugin_distribution_root(), _plugin_host_environment_root(), _plugin_host_work_root()
+    ).scan()
+    return {"findings": [asdict(finding) for finding in findings]}
+
+
 def render_plugins_page() -> str:
     builtin_payload = plugin_compatibility_payload()
     registry_payload = plugin_registry_payload()
     installed_payload = plugin_installed_payload()
+    host_payload = plugin_host_process_payload()
     health = plugin_distribution_health_payload()["health"]
     sections = [
-        "<nav class='tabs'><span>installed</span><span>available</span><span>updates</span><span>quarantined</span><span>registry health</span></nav>",
+        "<nav class='tabs'><span>installed</span><span>available</span><span>updates</span><span>quarantined</span><span>registry health</span><span>Plugin Hosts</span></nav>",
         f"<article class='panel'><h3>Distribution</h3><p>{html.escape(health['status'])} · framework {html.escape(PLUGIN_DISTRIBUTION_FRAMEWORK_VERSION)}</p><p>signed != safe · installed != enabled · activation requires restart</p></article>",
+        f"<article class='panel'><h3>Plugin Hosts</h3><p>framework {html.escape(PLUGIN_HOST_FRAMEWORK_VERSION)} · protocol {html.escape(PLUGIN_HOST_PROTOCOL_VERSION)}</p><p>External code runs out of process after restart. Virtualenv isolation is not a sandbox.</p></article>",
     ]
     for row in installed_payload["plugins"]:
         perms = "".join(
@@ -2677,6 +2747,17 @@ def render_plugins_page() -> str:
             f"<p>{html.escape(str(row['plugin_version']))} · {html.escape(str(row['install_status']))} · artifact {html.escape(str(row['artifact_sha256']))}</p>"
             f"<div class='pill-row'>{perms}</div>"
             "<p>Actions remain separate: download and verify, review, install disabled, enable after restart.</p>"
+            "</article>"
+        )
+    for host in host_payload["processes"]:
+        sections.append(
+            "<article class='panel plugin-card'>"
+            f"<h3>{html.escape(str(host['plugin_id']))}</h3>"
+            f"<p>{html.escape(str(host['plugin_version']))} · {html.escape(str(host['execution_mode']))} · {html.escape(str(host['process_status']))}</p>"
+            f"<p>Environment: {html.escape(str(host['environment_status']))} · Protocol: {html.escape(str(host['protocol']))} · Heartbeat: {html.escape(str(host['heartbeat']))}</p>"
+            f"<p>Calls: {html.escape(str(host['active_calls']))} · Memory: {html.escape(str(host['memory_status']))} · CPU: {html.escape(str(host['cpu_status']))}</p>"
+            f"<p>Crashes: {html.escape(str(host['crash_count']))} · Backoff: {html.escape(str(host['restartbackoff']))} · Containment: {html.escape(str(host['resource_containment']))}</p>"
+            f"<p>Crash classification: {html.escape(str(host['crashclassification'] or 'none'))}</p>"
             "</article>"
         )
     for plugin in builtin_payload["plugins"]:
@@ -3970,6 +4051,38 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/api/plugins/installed/"):
             json_response(self, plugin_installed_payload(parsed.path.removeprefix("/api/plugins/installed/")))
             return
+        if parsed.path == "/api/plugin-host/health":
+            json_response(self, plugin_host_health_payload())
+            return
+        if parsed.path == "/api/plugin-host/processes":
+            json_response(self, plugin_host_process_payload())
+            return
+        if parsed.path.startswith("/api/plugin-host/processes/"):
+            suffix = parsed.path.removeprefix("/api/plugin-host/processes/")
+            parts = suffix.split("/")
+            host_id = parts[0]
+            if len(parts) == 1:
+                json_response(self, plugin_host_process_payload(host_id))
+                return
+            leaf = parts[1]
+            if leaf == "requests":
+                json_response(self, {"host_id": host_id, "requests": []})
+                return
+            if leaf == "crashes":
+                json_response(self, {"host_id": host_id, "crashes": []})
+                return
+            if leaf == "resources":
+                json_response(
+                    self,
+                    {
+                        "host_id": host_id,
+                        "resources": PluginHostResourceController().to_public(),
+                    },
+                )
+                return
+        if parsed.path == "/api/plugin-host/integrity":
+            json_response(self, plugin_host_integrity_payload())
+            return
         if parsed.path == "/api/plugin-sdk/version":
             json_response(self, plugin_sdk_version_payload())
             return
@@ -4966,6 +5079,23 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         }
                     },
                     status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+        if path == "/api/plugin-host/reconcile":
+            json_response(self, {"status": "read_only_reconcile_completed", "republish_attempted": False})
+            return
+        if path.startswith("/api/plugin-host/processes/"):
+            suffix = path.removeprefix("/api/plugin-host/processes/")
+            host_id, _, action = suffix.partition("/")
+            if action in {"restart", "stop", "verify", "quarantine"}:
+                json_response(
+                    self,
+                    {
+                        "host_id": host_id,
+                        "action": action,
+                        "status": "restart_required" if action == "restart" else "accepted",
+                        "hot_swap": False,
+                    },
                 )
                 return
         if path.startswith("/api/channels/mastodon"):

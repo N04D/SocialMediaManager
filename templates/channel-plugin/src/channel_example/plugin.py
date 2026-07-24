@@ -10,7 +10,12 @@ from .runtime import ExampleChannelRuntime
 class ExampleChannelPlugin:
     @property
     def manifest(self) -> PluginManifest:
-        return PluginManifest.from_path(Path(__file__).resolve().parents[2] / "channel.manifest.json")
+        current = Path(__file__).resolve()
+        for parent in current.parents:
+            candidate = parent / "channel.manifest.json"
+            if candidate.exists():
+                return PluginManifest.from_path(candidate)
+        raise RuntimeError("channel manifest is missing")
 
     def register(self, context: PluginRegistrationContext) -> None:
         context.register_runtime_factory(self.manifest.id, self.create_runtime)

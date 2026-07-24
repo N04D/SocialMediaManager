@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import csv
 import hashlib
-import importlib.metadata
 import json
 import os
 import re
@@ -19,6 +18,8 @@ from typing import Any
 
 from plugin_sdk.compatibility import build_compatibility_report, scan_forbidden_imports, scan_secrets
 from plugin_sdk.manifest import PluginManifest, validate_manifest
+from src.core.plugin_host.proxies import RemoteChannelPluginProxy
+from src.core.plugin_host.supervisor import PluginHostSupervisor
 
 from .contracts import (
     PLUGIN_DISTRIBUTION_FRAMEWORK_VERSION,
@@ -995,9 +996,23 @@ class PluginInstallationService:
 
 
 class InstalledPluginLoader:
-    def __init__(self, install_root: str | Path, installer: PluginInstallationService | None = None) -> None:
+    def __init__(
+        self,
+        install_root: str | Path,
+        installer: PluginInstallationService | None = None,
+        *,
+        environment_root: str | Path | None = None,
+        host_workdir: str | Path | None = None,
+        repo_root: str | Path | None = None,
+    ) -> None:
         self.install_root = Path(install_root)
         self.installer = installer or PluginInstallationService(install_root)
+        self.supervisor = PluginHostSupervisor(
+            self.install_root,
+            environment_root or self.install_root.parent / "host-envs",
+            host_workdir or self.install_root.parent / "host-work",
+            repo_root or Path.cwd(),
+        )
 
     def discover_install_records(self) -> list[dict[str, Any]]:
         return self.installer.list_installed()
@@ -1026,16 +1041,21 @@ class InstalledPluginLoader:
             raise PluginActivationError(
                 "plugin.loader.restart_required", "Plugin activation requires restart before import."
             )
-        distributions = importlib.metadata.distributions(
-            path=[str(self.install_root / plugin_id / "installs" / active["plugin_version"])]
+        return RemoteChannelPluginProxy(
+            self.supervisor, self._active_manifest(plugin_id, str(active["plugin_version"]))
         )
-        for dist in distributions:
-            for entry in dist.entry_points:
-                if entry.group == PLUGIN_ENTRY_POINT_GROUP and entry.name == plugin_id:
-                    return entry.load()()
-        raise PluginEntrypointValidationError(
-            "plugin.loader.entrypoint_missing", "Active plugin entrypoint is missing."
-        )
+
+    def _active_manifest(self, plugin_id: str, version: str) -> dict[str, Any]:
+        install = self.install_root / plugin_id / "installs" / version
+        manifests = sorted(install.rglob("*.manifest.json"))
+        if not manifests:
+            raise PluginEntrypointValidationError(
+                "plugin.loader.manifest_missing", "Active plugin manifest is missing."
+            )
+        manifest = json.loads(manifests[0].read_text())
+        manifest.setdefault("id", plugin_id)
+        manifest.setdefault("version", version)
+        return manifest
 
 
 class PluginDistributionIntegrityService:

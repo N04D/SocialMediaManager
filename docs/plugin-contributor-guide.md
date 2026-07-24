@@ -7,3 +7,7 @@ Integration levels: deterministic fixture, local real service, external read-onl
 ## Phase 18 distribution
 
 Package releases as pure-Python wheels only. Do not include native extensions, source distributions, bundled SDK copies, production credentials, or runtime dependency installation. Registry browsing and package verification must not import plugin code. Installation is disabled by default; activation is a separate operator decision and requires restart. Signed does not mean safe.
+
+## Phase 19 host compatibility
+
+External plugins must work out of process. Use host callbacks for secrets, HTTP, media, browser, analytics, execution reporting, event, audit, clock, and scoped JSON state access. Do not rely on in-process globals, repository imports, or application singletons.
