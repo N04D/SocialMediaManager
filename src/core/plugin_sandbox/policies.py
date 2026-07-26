@@ -5,6 +5,7 @@ from __future__ import annotations
 LINUX_REQUIRED_CONTROLS = [
     "no_new_privs",
     "user_namespace",
+    "uid_gid_mapping",
     "mount_namespace",
     "pid_namespace",
     "ipc_namespace",

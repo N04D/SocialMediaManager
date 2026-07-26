@@ -7,6 +7,7 @@ security boundary.
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import subprocess
@@ -31,8 +32,9 @@ from .capabilities import ambient_empty, current_capability_summary
 from .cgroups import cgroup_summary, cgroup_v2_available
 from .filesystem import mountinfo_contains_forbidden_roots
 from .landlock import landlock_status
-from .namespaces import namespace_support
-from .seccomp import seccomp_status
+from .namespaces import namespace_enforcement_probe, namespace_support
+from .native import LINUX_LAUNCHER_CONTRACT_VERSION, LINUX_LAUNCHER_VERSION, launcher_record
+from .seccomp import profile_checksum, seccomp_backend_status, seccomp_status
 
 
 class LinuxPluginSandboxController:
@@ -42,6 +44,7 @@ class LinuxPluginSandboxController:
 
     def inspect_platform(self) -> SandboxPlatformCapability:
         support = namespace_support()
+        enforcement_probe = namespace_enforcement_probe()
         namespace_control_names = {
             "user": "user_namespace",
             "mnt": "mount_namespace",
@@ -51,10 +54,12 @@ class LinuxPluginSandboxController:
             "net": "network_namespace",
         }
         available = ["rlimits", "process_group", "sandbox_attestation"]
-        available.extend(control for name, control in namespace_control_names.items() if support.get(name))
+        if enforcement_probe["supported"]:
+            available.append("uid_gid_mapping")
+            available.extend(control for name, control in namespace_control_names.items() if support.get(name))
         if Path("/proc/self/status").exists():
             available.extend(["proc_isolated", "dev_minimal", "readonly_code_environment", "minimal_writable_dirs"])
-        if seccomp_status() not in {"0", "unavailable", "unknown"}:
+        if seccomp_backend_status() == "available":
             available.append("seccomp")
         if landlock_status() == "available":
             available.append("landlock")
@@ -97,8 +102,58 @@ class LinuxPluginSandboxController:
         env = dict(process_spec.env)
         env["SMM_PLUGIN_SANDBOX_PLAN"] = plan.id
         env["SMM_PLUGIN_SANDBOX_STATUS"] = "development_override" if missing else "OS sandbox enforced"
+        env["SMM_PLUGIN_SANDBOX_POLICY_CHECKSUM"] = plan.policy_checksum
+        env["SMM_PLUGIN_SANDBOX_ENVIRONMENT_CHECKSUM"] = plan.environment_checksum
+        env["SMM_PLUGIN_SANDBOX_ARTIFACT_CHECKSUM"] = plan.artifact_checksum
+        env["SMM_PLUGIN_SANDBOX_SECCOMP_PROFILE"] = "channel_api_first.v1"
+        env["SMM_PLUGIN_SANDBOX_SECCOMP_PROFILE_CHECKSUM"] = profile_checksum("channel_api_first.v1")
+        env["SMM_PLUGIN_SANDBOX_LAUNCHER_VERSION"] = LINUX_LAUNCHER_VERSION
+        env["SMM_PLUGIN_SANDBOX_LAUNCHER_CONTRACT_VERSION"] = LINUX_LAUNCHER_CONTRACT_VERSION
+        record = launcher_record()
+        if (
+            not record["permissions_safe"]
+            or record["architecture"] not in record["supported_architectures"]
+            or record["launcher_version"] != LINUX_LAUNCHER_VERSION
+        ):
+            raise PluginSandboxActivationBlockedError(
+                "plugin_sandbox.launcher.integrity_failed",
+                "Linux sandbox launcher integrity verification failed.",
+            )
+        if missing and self.development_override:
+            process = subprocess.Popen(
+                process_spec.argv,
+                stdin=process_spec.stdin,
+                stdout=process_spec.stdout,
+                stderr=process_spec.stderr,
+                cwd=process_spec.cwd,
+                env=env,
+                shell=False,
+                close_fds=True,
+                start_new_session=True,
+            )
+            return SandboxedProcess(
+                process=process,
+                process_instance_id=f"proc_{uuid.uuid4().hex}",
+                sandbox_plan_id=plan.id,
+                sandbox_status="development_override",
+                controls=plan.resolved_controls,
+                metadata={"missing_controls": missing, "development_override": True},
+            )
+        env_file = Path(process_spec.cwd) / f"sandbox-env-{uuid.uuid4().hex}.json"
+        env_file.write_text(json.dumps(env, sort_keys=True), encoding="utf-8")
+        env_file.chmod(0o600)
+        launcher_argv = [
+            process_spec.argv[0],
+            "-I",
+            "-m",
+            "src.core.plugin_sandbox.linux.launcher",
+            "--env-json",
+            str(env_file),
+            "--",
+            *process_spec.argv,
+        ]
         process = subprocess.Popen(
-            process_spec.argv,
+            launcher_argv,
             stdin=process_spec.stdin,
             stdout=process_spec.stdout,
             stderr=process_spec.stderr,
@@ -114,7 +169,13 @@ class LinuxPluginSandboxController:
             sandbox_plan_id=plan.id,
             sandbox_status="development_override" if missing else "OS sandbox enforced",
             controls=plan.resolved_controls,
-            metadata={"missing_controls": missing},
+            metadata={
+                "missing_controls": missing,
+                "launcher_version": LINUX_LAUNCHER_VERSION,
+                "launcher_contract_version": LINUX_LAUNCHER_CONTRACT_VERSION,
+                "launcher_checksum": record["launcher_checksum"],
+                "launcher_env_file": "redacted",
+            },
         )
 
     def attest(self, process: SandboxedProcess, plan: PluginSandboxPlan) -> PluginSandboxAttestation:
@@ -122,6 +183,7 @@ class LinuxPluginSandboxController:
         missing = [control for control in plan.required_controls if control not in capability.available_controls]
         evidence = {
             "namespace_support": namespace_support(),
+            "namespace_enforcement_probe": namespace_enforcement_probe(),
             "seccomp": seccomp_status(),
             "landlock": landlock_status(),
             "cgroup": cgroup_summary(),

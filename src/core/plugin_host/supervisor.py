@@ -151,6 +151,12 @@ class PluginHostProcess:
             result = self.call_raw("host.initialize", request.to_dict(), timeout=self.policy.request_timeout_seconds)
             self.ready = PluginReady(**result)
             self._verify_ready(request, self.ready)
+            self._verify_sandbox_attestation()
+            self.call_raw(
+                "sandbox.attestation_accepted",
+                {"status": "accepted", "host_id": self.host_id},
+                timeout=self.policy.request_timeout_seconds,
+            )
             self.call_raw("plugin.activate", {"host_id": self.host_id}, timeout=self.policy.request_timeout_seconds)
             self.record.process_status = "ready"
             self.record.last_heartbeat_at = utc_now()
@@ -258,6 +264,29 @@ class PluginHostProcess:
         }
         if not all(checks.values()):
             raise PluginHostHandshakeError("plugin_host.handshake.identity_mismatch", "Plugin host identity mismatch.")
+
+    def _verify_sandbox_attestation(self) -> None:
+        if self.sandbox_development_override:
+            return
+        if self.sandbox_attestation is None or self.sandbox_attestation.status != "enforced":
+            self.terminate("sandbox parent attestation failed")
+            raise PluginHostHandshakeError(
+                "plugin_host.sandbox.parent_attestation_failed",
+                "Parent-side sandbox attestation failed.",
+            )
+        child = self.ready.sandbox_attestation if self.ready else {}
+        if child.get("status") != "enforced":
+            self.terminate("sandbox child attestation failed")
+            raise PluginHostHandshakeError(
+                "plugin_host.sandbox.child_attestation_failed",
+                "Child-side sandbox attestation failed.",
+            )
+        if child.get("seccomp_mode") != "2" or not child.get("no_new_privs"):
+            self.terminate("sandbox kernel evidence mismatch")
+            raise PluginHostHandshakeError(
+                "plugin_host.sandbox.kernel_evidence_mismatch",
+                "Sandbox kernel evidence did not match required controls.",
+            )
 
     def _crash(
         self, classification: str, mutation_state: str, code: str, message: str, *, restartable: bool

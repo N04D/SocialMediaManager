@@ -6,6 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from .native import DENIED_SYSCALLS, seccomp_available
+
 SECCOMP_PROFILES = {
     "python_plugin_base": [
         "ptrace",
@@ -26,9 +28,13 @@ SECCOMP_PROFILES = {
         "add_key",
         "request_key",
     ],
+    "python_plugin_base.v1": DENIED_SYSCALLS,
     "channel_api_first": ["socket", "connect", "bind", "listen", "execveat"],
+    "channel_api_first.v1": DENIED_SYSCALLS,
     "channel_browser_proxy": ["socket", "connect", "bind", "listen", "execveat"],
+    "channel_browser_proxy.v1": DENIED_SYSCALLS,
     "channel_metrics_read": ["socket", "connect", "bind", "listen", "execveat"],
+    "channel_metrics_read.v1": DENIED_SYSCALLS,
 }
 
 
@@ -47,4 +53,8 @@ def seccomp_status() -> str:
     return "unknown"
 
 
-__all__ = ["SECCOMP_PROFILES", "profile_checksum", "seccomp_status"]
+def seccomp_backend_status() -> str:
+    return "available" if seccomp_available() else "unavailable"
+
+
+__all__ = ["SECCOMP_PROFILES", "profile_checksum", "seccomp_backend_status", "seccomp_status"]

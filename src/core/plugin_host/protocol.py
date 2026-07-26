@@ -11,6 +11,7 @@ PLUGIN_METHODS = {
     "plugin.activate",
     "plugin.shutdown",
     "plugin.ping",
+    "sandbox.attestation_accepted",
     "channel.start_connect",
     "channel.complete_connect",
     "channel.disconnect",

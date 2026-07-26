@@ -16,6 +16,7 @@ from .dispatcher import PluginRuntimeDispatcher
 from .framing import decode_frame, encode_frame
 from .logging import log_safe
 from .protocol import error_response, success_response
+from .sandbox import enforce_and_attest
 
 CHANNEL_METHOD_MAP = {
     "channel.start_connect": "start_connect",
@@ -37,6 +38,8 @@ class ChildPluginHost:
         self.plugin: Any = None
         self.dispatcher: PluginRuntimeDispatcher | None = None
         self.initialized: dict[str, Any] = {}
+        self.sandbox_attestation: dict[str, Any] = {}
+        self.sandbox_attestation_accepted = False
 
     def run(self) -> int:
         while True:
@@ -60,6 +63,8 @@ class ChildPluginHost:
         try:
             if method == "host.initialize":
                 return success_response(request_id, self.initialize(params))
+            if method == "sandbox.attestation_accepted":
+                return success_response(request_id, self.accept_sandbox_attestation(params))
             if method == "plugin.activate":
                 return success_response(request_id, self._dispatcher().activate())
             if method == "plugin.shutdown":
@@ -84,8 +89,8 @@ class ChildPluginHost:
         src_root = version_root / "src"
         if src_root.exists():
             sys.path.insert(0, str(src_root))
-        self.plugin = self._load_plugin(expected_id)
-        manifest = self._manifest()
+        self.sandbox_attestation = enforce_and_attest()
+        manifest = self._installed_manifest()
         entrypoint = str(params.get("entrypoint") or "")
         ready = {
             "protocol_version": params["protocol_version"],
@@ -98,10 +103,20 @@ class ChildPluginHost:
             "requested_permissions": manifest.get("permissions", []),
             "supported_methods": ["plugin.activate", "plugin.shutdown", "plugin.ping", *CHANNEL_METHOD_MAP.keys()],
             "runtime_checksum": params.get("environment_checksum", ""),
-            "warnings": [],
+            "sandbox_attestation": self.sandbox_attestation,
+            "warnings": [] if self.sandbox_attestation.get("status") == "enforced" else ["sandbox attestation failed"],
         }
         self.initialized = ready
         return ready
+
+    def accept_sandbox_attestation(self, params: dict[str, Any]) -> dict[str, Any]:
+        allowed = {"enforced"}
+        if os.environ.get("SMM_PLUGIN_SANDBOX_STATUS") == "development_override":
+            allowed.add("development_override")
+        if str(params.get("status")) != "accepted" or self.sandbox_attestation.get("status") not in allowed:
+            raise RuntimeError("sandbox attestation rejected")
+        self.sandbox_attestation_accepted = True
+        return {"status": "accepted"}
 
     def _load_plugin(self, plugin_id: str) -> Any:
         for dist in importlib.metadata.distributions(
@@ -146,6 +161,10 @@ class ChildPluginHost:
         return json.loads(manifests[0].read_text()) if manifests else {}
 
     def _dispatcher(self) -> PluginRuntimeDispatcher:
+        if not self.sandbox_attestation_accepted:
+            raise RuntimeError("sandbox attestation has not been accepted")
+        if self.plugin is None:
+            self.plugin = self._load_plugin(os.environ["SMM_PLUGIN_ID"])
         if self.dispatcher is None:
             self.dispatcher = PluginRuntimeDispatcher(self.plugin)
         return self.dispatcher

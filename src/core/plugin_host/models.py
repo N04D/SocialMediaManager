@@ -79,6 +79,7 @@ class PluginReady:
     supported_methods: list[str]
     runtime_checksum: str
     warnings: list[str] = field(default_factory=list)
+    sandbox_attestation: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

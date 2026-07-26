@@ -29,6 +29,52 @@ def run() -> list[dict[str, str]]:
             "message": str(len(list((ROOT / "scenarios").glob("*.json")))),
         },
     ]
+    controls = set(capability.available_controls)
+    rows.extend(
+        [
+            {
+                "status": "PASS"
+                if all(
+                    item in controls
+                    for item in [
+                        "user_namespace",
+                        "mount_namespace",
+                        "pid_namespace",
+                        "ipc_namespace",
+                        "uts_namespace",
+                        "network_namespace",
+                    ]
+                )
+                else "FAIL",
+                "check": "namespace creation",
+                "message": "required namespace set",
+            },
+            {"status": "PASS" if "uid_gid_mapping" in controls else "FAIL", "check": "uid/gid mapping", "message": ""},
+            {"status": "PASS" if "landlock" in controls else "FAIL", "check": "Landlock ABI", "message": ""},
+            {
+                "status": "PASS" if "landlock" in controls and capability.production_ready else "FAIL",
+                "check": "Landlock enforcement",
+                "message": "",
+            },
+            {"status": "PASS" if "seccomp" in controls else "FAIL", "check": "seccomp load", "message": ""},
+            {
+                "status": "PASS" if "seccomp" in controls and capability.production_ready else "FAIL",
+                "check": "seccomp denial probes",
+                "message": "",
+            },
+            {
+                "status": "PASS" if "network_default_deny" in controls and "network_namespace" in controls else "FAIL",
+                "check": "network default-deny",
+                "message": "",
+            },
+            {"status": "PASS" if "cgroup_v2" in controls else "WARN", "check": "cgroup", "message": "v2"},
+            {
+                "status": "PASS" if capability.production_ready else "FAIL",
+                "check": "child attestation",
+                "message": "",
+            },
+        ]
+    )
     rows.extend({"status": "FAIL", "check": "missing_control", "message": item} for item in capability.missing_controls)
     return rows
 

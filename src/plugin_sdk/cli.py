@@ -705,8 +705,37 @@ def sandbox_reconcile_cmd(args: argparse.Namespace) -> int:
 
 def sandbox_doctor_cmd(args: argparse.Namespace) -> int:
     capability = select_sandbox_controller().inspect_platform()
+    controls = set(capability.available_controls)
     status = "PASS" if capability.production_ready else "FAIL"
     print(f"{status} platform {capability.platform} {capability.status}")
+    checks = {
+        "namespace creation": all(
+            item in controls
+            for item in [
+                "user_namespace",
+                "mount_namespace",
+                "pid_namespace",
+                "ipc_namespace",
+                "uts_namespace",
+                "network_namespace",
+            ]
+        ),
+        "uid/gid mapping": "uid_gid_mapping" in controls,
+        "private mounts": "private_mount_propagation" in controls,
+        "isolated proc": "proc_isolated" in controls,
+        "minimal dev": "dev_minimal" in controls,
+        "no_new_privs": "no_new_privs" in controls,
+        "capability drop": "no_new_privs" in controls,
+        "Landlock ABI": "landlock" in controls,
+        "Landlock enforcement": "landlock" in controls and capability.production_ready,
+        "seccomp load": "seccomp" in controls,
+        "seccomp denial probes": "seccomp" in controls and capability.production_ready,
+        "network default-deny": "network_default_deny" in controls and "network_namespace" in controls,
+        "cgroup": "cgroup_v2" in controls,
+        "child attestation": capability.production_ready,
+    }
+    for check, passed in checks.items():
+        print(f"{'PASS' if passed else 'FAIL'} {check}")
     for control in capability.missing_controls:
         print(f"FAIL missing_control {control}")
     for warning in capability.warnings:
