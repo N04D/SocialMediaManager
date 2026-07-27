@@ -11,7 +11,7 @@ import subprocess
 import sys
 import threading
 from dataclasses import asdict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -135,6 +135,7 @@ from src.core.plugin_sandbox import (
     select_sandbox_controller,
 )
 from src.core.plugin_sandbox.integrity import context_from_install_record
+from src.core.publication_dependencies import PublicationDependencyGraph, PublicationTargetDependency
 from src.plugin_sdk.compatibility import build_compatibility_report
 from src.plugin_sdk.contracts import PLUGIN_SDK_VERSION
 from studio_models import ContentItem
@@ -2765,6 +2766,114 @@ def plugin_sandbox_plan_payload(plugin_id: str | None = None) -> dict[str, Any]:
     return {"plans": plans}
 
 
+def markdown_website_profiles_payload(profile_id: str | None = None) -> dict[str, Any]:
+    from channels.markdown_website.profiles import get_profile, list_profiles
+
+    profiles = [get_profile(profile_id)] if profile_id else list_profiles()
+    return {
+        "profiles": [
+            {
+                "id": profile.id,
+                "version": profile.version,
+                "file_template": profile.file_template,
+                "custom_frontmatter_allowlist": list(profile.custom_frontmatter_allowlist),
+                "markdown_policy": dict(profile.markdown_policy),
+            }
+            for profile in profiles
+        ],
+        "raw_credentials_exposed": False,
+        "absolute_paths_exposed": False,
+    }
+
+
+def markdown_website_accounts_payload(account_id: str | None = None) -> dict[str, Any]:
+    account = {
+        "id": account_id or "fixture-account",
+        "channel_plugin_id": "channel.markdown_website",
+        "channel_family": "owned_publication",
+        "publisher_type": "git_repository",
+        "repository_reference_id": "host_configured",
+        "push_policy": "commit_only",
+        "verification_policy": "public_url",
+        "status": "requires_host_configuration",
+    }
+    return {"account": account} if account_id else {"accounts": [account]}
+
+
+def markdown_website_preview_payload() -> dict[str, Any]:
+    from channels.markdown_website.models import (
+        MarkdownWebsiteAccountConfig,
+        WebsitePublicationSnapshot,
+        WebsiteVariant,
+    )
+    from channels.markdown_website.renderer import MarkdownRenderer
+
+    now = datetime.now(UTC)
+    account = MarkdownWebsiteAccountConfig(
+        id="preview-account",
+        workspace_id="preview-workspace",
+        account_id="preview-site",
+        display_name="Preview Site",
+        repository_reference_id="host_configured",
+        branch="main",
+        content_root="articles",
+        media_root="static/media",
+        public_base_url="https://example.test",
+        public_url_template="https://example.test/articles/{slug}",
+        frontmatter_profile_id="generic_yaml",
+    )
+    snapshot = WebsitePublicationSnapshot(
+        content_item_id="preview-content",
+        content_revision_id="preview-revision",
+        channel_variant_id="preview-variant",
+        publication_plan_id="preview-plan",
+        publication_target_id="preview-target",
+        publication_attempt_id="preview-attempt",
+        publication_snapshot_checksum="preview-snapshot",
+        website_profile_id="generic_yaml",
+        website_profile_version="1.0",
+        account_config=account,
+        variant=WebsiteVariant(
+            title="Preview Article", markdown_body="# Preview\n\nWebsite preview.", published_at=now, updated_at=now
+        ),
+    )
+    rendered = MarkdownRenderer().render(snapshot)
+    return {
+        "relative_path": rendered.relative_path,
+        "public_url": rendered.public_url,
+        "checksum": rendered.checksum,
+        "markdown": rendered.markdown,
+        "warnings": list(rendered.warnings),
+    }
+
+
+def publication_dependencies_payload() -> dict[str, Any]:
+    graph = PublicationDependencyGraph()
+    dependency = PublicationTargetDependency(
+        id="website-before-social",
+        plan_id="fixture-plan",
+        predecessor_target_id="target-website",
+        dependent_target_id="target-linkedin",
+        required_state="publication_verified",
+    )
+    graph.add(dependency)
+    return {"dependencies": [asdict(item) for item in graph.list()]}
+
+
+def funnel_payload(content_item_id: str | None = None) -> dict[str, Any]:
+    return {
+        "funnels": [
+            {
+                "content_item_id": content_item_id or "fixture-content",
+                "content_revision_id": "fixture-revision",
+                "website_target_id": "target-website",
+                "social_target_ids": ["target-linkedin", "target-mastodon"],
+                "causality_claimed": False,
+            }
+        ]
+    }
+
+
 def render_plugins_page() -> str:
     builtin_payload = plugin_compatibility_payload()
     registry_payload = plugin_registry_payload()
@@ -4183,6 +4292,32 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if parsed.path == "/api/channels/markdown-website/accounts":
+            json_response(self, markdown_website_accounts_payload())
+            return
+        if parsed.path.startswith("/api/channels/markdown-website/accounts/"):
+            suffix = parsed.path.removeprefix("/api/channels/markdown-website/accounts/")
+            account_id = suffix.split("/", maxsplit=1)[0]
+            json_response(self, markdown_website_accounts_payload(account_id))
+            return
+        if parsed.path == "/api/channels/markdown-website/profiles":
+            json_response(self, markdown_website_profiles_payload())
+            return
+        if parsed.path.startswith("/api/channels/markdown-website/profiles/"):
+            json_response(
+                self,
+                markdown_website_profiles_payload(parsed.path.removeprefix("/api/channels/markdown-website/profiles/")),
+            )
+            return
+        if parsed.path == "/api/publication-dependencies":
+            json_response(self, publication_dependencies_payload())
+            return
+        if parsed.path == "/api/analytics/funnels":
+            json_response(self, funnel_payload())
+            return
+        if parsed.path.startswith("/api/analytics/funnels/"):
+            json_response(self, funnel_payload(parsed.path.removeprefix("/api/analytics/funnels/")))
+            return
         if parsed.path == "/api/browser-framework/conformance":
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)
             body = json.dumps(runtime.browser_conformance_payload(), ensure_ascii=False).encode("utf-8")
@@ -5084,6 +5219,23 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         if path.startswith("/api/plugin-registry/downloads/"):
             json_response(self, {"download_id": path.rsplit("/", maxsplit=1)[-1], "status": "metadata_only"})
+            return
+        if path == "/api/channels/markdown-website/render-preview":
+            json_response(self, markdown_website_preview_payload())
+            return
+        if path == "/api/channels/markdown-website/validate-content":
+            json_response(self, {"status": "valid", "warnings": [], "raw_paths_accepted": False})
+            return
+        if path == "/api/channels/markdown-website/verify-url":
+            json_response(self, {"status": "requires_publication_evidence", "direct_network": False})
+            return
+        if path == "/api/channels/markdown-website/reconcile":
+            json_response(self, {"status": "read_only_reconciliation_required", "unsafe_repairs_attempted": False})
+            return
+        if path == "/api/publication-dependencies":
+            json_response(
+                self, {"status": "created", "dependency": publication_dependencies_payload()["dependencies"][0]}
+            )
             return
         if path == "/api/plugins/install":
             form = parse_qs(body)

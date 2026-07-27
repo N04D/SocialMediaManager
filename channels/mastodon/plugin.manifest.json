@@ -49,6 +49,7 @@
   "schema_version": "1.0",
   "plugin_type": "channel",
   "sdk_contract_version": "1.0.0",
+  "channel_family": "social_distribution",
   "framework_contract_versions": {
     "media": "0.3",
     "content": "0.1",

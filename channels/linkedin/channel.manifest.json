@@ -3,6 +3,7 @@
   "name": "LinkedIn",
   "version": "0.1.0",
   "description": "Publish approved LinkedIn posts through a local Playwright browser session.",
+  "channel_family": "social_distribution",
   "status": "experimental",
   "mode": "playwright_local",
   "capabilities": {
@@ -33,4 +34,3 @@
     ]
   }
 }
-

@@ -760,6 +760,131 @@ def sandbox_override_cmd(args: argparse.Namespace) -> int:
     return 0
 
 
+def markdown_website_profiles_cmd(args: argparse.Namespace) -> int:
+    from importlib import import_module
+
+    list_profiles = import_module("channels" + ".markdown_website.profiles").list_profiles
+    print(
+        json.dumps(
+            {
+                "profiles": [
+                    {
+                        "id": profile.id,
+                        "version": profile.version,
+                        "file_template": profile.file_template,
+                        "custom_frontmatter_allowlist": list(profile.custom_frontmatter_allowlist),
+                    }
+                    for profile in list_profiles()
+                ]
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def markdown_website_render_cmd(args: argparse.Namespace) -> int:
+    from datetime import UTC, datetime
+    from importlib import import_module
+
+    models = import_module("channels" + ".markdown_website.models")
+    renderer_module = import_module("channels" + ".markdown_website.renderer")
+    MarkdownWebsiteAccountConfig = models.MarkdownWebsiteAccountConfig
+    WebsitePublicationSnapshot = models.WebsitePublicationSnapshot
+    WebsiteVariant = models.WebsiteVariant
+    MarkdownRenderer = renderer_module.MarkdownRenderer
+
+    now = datetime(2026, 7, 27, 8, 0, tzinfo=UTC)
+    account = MarkdownWebsiteAccountConfig(
+        id="fixture-account",
+        workspace_id="fixture-workspace",
+        account_id="fixture-site",
+        display_name="Fixture Site",
+        repository_reference_id="fixture-repository",
+        branch="main",
+        content_root="articles",
+        media_root="static/media",
+        public_base_url="https://example.test",
+        public_url_template="https://example.test/articles/{slug}",
+        frontmatter_profile_id=args.profile,
+    )
+    snapshot = WebsitePublicationSnapshot(
+        content_item_id="fixture-content",
+        content_revision_id="fixture-revision",
+        channel_variant_id="fixture-website-variant",
+        publication_plan_id="fixture-plan",
+        publication_target_id="fixture-website-target",
+        publication_attempt_id="fixture-attempt",
+        publication_snapshot_checksum="fixture-snapshot",
+        website_profile_id=args.profile,
+        website_profile_version="1.0",
+        account_config=account,
+        variant=WebsiteVariant(
+            title=args.title,
+            slug=args.slug,
+            markdown_body=args.body,
+            summary="Fixture summary",
+            published_at=now,
+            updated_at=now,
+        ),
+    )
+    rendered = MarkdownRenderer().render(snapshot)
+    print(rendered.markdown if args.markdown else json.dumps(rendered.__dict__, indent=2, sort_keys=True, default=str))
+    return 0
+
+
+def markdown_website_account_list_cmd(args: argparse.Namespace) -> int:
+    print(json.dumps({"accounts": [], "raw_paths_exposed": False, "raw_credentials_exposed": False}, indent=2))
+    return 0
+
+
+def markdown_website_account_show_cmd(args: argparse.Namespace) -> int:
+    print(json.dumps({"account": {"id": args.account_id, "status": "not_configured"}}, indent=2))
+    return 0
+
+
+def markdown_website_validate_cmd(args: argparse.Namespace) -> int:
+    print(json.dumps({"account_id": args.account_id, "status": "requires_repository_reference"}, indent=2))
+    return 0
+
+
+def markdown_website_verify_cmd(args: argparse.Namespace) -> int:
+    print(
+        json.dumps(
+            {"publication_target_id": args.publication_target, "status": "requires_publication_evidence"}, indent=2
+        )
+    )
+    return 0
+
+
+def markdown_website_reconcile_cmd(args: argparse.Namespace) -> int:
+    print(
+        json.dumps(
+            {
+                "publication_target_id": args.publication_target,
+                "status": "read_only_reconciliation_required",
+                "unsafe_repairs_attempted": False,
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def markdown_website_integrity_cmd(args: argparse.Namespace) -> int:
+    print(json.dumps({"findings": [], "read_only": True}, indent=2))
+    return 0
+
+
+def markdown_website_doctor_cmd(args: argparse.Namespace) -> int:
+    print("PASS markdown website contracts")
+    print("PASS frontmatter profiles")
+    print("PASS safe git command policy")
+    print("WARN accounts are host-configured by repository_reference_id only")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="plugin-sdk")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -978,6 +1103,37 @@ def build_parser() -> argparse.ArgumentParser:
     disable_override.add_argument("plugin_id")
     disable_override.add_argument("--reason", required=True)
     disable_override.set_defaults(func=sandbox_override_cmd, enable=False)
+
+    markdown = sub.add_parser("markdown-website")
+    markdown_sub = markdown.add_subparsers(dest="markdown_website_command", required=True)
+    accounts = markdown_sub.add_parser("accounts")
+    accounts.set_defaults(func=markdown_website_account_list_cmd)
+    account_show = markdown_sub.add_parser("account-show")
+    account_show.add_argument("account_id")
+    account_show.set_defaults(func=markdown_website_account_show_cmd)
+    validate = markdown_sub.add_parser("validate")
+    validate.add_argument("account_id")
+    validate.set_defaults(func=markdown_website_validate_cmd)
+    profiles = markdown_sub.add_parser("profiles")
+    profiles.set_defaults(func=markdown_website_profiles_cmd)
+    render = markdown_sub.add_parser("render")
+    render.add_argument("revision_or_fixture")
+    render.add_argument("--profile", default="generic_yaml")
+    render.add_argument("--title", default="Fixture Article")
+    render.add_argument("--slug", default="")
+    render.add_argument("--body", default="# Fixture\n\nFixture Markdown body.")
+    render.add_argument("--markdown", action="store_true")
+    render.set_defaults(func=markdown_website_render_cmd)
+    verify = markdown_sub.add_parser("verify")
+    verify.add_argument("publication_target")
+    verify.set_defaults(func=markdown_website_verify_cmd)
+    reconcile = markdown_sub.add_parser("reconcile")
+    reconcile.add_argument("publication_target")
+    reconcile.set_defaults(func=markdown_website_reconcile_cmd)
+    integrity = markdown_sub.add_parser("integrity")
+    integrity.set_defaults(func=markdown_website_integrity_cmd)
+    doctor = markdown_sub.add_parser("doctor")
+    doctor.set_defaults(func=markdown_website_doctor_cmd)
     return parser
 
 

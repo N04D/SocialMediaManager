@@ -1,0 +1,5 @@
+# Markdown Website Channel v0.1
+
+`channel.markdown_website` is a built-in `owned_publication` channel. It renders a full immutable content revision as Markdown, writes it to an allowlisted Git worktree, commits exact changed paths, optionally pushes to an allowlisted remote branch, and verifies the resulting public URL before social distribution can continue.
+
+The plugin is not a hosting platform or static-site generator. It does not install Node.js, run build commands, deploy hosting providers, accept arbitrary paths, or force-push.

@@ -15,3 +15,7 @@ External plugins must work out of process. Use host callbacks for secrets, HTTP,
 ## Phase 20 sandbox compatibility
 
 Design external channel plugins for broker-only access. Do not read local files directly, open sockets, spawn subprocesses, or expect repository paths. The sandbox hides `content/`, `drafts/`, home credentials, and other plugin state.
+
+## Phase 21 owned publication
+
+`channel.markdown_website` is a built-in reference for owned publication. It uses allowlisted repository references, normalized relative paths, exact Git path staging, deterministic frontmatter, revision binding, public URL verification, and content-bound funnel metrics. Community plugins should not copy private repository, credential, or raw path handling.

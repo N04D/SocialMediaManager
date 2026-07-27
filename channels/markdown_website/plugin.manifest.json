@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0",
+  "id": "channel.markdown_website",
+  "name": "Markdown Website",
+  "version": "0.1.0",
+  "plugin_type": "channel",
+  "type": "channel",
+  "description": "Publishes full Markdown articles into an allowlisted Git worktree for owned website publication.",
+  "entrypoint": "channels.markdown_website",
+  "plugin_api_version": 1,
+  "sdk_contract_version": "1.0.0",
+  "framework_contract_versions": {
+    "content": "0.1",
+    "media": "0.3",
+    "execution": "0.1",
+    "scheduling": "0.1",
+    "analytics": "0.1",
+    "channel": "1.0"
+  },
+  "channel_family": "owned_publication",
+  "publication_format": "markdown",
+  "execution_mode": "built_in_in_process",
+  "publisher_type": "git_repository",
+  "capabilities": [
+    "channel.connect",
+    "channel.disconnect",
+    "channel.status",
+    "channel.publish.text",
+    "channel.publish.image",
+    "channel.metrics.collect",
+    "channel.health",
+    "channel.markdown_website.publish",
+    "channel.markdown_website.verify"
+  ],
+  "dependencies": [
+    {"capability": "content.items", "min_version": "0.1.0"},
+    {"capability": "media.library", "min_version": "0.3.0"},
+    {"capability": "publication.execution", "min_version": "0.1.0"},
+    {"capability": "publication.scheduling", "min_version": "0.1.0"},
+    {"capability": "analytics.ingestion", "min_version": "0.1.0"}
+  ],
+  "configuration_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["repository_reference_id", "branch", "content_root", "media_root", "public_base_url", "public_url_template", "frontmatter_profile_id"],
+    "properties": {
+      "repository_reference_id": {"type": "string"},
+      "branch": {"type": "string"},
+      "content_root": {"type": "string"},
+      "media_root": {"type": "string"},
+      "public_base_url": {"type": "string"},
+      "public_url_template": {"type": "string"},
+      "frontmatter_profile_id": {"type": "string"},
+      "push_policy": {"enum": ["commit_only", "commit_and_push"]},
+      "verification_policy": {"enum": ["commit_only", "remote_commit", "public_url"]}
+    }
+  },
+  "secrets": [],
+  "permissions": [
+    "outbound_network",
+    "media_read",
+    "media_materialization",
+    "analytics_ingestion",
+    "execution_reporting",
+    "account_configuration"
+  ],
+  "distribution": "builtin",
+  "maintainers": [{"name": "Core maintainers", "role": "owner", "contact_reference": "project repository"}],
+  "license": "Proprietary local project",
+  "documentation": "docs/markdown-website-channel-v0.1.md",
+  "compatibility": {"test_profiles": ["channel.api_first", "channel.text_publish", "channel.image_publish", "channel.metrics"]}
+}

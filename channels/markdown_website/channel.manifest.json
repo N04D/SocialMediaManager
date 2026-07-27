@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "id": "channel.markdown_website",
+  "name": "Markdown Website",
+  "version": "0.1.0",
+  "plugin_type": "channel",
+  "type": "channel",
+  "entrypoint": "channels.markdown_website",
+  "plugin_api_version": 1,
+  "capabilities": ["channel.status", "channel.publish.text", "channel.publish.image", "channel.metrics.collect", "channel.health"],
+  "dependencies": [],
+  "configuration_schema": {},
+  "permissions": ["outbound_network", "media_read", "media_materialization", "analytics_ingestion", "execution_reporting", "account_configuration"],
+  "distribution": "builtin",
+  "documentation": "docs/markdown-website-channel-v0.1.md"
+}

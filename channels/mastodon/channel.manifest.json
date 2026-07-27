@@ -3,6 +3,7 @@
   "name": "Mastodon",
   "version": "0.1.0",
   "description": "API-first Mastodon channel for text, image publishing, and status metrics.",
+  "channel_family": "social_distribution",
   "status": "pilot",
   "mode": "api_oauth_pkce",
   "capabilities": {
