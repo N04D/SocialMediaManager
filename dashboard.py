@@ -2893,17 +2893,81 @@ def owned_publication_service() -> OwnedPublicationWorkspaceService:
 
 def owned_publication_operations_payload() -> dict[str, Any]:
     service = owned_publication_service()
-    health = service.storage_health()
+    health = service.operations_health()
     recovery = service.recovery()
+    release = service.release_check_payload(require_certification=False)
     return {
-        "storage": health,
+        "storage": health["storage"],
         "recovery": recovery,
-        "active_leases": 0,
+        "workers": health["workers"],
+        "metrics": health["metrics"],
+        "backups": service.backup_list(),
+        "readiness": release["report"],
+        "active_leases": int(health["metrics"]["owned_publication_active_leases"]),
         "expired_leases_released": recovery["expired_reconciliation_leases_released"],
         "queue_depth": len(service.reconciliation()["items"]),
         "readmodels": service.readmodels_status(),
-        "phase20_2": {"production_ready": False, "blocked": True},
+        "phase20_2": service.phase20_2_status(),
     }
+
+
+def render_owned_publication_operations_page() -> str:
+    operations = owned_publication_operations_payload()
+    readiness = operations["readiness"]
+    worker_rows = "".join(
+        "<tr>"
+        f"<td>{html.escape(worker['worker_type'])}</td>"
+        f"<td>{html.escape(worker['status'])}</td>"
+        f"<td>{html.escape(worker['last_heartbeat'])}</td>"
+        f"<td>{html.escape(str(worker['processed_items']))}</td>"
+        f"<td>{html.escape(worker['last_error_code'])}</td>"
+        "</tr>"
+        for worker in operations["workers"]["workers"]
+    )
+    metrics_rows = "".join(
+        f"<tr><td>{html.escape(name)}</td><td>{html.escape(str(value))}</td></tr>"
+        for name, value in operations["metrics"].items()
+    )
+    backup_rows = (
+        "".join(
+            "<tr>"
+            f"<td>{html.escape(item['id'])}</td>"
+            f"<td>{html.escape(item['status'])}</td>"
+            f"<td>{html.escape(item['validation_status'])}</td>"
+            f"<td>{html.escape(str(item['backup_size_bytes']))}</td>"
+            "</tr>"
+            for item in operations["backups"]["backups"]
+        )
+        or "<tr><td colspan='4'>No backups yet</td></tr>"
+    )
+    return f"""
+      <section class="owned-operations" aria-labelledby="owned-operations-title">
+        <h2 id="owned-operations-title">Owned publication operations</h2>
+        <div class="workspace-grid">
+          <article class="panel">
+            <h3>Readiness</h3>
+            <p>Owned operations: <strong>{html.escape(str(readiness["owned_publication_operations_ready"]))}</strong></p>
+            <p>External plugin sandbox: <strong>{html.escape(str(readiness["external_plugin_sandbox_ready"]))}</strong></p>
+            <p>Phase 20.2: {html.escape(str(operations["phase20_2"]["status"]))}</p>
+          </article>
+          <article class="panel">
+            <h3>Storage</h3>
+            <p>Ready: {html.escape(str(operations["storage"]["ready"]))}</p>
+            <p>Schema: {html.escape(str(operations["storage"]["schema_version"]))} · Journal: {html.escape(str(operations["storage"]["journal_mode"]))}</p>
+            <p>Database bytes: {html.escape(str(operations["storage"]["database_size_bytes"]))} · Free bytes: {html.escape(str(operations["storage"]["free_disk_bytes"]))}</p>
+          </article>
+          <article class="panel">
+            <h3>Release gate</h3>
+            <p>Browser certification: {html.escape(str(readiness["browser_certification_passed"]))}</p>
+            <p>Worker certification: {html.escape(str(readiness["worker_certification_passed"]))}</p>
+            <p>Required skips: {html.escape(str(readiness["required_certification_skips"]))}</p>
+          </article>
+        </div>
+        <section class="panel"><h3>Workers</h3><table><thead><tr><th>Type</th><th>Status</th><th>Heartbeat</th><th>Processed</th><th>Error</th></tr></thead><tbody>{worker_rows}</tbody></table></section>
+        <section class="panel"><h3>Backups</h3><table><thead><tr><th>ID</th><th>Status</th><th>Validation</th><th>Bytes</th></tr></thead><tbody>{backup_rows}</tbody></table></section>
+        <section class="panel"><h3>Metrics</h3><table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody>{metrics_rows}</tbody></table></section>
+      </section>
+    """
 
 
 def render_owned_publication_workspace_page() -> str:
@@ -3258,8 +3322,8 @@ def render_main_content(
     if route == ROUTE_OPERATIONS:
         return (
             "Operations",
-            "Reconciliation queue and safe read-only repairs",
-            render_owned_publication_workspace_page(),
+            "Release gates, workers, storage health, backups, and recovery",
+            render_owned_publication_operations_page(),
         )
     if route == ROUTE_PLUGINS:
         return (
@@ -4364,6 +4428,29 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if parsed.path == "/health/live":
+            json_response(self, {"status": "alive", "liveness": True})
+            return
+        if parsed.path == "/health/ready":
+            health = owned_publication_service().operations_health()
+            status = HTTPStatus.OK if health["readiness"]["ready"] else HTTPStatus.SERVICE_UNAVAILABLE
+            json_response(self, health["readiness"], status=status)
+            return
+        if parsed.path == "/api/operations/health":
+            json_response(self, owned_publication_service().operations_health())
+            return
+        if parsed.path == "/api/operations/release-check":
+            json_response(self, owned_publication_service().release_check_payload(require_certification=False))
+            return
+        if parsed.path == "/api/operations/backups":
+            json_response(self, owned_publication_service().backup_list())
+            return
+        if parsed.path.startswith("/api/operations/backups/"):
+            suffix = parsed.path.removeprefix("/api/operations/backups/")
+            parts = suffix.split("/")
+            if len(parts) == 1:
+                json_response(self, owned_publication_service().backup_show(parts[0]))
+                return
         if parsed.path == "/api/channels":
             ensure_channel_store_dirs()
             body = json.dumps(
@@ -5574,6 +5661,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/operations/recovery/run":
             json_response(self, owned_publication_service().recovery())
+            return
+        if path == "/api/operations/backups":
+            json_response(self, owned_publication_service().backup_create(json_body), status=HTTPStatus.CREATED)
+            return
+        if path.startswith("/api/operations/backups/") and path.endswith("/validate"):
+            backup_id = path.removeprefix("/api/operations/backups/").removesuffix("/validate").strip("/")
+            json_response(self, owned_publication_service().backup_validate(backup_id))
+            return
+        if path == "/api/operations/retention/preview":
+            json_response(self, owned_publication_service().retention_preview(json_body))
+            return
+        if path == "/api/operations/support-bundles":
+            json_response(self, owned_publication_service().support_bundle_create(), status=HTTPStatus.CREATED)
             return
         if path == "/api/readmodels/rebuild":
             json_response(self, owned_publication_service().rebuild_readmodels(json_body))

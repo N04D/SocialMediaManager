@@ -1,0 +1,60 @@
+name: Owned Publication Operations
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  owned-publication-browser-worker-certification:
+    name: Owned Publication Browser and Worker Certification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Run fail-on-skip browser and worker certification
+        run: |
+          python scripts/owned-publication-certify.py --json --output owned-publication-certification.json
+      - name: Upload safe certification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owned-publication-certification-report
+          path: owned-publication-certification.json
+          if-no-files-found: error
+
+  owned-publication-release-gate:
+    name: Owned Publication Release Gate
+    runs-on: ubuntu-24.04
+    needs: owned-publication-browser-worker-certification
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run operations release gate
+        run: |
+          python -m unittest tests.test_owned_publication_disaster_recovery_phase24 -v
+          python -m unittest tests.test_owned_publication_readiness_phase24 -v
+          python -m src.plugin_sdk.cli owned-publication release-check --json > owned-publication-readiness.json
+      - name: Upload safe readiness report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owned-publication-readiness-report
+          path: owned-publication-readiness.json
+          if-no-files-found: error

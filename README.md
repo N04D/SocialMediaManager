@@ -6,6 +6,8 @@ The workspace does not build or host a website. Git push is distinct from public
 
 Phase 23 persists owned-publication drafts, immutable revisions, variants, publication plans, evidence, reconciliation leases, campaigns, and funnel readmodels in a host-owned SQLite store.
 
+Phase 24 adds production operations for the owned-publication stack: browser/worker CI certification, fail-on-skip release gates, worker supervision, storage health, managed SQLite backups, staged restore validation, support bundles, and a release-check command. External plugin sandbox certification from phase 20.2 remains separately blocked and is reported separately.
+
 SocialMediaManager turns long-form content into channel-specific publication targets.
 
 ## Markdown Website Channel

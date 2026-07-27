@@ -910,6 +910,25 @@ def owned_publication_cmd(args: argparse.Namespace) -> int:
         payload = service.funnel(content_id)
     elif args.owned_command == "storage-health":
         payload = service.storage_health()
+    elif args.owned_command == "operations-health":
+        payload = service.operations_health()
+    elif args.owned_command == "backup-create":
+        payload = service.backup_create({"backup_destination_reference_id": "local-managed"})
+    elif args.owned_command == "backup-list":
+        payload = service.backup_list()
+    elif args.owned_command == "backup-show":
+        payload = service.backup_show(args.backup_id)
+    elif args.owned_command == "backup-validate":
+        payload = service.backup_validate(args.backup_id)
+    elif args.owned_command == "retention-preview":
+        payload = service.retention_preview({"dry_run": True})
+    elif args.owned_command == "support-bundle-create":
+        payload = service.support_bundle_create()
+    elif args.owned_command == "release-check":
+        payload = service.release_check_payload(require_certification=False)
+        if getattr(args, "json", False):
+            print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+            return 0 if payload["report"]["owned_publication_operations_ready"] else 1
     elif args.owned_command == "migrations":
         payload = service.migrations()
     elif args.owned_command == "recovery":
@@ -1195,15 +1214,27 @@ def build_parser() -> argparse.ArgumentParser:
         "funnel",
         "reconciliation",
         "storage-health",
+        "operations-health",
         "migrations",
         "recovery",
         "reconciliation-list",
         "readmodels-status",
         "readmodels-rebuild",
         "campaigns",
+        "backup-create",
+        "backup-list",
+        "retention-preview",
+        "support-bundle-create",
     }:
         cmd = owned_sub.add_parser(name)
         cmd.add_argument("--content-item-id", default="content-owned-1")
+        cmd.set_defaults(func=owned_publication_cmd)
+    release_check = owned_sub.add_parser("release-check")
+    release_check.add_argument("--json", action="store_true")
+    release_check.set_defaults(func=owned_publication_cmd)
+    for name in {"backup-show", "backup-validate"}:
+        cmd = owned_sub.add_parser(name)
+        cmd.add_argument("backup_id")
         cmd.set_defaults(func=owned_publication_cmd)
     for name in {"reconciliation-show", "reconciliation-check"}:
         cmd = owned_sub.add_parser(name)

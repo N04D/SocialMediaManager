@@ -15,6 +15,14 @@ from .models import (
     stable_checksum,
     utc_now_iso,
 )
+from .operations import (
+    CertificationGate,
+    OwnedPublicationWorkerSupervisor,
+    ProductionReadinessService,
+    StorageBackupService,
+    SupportBundleService,
+    operations_metrics,
+)
 from .persistence import DatabaseOwnedPublicationRepository, default_database_path
 
 
@@ -319,13 +327,92 @@ class OwnedPublicationWorkspaceService:
         }
 
     def storage_health(self) -> dict[str, Any]:
-        return asdict(self.repository.health())
+        from .operations import OperationsHealthService
+
+        health = asdict(OperationsHealthService(self.repository).storage_health())
+        health["production_source"] = "database-backed"
+        return health
 
     def migrations(self) -> dict[str, Any]:
         return self.repository.migrations()
 
     def recovery(self) -> dict[str, Any]:
         return self.repository.recovery()
+
+    def operations_health(self) -> dict[str, Any]:
+        supervisor = OwnedPublicationWorkerSupervisor(self.repository)
+        startup = supervisor.startup()
+        return {
+            "contract_version": "1.0",
+            "liveness": {"status": "alive"},
+            "readiness": {"ready": bool(startup["started"]), "reason": startup.get("reason", "")},
+            "storage": self.storage_health(),
+            "workers": supervisor.health(),
+            "metrics": operations_metrics(self.repository),
+            "phase20_2": self.phase20_2_status(),
+        }
+
+    def phase20_2_status(self) -> dict[str, Any]:
+        from src.core.plugin_sandbox.integrity import PluginSandboxIntegrityService
+
+        health = PluginSandboxIntegrityService(self.repository.database_path.parent / "sandbox").health()
+        return {
+            "production_ready": health.production_ready,
+            "status": health.controller_status,
+            "missing_controls": list(health.missing_controls),
+        }
+
+    def backup_create(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        record = StorageBackupService(self.repository).create_backup(
+            destination_reference_id=str((payload or {}).get("backup_destination_reference_id") or "local-managed")
+        )
+        return {"backup": asdict(record)}
+
+    def backup_list(self) -> dict[str, Any]:
+        return {"backups": [asdict(item) for item in StorageBackupService(self.repository).list_backups()]}
+
+    def backup_show(self, backup_id: str) -> dict[str, Any]:
+        return {"backup": asdict(StorageBackupService(self.repository).get_backup(backup_id))}
+
+    def backup_validate(self, backup_id: str) -> dict[str, Any]:
+        return {"restore_validation": asdict(StorageBackupService(self.repository).validate_restore(backup_id))}
+
+    def retention_preview(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        service = StorageBackupService(self.repository)
+        return service.apply_retention(
+            keep_last=int((payload or {}).get("keep_last") or 2),
+            maximum_total_bytes=int((payload or {}).get("maximum_total_bytes") or 1024 * 1024 * 1024),
+            dry_run=bool((payload or {}).get("dry_run", True)),
+        )
+
+    def support_bundle_create(self) -> dict[str, Any]:
+        readiness = self.release_check_payload(require_certification=False)
+        return {"support_bundle": SupportBundleService(self.repository).create_bundle(readiness)}
+
+    def release_check_payload(self, *, require_certification: bool = True) -> dict[str, Any]:
+        gate = CertificationGate(commit_sha="local")
+        browser = None
+        worker = None
+        if not require_certification:
+            browser = gate.evidence_from_result(certification_type="browser_certification", browser_version="local")
+            worker = gate.evidence_from_result(certification_type="worker_certification")
+        backup_service = StorageBackupService(self.repository)
+        if not backup_service.list_backups():
+            backup_service.create_backup()
+        report = ProductionReadinessService(self.repository, backup_service=backup_service).report(
+            browser_evidence=browser,
+            worker_evidence=worker,
+        )
+        return {
+            "contract_version": "1.0",
+            "report": asdict(report),
+            "release_gate": {
+                "required_browser_tests_skipped": report.required_certification_skips if not browser else 0,
+                "required_worker_tests_skipped": report.required_certification_skips if not worker else 0,
+                "browser_certification_passed": report.browser_certification_passed,
+                "worker_certification_passed": report.worker_certification_passed,
+            },
+        }
 
     def readmodels_status(self) -> dict[str, Any]:
         return self.repository.readmodels_status()

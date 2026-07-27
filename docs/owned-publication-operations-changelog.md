@@ -14,3 +14,10 @@
 - Added two-context browser concurrency coverage for stale draft autosave conflicts.
 - Added bounded worker certification for concurrent occurrence and reconciliation claims, heartbeat, lease expiry, reclaim, and no-blind-retry behavior.
 - Documented that no CI browser certification job exists until a suitable Chromium-capable runner is configured.
+
+## 0.1.2
+
+- Added production operations and release gates for owned-publication browser and worker certification.
+- Added host-owned worker supervisor health, startup, cycle, heartbeat, and graceful shutdown reporting.
+- Added managed SQLite backup, restore validation, backup retention preview, production readiness, support bundles, health endpoints, operations metrics, and operations dashboard.
+- Added CI workflow definitions for browser/worker certification and owned-publication release gate.
