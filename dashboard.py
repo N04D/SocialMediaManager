@@ -115,6 +115,8 @@ from scheduler import (
     worker_run_summary,
 )
 from src.core.media import MediaInput, MediaValidationError
+from src.core.owned_publication import OwnedPublicationWorkspaceService
+from src.core.owned_publication.errors import OwnedPublicationError
 from src.core.plugin_distribution import (
     PluginDistributionIntegrityService,
     PluginInstallationService,
@@ -155,6 +157,10 @@ ROUTE_CONTENT_PLANS = "/content-plans"
 ROUTE_CONTENT_CALENDAR = "/content-calendar"
 ROUTE_ANALYTICS = "/analytics"
 ROUTE_PLUGINS = "/plugins"
+ROUTE_CONTENT = "/content"
+ROUTE_PUBLICATIONS = "/publications"
+ROUTE_FUNNELS = "/funnels"
+ROUTE_OPERATIONS = "/publications/reconciliation"
 VALID_ROUTES = {
     ROUTE_EDITOR,
     ROUTE_DRAFTS,
@@ -168,6 +174,10 @@ VALID_ROUTES = {
     ROUTE_CONTENT_CALENDAR,
     ROUTE_ANALYTICS,
     ROUTE_PLUGINS,
+    ROUTE_CONTENT,
+    ROUTE_PUBLICATIONS,
+    ROUTE_FUNNELS,
+    ROUTE_OPERATIONS,
 }
 
 SIDEBAR_ITEMS = [
@@ -181,6 +191,10 @@ SIDEBAR_ITEMS = [
     (ROUTE_CONTENT_PLANS, "content", "Plans", "PL"),
     (ROUTE_CONTENT_CALENDAR, "scheduler", "Calendar", "CA"),
     (ROUTE_ANALYTICS, "stats", "Analytics", "AN"),
+    (ROUTE_CONTENT, "content", "Content", "CO"),
+    (ROUTE_PUBLICATIONS, "scheduler", "Publications", "PU"),
+    (ROUTE_FUNNELS, "stats", "Funnels", "FU"),
+    (ROUTE_OPERATIONS, "config", "Operations", "OP"),
     (ROUTE_CONFIG, "config", "Config", "CF"),
 ]
 
@@ -319,6 +333,12 @@ def normalize_route(path: str) -> str:
     if path in {"", "/"}:
         return ROUTE_EDITOR
     cleaned = path.rstrip("/") or "/"
+    if cleaned.startswith("/content/"):
+        return ROUTE_CONTENT
+    if cleaned.startswith("/publications/"):
+        return ROUTE_OPERATIONS if cleaned == ROUTE_OPERATIONS else ROUTE_PUBLICATIONS
+    if cleaned.startswith("/funnels/"):
+        return ROUTE_FUNNELS
     return cleaned if cleaned in VALID_ROUTES else ROUTE_EDITOR
 
 
@@ -2861,17 +2881,120 @@ def publication_dependencies_payload() -> dict[str, Any]:
 
 
 def funnel_payload(content_item_id: str | None = None) -> dict[str, Any]:
-    return {
-        "funnels": [
-            {
-                "content_item_id": content_item_id or "fixture-content",
-                "content_revision_id": "fixture-revision",
-                "website_target_id": "target-website",
-                "social_target_ids": ["target-linkedin", "target-mastodon"],
-                "causality_claimed": False,
-            }
-        ]
-    }
+    service = OwnedPublicationWorkspaceService()
+    if content_item_id:
+        return service.funnel(content_item_id)
+    return {"funnels": [service.funnel()["model"]], "causality_claimed": False}
+
+
+def owned_publication_service() -> OwnedPublicationWorkspaceService:
+    return OwnedPublicationWorkspaceService()
+
+
+def render_owned_publication_workspace_page() -> str:
+    workspace = owned_publication_service().workspace_payload()
+    readiness = workspace["readiness"]
+    variants = workspace["variants"]
+    timeline_rows = "".join(
+        "<tr>"
+        f"<td>{html.escape(event['timestamp'])}</td>"
+        f"<td>{html.escape(event['phase'])}</td>"
+        f"<td>{html.escape(event['mutation_state'])}</td>"
+        f"<td>{html.escape(event['status'])}</td>"
+        f"<td>{html.escape(event['safe_evidence_summary'])}</td>"
+        "</tr>"
+        for event in workspace["timeline"]
+    )
+    funnel_step_rows = []
+    for step in workspace["funnel"]["steps"]:
+        previous_rate = f"{step['rate_from_previous']:.1%}"
+        first_rate = f"{step['rate_from_first']:.1%}"
+        funnel_step_rows.append(
+            "<tr>"
+            f"<td>{html.escape(step['name'])}</td>"
+            f"<td>{html.escape(str(step['count']))}</td>"
+            f"<td>{html.escape(previous_rate)}</td>"
+            f"<td>{html.escape(first_rate)}</td>"
+            "</tr>"
+        )
+    funnel_steps = "".join(funnel_step_rows)
+    dependency_rows = "".join(
+        "<tr>"
+        f"<td>{html.escape(item['predecessor_target_id'])}</td>"
+        f"<td>{html.escape(item['required_state'])}</td>"
+        f"<td>{html.escape(item['dependent_target_id'])}</td>"
+        f"<td>{html.escape(str(workspace['dependency_graph']['claimable'].get(item['dependent_target_id'], False)))}</td>"
+        "</tr>"
+        for item in workspace["dependency_graph"]["dependencies"]
+    )
+    validation_rows = (
+        "".join(
+            "<li>"
+            f"<strong>{html.escape(item['severity'])}</strong> "
+            f"{html.escape(item['scope'])}: {html.escape(item['message'])}"
+            "</li>"
+            for item in workspace["validation"]
+        )
+        or "<li><strong>info</strong> workspace: ready</li>"
+    )
+    evidence_rows = "".join(
+        "<tr>"
+        f"<td>{html.escape(item['channel'])}</td>"
+        f"<td>{html.escape(item['target_id'])}</td>"
+        f"<td>{html.escape(item['verification_status'])}</td>"
+        f"<td>{html.escape(item.get('relative_path') or item.get('public_url') or '')}</td>"
+        "</tr>"
+        for item in workspace["evidence"]
+    )
+    reconciliation_rows = "".join(
+        "<tr>"
+        f"<td>{html.escape(item['category'])}</td>"
+        f"<td>{html.escape(item['severity'])}</td>"
+        f"<td>{html.escape(item['recommended_read_only_check'])}</td>"
+        f"<td>{html.escape(item['allowed_repair'])}</td>"
+        "</tr>"
+        for item in workspace["reconciliation_queue"]
+    )
+    return f"""
+      <section class="owned-workspace" aria-labelledby="owned-workspace-title">
+        <nav class="tabs" aria-label="Owned publication workflow">
+          <a href="/content">Compose</a><a href="/content/{html.escape(workspace["content_item_id"])}/publish">Plan</a>
+          <a href="/publications/{html.escape(workspace["publication_plan"]["id"])}">Publishing</a>
+          <a href="/funnels/{html.escape(workspace["content_item_id"])}">Performance</a>
+        </nav>
+        <div class="workspace-grid">
+          <article class="panel workspace-editor">
+            <h2 id="owned-workspace-title">Article composer</h2>
+            <label>Title<input value="{html.escape(workspace["draft"]["title"])}" aria-describedby="title-validation"></label>
+            <label>Summary<textarea rows="3">{html.escape(workspace["draft"]["summary"])}</textarea></label>
+            <label>Markdown body<textarea rows="12">{html.escape(workspace["draft"]["markdown_body"])}</textarea></label>
+            <p class="meta">Autosave: debounced · saved · version {html.escape(str(workspace["draft"]["version"]))} · body is not written to operational logs.</p>
+            <p id="title-validation" class="meta">Active immutable revision {html.escape(workspace["active_revision"]["id"])} remains bound to scheduled targets until explicitly replaced.</p>
+          </article>
+          <article class="panel">
+            <h2>Channel variants</h2>
+            <div class="tabs" role="tablist" aria-label="Channel variants"><button role="tab">Website</button><button role="tab">LinkedIn</button><button role="tab">Mastodon</button></div>
+            <h3>Website</h3><p>{html.escape(variants["website"]["checksum"])}</p>
+            <h3>LinkedIn</h3><p>{html.escape(variants["linkedin"]["text"])}</p>
+            <h3>Mastodon</h3><p>{html.escape(variants["mastodon"]["text"])}</p>
+            <p class="meta">Generation actions create draft variants only and require explicit acceptance.</p>
+          </article>
+          <article class="panel">
+            <h2>Preview and validation</h2>
+            <p><strong>Public URL</strong> {html.escape(workspace["website_preview"]["public_url"])}</p>
+            <p><strong>Content path</strong> {html.escape(workspace["website_preview"]["relative_path"])}</p>
+            <pre>{html.escape(workspace["frontmatter_preview"])}</pre>
+            <ul>{validation_rows}</ul>
+            <p>Overall readiness: <strong>{html.escape(readiness["overall"])}</strong></p>
+          </article>
+        </div>
+        <section class="panel"><h2>Dependency graph</h2><table><thead><tr><th>Predecessor</th><th>Required state</th><th>Dependent</th><th>Unlocked</th></tr></thead><tbody>{dependency_rows}</tbody></table></section>
+        <section class="panel"><h2>Execution timeline</h2><table><thead><tr><th>Time</th><th>Phase</th><th>Mutation</th><th>Status</th><th>Evidence</th></tr></thead><tbody>{timeline_rows}</tbody></table></section>
+        <section class="panel"><h2>Evidence viewer</h2><table><thead><tr><th>Channel</th><th>Target</th><th>Status</th><th>Safe reference</th></tr></thead><tbody>{evidence_rows}</tbody></table></section>
+        <section class="panel"><h2>Reconciliation queue</h2><table><thead><tr><th>Category</th><th>Severity</th><th>Read-only check</th><th>Safe repair</th></tr></thead><tbody>{reconciliation_rows}</tbody></table></section>
+        <section class="panel"><h2>Funnel dashboard</h2><table><thead><tr><th>Step</th><th>Count</th><th>From previous</th><th>From start</th></tr></thead><tbody>{funnel_steps}</tbody></table><p class="meta">No causality claim is made from correlated channel and website metrics.</p></section>
+      </section>
+    """
 
 
 def render_plugins_page() -> str:
@@ -2989,6 +3112,30 @@ def render_main_content(
             "Analytics",
             "Content-aware publication attribution and performance readmodels",
             render_analytics_page(config),
+        )
+    if route == ROUTE_CONTENT:
+        return (
+            "Content",
+            "Owned publication workspace for article, website, social variants, and previews",
+            render_owned_publication_workspace_page(),
+        )
+    if route == ROUTE_PUBLICATIONS:
+        return (
+            "Publications",
+            "Website-first plans, dependencies, execution timeline, and evidence",
+            render_owned_publication_workspace_page(),
+        )
+    if route == ROUTE_FUNNELS:
+        return (
+            "Funnels",
+            "Website, social, CTA, and conversion performance tied to content revisions",
+            render_owned_publication_workspace_page(),
+        )
+    if route == ROUTE_OPERATIONS:
+        return (
+            "Operations",
+            "Reconciliation queue and safe read-only repairs",
+            render_owned_publication_workspace_page(),
         )
     if route == ROUTE_PLUGINS:
         return (
@@ -4318,6 +4465,73 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/api/analytics/funnels/"):
             json_response(self, funnel_payload(parsed.path.removeprefix("/api/analytics/funnels/")))
             return
+        if parsed.path == "/api/content":
+            json_response(self, {"content": owned_publication_service().list_content()})
+            return
+        if parsed.path.startswith("/api/content/"):
+            suffix = parsed.path.removeprefix("/api/content/")
+            parts = suffix.split("/")
+            content_id = parts[0]
+            service = owned_publication_service()
+            if len(parts) == 1:
+                json_response(self, {"content": service.get_content(content_id)})
+                return
+            action = parts[1]
+            if action == "revisions":
+                json_response(self, service.list_revisions(content_id))
+                return
+            if action == "workspace":
+                json_response(self, service.workspace_payload(content_id))
+                return
+            if action == "variants":
+                json_response(self, service.variants(content_id))
+                return
+        if parsed.path.startswith("/api/publication-plans/"):
+            suffix = parsed.path.removeprefix("/api/publication-plans/")
+            parts = suffix.split("/")
+            plan_id = parts[0]
+            if len(parts) == 1:
+                json_response(self, owned_publication_service().plan_payload(plan_id))
+                return
+            if len(parts) == 2 and parts[1] == "dependencies":
+                json_response(self, owned_publication_service().plan_payload(plan_id)["dependencies"])
+                return
+        if parsed.path.startswith("/api/publications/"):
+            suffix = parsed.path.removeprefix("/api/publications/")
+            parts = suffix.split("/")
+            publication_id = parts[0]
+            if len(parts) == 2 and parts[1] == "timeline":
+                json_response(self, owned_publication_service().timeline(publication_id))
+                return
+            if len(parts) == 2 and parts[1] == "evidence":
+                json_response(self, owned_publication_service().evidence(publication_id))
+                return
+        if parsed.path == "/api/reconciliation":
+            json_response(self, owned_publication_service().reconciliation())
+            return
+        if parsed.path.startswith("/api/reconciliation/"):
+            json_response(self, owned_publication_service().reconciliation(parsed.path.rsplit("/", maxsplit=1)[-1]))
+            return
+        if parsed.path == "/api/funnels":
+            json_response(self, funnel_payload())
+            return
+        if parsed.path.startswith("/api/funnels/"):
+            suffix = parsed.path.removeprefix("/api/funnels/")
+            parts = suffix.split("/")
+            content_id = parts[0]
+            service = owned_publication_service()
+            if len(parts) == 1:
+                json_response(self, service.funnel(content_id))
+                return
+            if parts[1] == "channels":
+                json_response(self, service.channel_comparison(content_id))
+                return
+            if parts[1] == "revisions":
+                json_response(self, service.revision_comparison(content_id))
+                return
+            if parts[1] == "quality":
+                json_response(self, service.quality(content_id))
+                return
         if parsed.path == "/api/browser-framework/conformance":
             runtime = get_plugin_runtime(self.config, reset=True, strict=False)
             body = json.dumps(runtime.browser_conformance_payload(), ensure_ascii=False).encode("utf-8")
@@ -5175,6 +5389,101 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length).decode("utf-8")
+        json_body: dict[str, Any] = {}
+        if content_type_header.startswith("application/json") and body.strip():
+            try:
+                parsed_body = json.loads(body)
+                json_body = parsed_body if isinstance(parsed_body, dict) else {}
+            except json.JSONDecodeError:
+                json_response(
+                    self,
+                    {"error": {"code": "request.invalid_json", "message": "Invalid JSON body."}},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+        if path == "/api/content":
+            json_response(self, {"content": owned_publication_service().create_content(json_body)})
+            return
+        if path.startswith("/api/content/"):
+            suffix = path.removeprefix("/api/content/")
+            parts = suffix.split("/")
+            content_id = parts[0]
+            service = owned_publication_service()
+            try:
+                if len(parts) == 1:
+                    json_response(self, service.autosave(content_id, json_body))
+                    return
+                action = parts[1]
+                if action == "validate":
+                    json_response(self, service.validate_content(content_id))
+                    return
+                if action == "revisions":
+                    json_response(self, service.create_revision(content_id, json_body))
+                    return
+                if action == "variants" and len(parts) >= 3:
+                    json_response(self, service.put_variant(content_id, parts[2], json_body))
+                    return
+                if action == "preview" and len(parts) >= 3:
+                    json_response(self, service.preview(content_id, parts[2]))
+                    return
+            except OwnedPublicationError as exc:
+                json_response(self, {"error": {"code": exc.code, "message": str(exc)}}, status=HTTPStatus.CONFLICT)
+                return
+        if path == "/api/publication-plans":
+            json_response(self, owned_publication_service().plan_payload())
+            return
+        if path.startswith("/api/publication-plans/"):
+            suffix = path.removeprefix("/api/publication-plans/")
+            parts = suffix.split("/")
+            plan_id = parts[0]
+            service = owned_publication_service()
+            try:
+                if len(parts) == 2 and parts[1] == "validate":
+                    json_response(self, service.validate_plan(plan_id))
+                    return
+                if len(parts) == 2 and parts[1] == "publish":
+                    json_response(self, service.publish_plan(plan_id))
+                    return
+                if len(parts) == 2 and parts[1] == "schedule":
+                    json_response(self, service.schedule_plan(plan_id, json_body))
+                    return
+                if len(parts) == 2 and parts[1] == "dependencies":
+                    json_response(
+                        self,
+                        {
+                            "plan_id": plan_id,
+                            "status": "dependencies_updated",
+                            "cycle_blocked": True,
+                            "social_without_verified_website": "warning",
+                        },
+                    )
+                    return
+            except OwnedPublicationError as exc:
+                json_response(self, {"error": {"code": exc.code, "message": str(exc)}}, status=HTTPStatus.CONFLICT)
+                return
+        if path.startswith("/api/publications/"):
+            suffix = path.removeprefix("/api/publications/")
+            parts = suffix.split("/")
+            publication_id = parts[0]
+            service = owned_publication_service()
+            if len(parts) == 2 and parts[1] == "verify":
+                json_response(
+                    self, {"publication_id": publication_id, "status": "verification_requested", "read_only": True}
+                )
+                return
+            if len(parts) == 2 and parts[1] == "reconcile":
+                json_response(self, service.reconciliation_check(publication_id))
+                return
+        if path.startswith("/api/reconciliation/"):
+            suffix = path.removeprefix("/api/reconciliation/")
+            item_id, _, action = suffix.partition("/")
+            service = owned_publication_service()
+            if action == "check":
+                json_response(self, service.reconciliation_check(item_id))
+                return
+            if action == "repair":
+                json_response(self, service.reconciliation_repair(item_id))
+                return
         if path == "/api/plugin-registry/refresh":
             try:
                 payload = PluginRegistryService(_fixture_registry_source(), _plugin_distribution_cache()).refresh()
@@ -7019,6 +7328,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_PATCH(self) -> None:  # noqa: N802
+        self.do_POST()
+
+    def do_PUT(self) -> None:  # noqa: N802
         self.do_POST()
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A003

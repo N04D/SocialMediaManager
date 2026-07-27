@@ -885,6 +885,38 @@ def markdown_website_doctor_cmd(args: argparse.Namespace) -> int:
     return 0
 
 
+def owned_publication_cmd(args: argparse.Namespace) -> int:
+    from importlib import import_module
+
+    service_module = import_module("src.core.owned_publication.service")
+    mcp_module = import_module("src.core.owned_publication.mcp")
+    service = service_module.OwnedPublicationWorkspaceService()
+    content_id = getattr(args, "content_item_id", "content-owned-1")
+    if args.owned_command == "workspace":
+        payload = service.workspace_payload(content_id)
+    elif args.owned_command == "preview":
+        payload = service.preview(content_id, args.channel)
+    elif args.owned_command == "validate":
+        payload = service.validate_content(content_id)
+    elif args.owned_command == "plan":
+        payload = service.plan_payload(getattr(args, "plan_id", "plan-owned-1"))
+    elif args.owned_command == "timeline":
+        payload = service.timeline(args.publication_id)
+    elif args.owned_command == "evidence":
+        payload = service.evidence(args.publication_id)
+    elif args.owned_command == "reconciliation":
+        payload = service.reconciliation()
+    elif args.owned_command == "funnel":
+        payload = service.funnel(content_id)
+    elif args.owned_command == "mcp":
+        mcp = mcp_module.OwnedPublicationMCP(service)
+        payload = getattr(mcp, args.query)(content_id)
+    else:
+        payload = {"status": "unknown"}
+    print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="plugin-sdk")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1134,6 +1166,28 @@ def build_parser() -> argparse.ArgumentParser:
     integrity.set_defaults(func=markdown_website_integrity_cmd)
     doctor = markdown_sub.add_parser("doctor")
     doctor.set_defaults(func=markdown_website_doctor_cmd)
+
+    owned = sub.add_parser("owned-publication")
+    owned_sub = owned.add_subparsers(dest="owned_command", required=True)
+    for name in {"workspace", "validate", "funnel", "reconciliation"}:
+        cmd = owned_sub.add_parser(name)
+        cmd.add_argument("--content-item-id", default="content-owned-1")
+        cmd.set_defaults(func=owned_publication_cmd)
+    preview = owned_sub.add_parser("preview")
+    preview.add_argument("--content-item-id", default="content-owned-1")
+    preview.add_argument("--channel", default="website", choices=["website", "linkedin", "mastodon"])
+    preview.set_defaults(func=owned_publication_cmd)
+    plan_cmd = owned_sub.add_parser("plan")
+    plan_cmd.add_argument("--plan-id", default="plan-owned-1")
+    plan_cmd.set_defaults(func=owned_publication_cmd)
+    for name in {"timeline", "evidence"}:
+        cmd = owned_sub.add_parser(name)
+        cmd.add_argument("publication_id")
+        cmd.set_defaults(func=owned_publication_cmd)
+    mcp_cmd = owned_sub.add_parser("mcp")
+    mcp_cmd.add_argument("query")
+    mcp_cmd.add_argument("--content-item-id", default="content-owned-1")
+    mcp_cmd.set_defaults(func=owned_publication_cmd)
     return parser
 
 
