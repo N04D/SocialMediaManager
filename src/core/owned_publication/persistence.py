@@ -1158,6 +1158,16 @@ class DatabaseOwnedPublicationRepository:
             ).rowcount
         return updated == 1
 
+    def list_occurrence_ids(self, *, limit: int = 10) -> list[str]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT id FROM publication_occurrences "
+                "WHERE status IN ('waiting_dependency', 'open', 'claimed') "
+                "ORDER BY planned_for, created_at LIMIT ?",
+                (max(1, limit),),
+            ).fetchall()
+        return [str(row["id"]) for row in rows]
+
     def append_execution_event(
         self,
         workspace_id: str,
@@ -1367,6 +1377,15 @@ class DatabaseOwnedPublicationRepository:
             rows = connection.execute(sql, params).fetchall()
         return [self._reconciliation_from_row(row) for row in rows]
 
+    def list_reconciliation_ids(self, *, limit: int = 10) -> list[str]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT id FROM reconciliation_items WHERE status IN ('open', 'waiting', 'claimed') "
+                "ORDER BY next_check_at, detected_at LIMIT ?",
+                (max(1, limit),),
+            ).fetchall()
+        return [str(row["id"]) for row in rows]
+
     def get_reconciliation_item(self, item_id: str) -> ReconciliationItem:
         with self._connect() as connection:
             row = connection.execute(
@@ -1441,6 +1460,32 @@ class DatabaseOwnedPublicationRepository:
                 "INSERT INTO reconciliation_attempts VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     f"rec-attempt-{stable_checksum(item_id + resolution)[:12]}",
+                    row["workspace_id"],
+                    item_id,
+                    "read_only_check",
+                    "resolved",
+                    _json({"resolution": resolution, "new_mutation": False}),
+                    utc_now_iso(),
+                ),
+            )
+        return {"id": item_id, "status": "resolved", "new_mutation": False}
+
+    def resolve_claimed_reconciliation(self, item_id: str, owner: str, resolution: str) -> dict[str, Any]:
+        with self.transaction() as connection:
+            row = connection.execute(
+                f"SELECT {RECONCILIATION_COLUMNS} FROM reconciliation_items WHERE id=?", (item_id,)
+            ).fetchone()
+            if not row or row["lease_owner"] != owner:
+                raise OwnedPublicationError("workspace.conflict", "Reconciliation owner conflict.")
+            connection.execute(
+                "UPDATE reconciliation_items SET status='resolved', resolution=?, resolved_at=?, version=version+1 "
+                "WHERE id=?",
+                (resolution, utc_now_iso(), item_id),
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO reconciliation_attempts VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    f"rec-attempt-{stable_checksum(item_id + owner + resolution)[:12]}",
                     row["workspace_id"],
                     item_id,
                     "read_only_check",

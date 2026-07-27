@@ -254,7 +254,19 @@ class OwnedPublicationWorkspaceService:
         return self._workspace
 
     def workspace_payload(self, content_item_id: str | None = None) -> dict[str, Any]:
-        return _workspace_to_payload(self.get_workspace(content_item_id))
+        payload = _workspace_to_payload(self.get_workspace(content_item_id))
+        target_id = content_item_id or payload["content_item_id"]
+        try:
+            draft = self.repository.get_draft(target_id)
+        except OwnedPublicationError:
+            return payload
+        payload["content_item_id"] = draft.id
+        payload["draft"] = _draft_payload(draft)
+        revisions = self.repository.list_revisions(draft.id)
+        if revisions and (len(revisions) > 1 or target_id != self._workspace.content_item_id):
+            payload["active_revision"] = asdict(revisions[-1])
+            payload["revision_history"] = [asdict(item) for item in revisions]
+        return payload
 
     def variants(self, content_item_id: str) -> dict[str, Any]:
         workspace = self.get_workspace(content_item_id)

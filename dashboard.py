@@ -2907,9 +2907,12 @@ def owned_publication_operations_payload() -> dict[str, Any]:
 
 
 def render_owned_publication_workspace_page() -> str:
+    from src.core.owned_publication.validation import render_safe_markdown_preview
+
     workspace = owned_publication_service().workspace_payload()
     readiness = workspace["readiness"]
     variants = workspace["variants"]
+    draft = workspace["draft"]
     timeline_rows = "".join(
         "<tr>"
         f"<td>{html.escape(event['timestamp'])}</td>"
@@ -2952,6 +2955,12 @@ def render_owned_publication_workspace_page() -> str:
         )
         or "<li><strong>info</strong> workspace: ready</li>"
     )
+    unsafe_preview_fixture = render_safe_markdown_preview(
+        "Normal **Markdown**\n\n<script>window.__unsafe = true</script>\n"
+        '<img src=x onerror="window.__unsafe = true">\n'
+        '<a href="javascript:window.__unsafe=true">unsafe</a>\n'
+        '<iframe src="https://example.invalid"></iframe>'
+    )
     evidence_rows = "".join(
         "<tr>"
         f"<td>{html.escape(item['channel'])}</td>"
@@ -2980,18 +2989,29 @@ def render_owned_publication_workspace_page() -> str:
         <div class="workspace-grid">
           <article class="panel workspace-editor">
             <h2 id="owned-workspace-title">Article composer</h2>
-            <label>Title<input value="{html.escape(workspace["draft"]["title"])}" aria-describedby="title-validation"></label>
-            <label>Summary<textarea rows="3">{html.escape(workspace["draft"]["summary"])}</textarea></label>
-            <label>Markdown body<textarea rows="12">{html.escape(workspace["draft"]["markdown_body"])}</textarea></label>
-            <p class="meta">Autosave: debounced · saved · version {html.escape(str(workspace["draft"]["version"]))} · body is not written to operational logs.</p>
+            <form id="owned-composer-form" data-content-id="{html.escape(workspace["content_item_id"])}" data-version="{html.escape(str(draft["version"]))}">
+              <label>Title <input id="owned-title" name="title" value="{html.escape(draft["title"])}" aria-describedby="title-validation"></label>
+              <label for="owned-summary">Summary</label><textarea id="owned-summary" name="summary" rows="3">{html.escape(draft["summary"])}</textarea>
+              <label for="owned-language">Language</label><select id="owned-language" name="language"><option selected>{html.escape(draft["language"])}</option><option>nl</option><option>en</option></select>
+              <label for="owned-author">Author</label><input id="owned-author" name="author" value="{html.escape(draft["author"])}">
+              <label for="owned-tags">Tags</label><input id="owned-tags" name="tags" value="{html.escape(", ".join(draft["tags"]))}">
+              <label for="owned-hero">Hero image</label><select id="owned-hero" name="hero_media_asset_id"><option value="media-hero-fixture">Fixture hero image</option></select>
+              <label for="owned-seo">SEO description</label><input id="owned-seo" name="seo_description" value="Durable owned publication operations">
+              <label for="owned-cta">CTA label</label><input id="owned-cta" name="cta_label" value="Read the guide">
+              <label for="owned-body">Markdown body</label><textarea id="owned-body" name="markdown_body" rows="12">{html.escape(draft["markdown_body"])}</textarea>
+              <p id="autosave-status" class="meta" role="status" aria-live="polite">Autosave: debounced · saved · version {html.escape(str(draft["version"]))} · body is not written to operational logs.</p>
+              <p id="conflict-status" class="meta" role="alert" tabindex="-1"></p>
+              <button id="create-revision" type="button">Create immutable revision</button>
+              <button id="create-plan" type="button">Create publication plan</button>
+            </form>
             <p id="title-validation" class="meta">Active immutable revision {html.escape(workspace["active_revision"]["id"])} remains bound to scheduled targets until explicitly replaced.</p>
           </article>
           <article class="panel">
             <h2>Channel variants</h2>
-            <div class="tabs" role="tablist" aria-label="Channel variants"><button role="tab">Website</button><button role="tab">LinkedIn</button><button role="tab">Mastodon</button></div>
-            <h3>Website</h3><p>{html.escape(variants["website"]["checksum"])}</p>
-            <h3>LinkedIn</h3><p>{html.escape(variants["linkedin"]["text"])}</p>
-            <h3>Mastodon</h3><p>{html.escape(variants["mastodon"]["text"])}</p>
+            <div class="tabs" role="tablist" aria-label="Channel variants"><button role="tab" aria-selected="true" tabindex="0">Website</button><button role="tab" aria-selected="false" tabindex="-1">LinkedIn</button><button role="tab" aria-selected="false" tabindex="-1">Mastodon</button></div>
+            <h3>Website</h3><label for="frontmatter-profile">Frontmatter profile</label><select id="frontmatter-profile"><option>generic_yaml</option><option>hugo</option></select><p>{html.escape(variants["website"]["checksum"])}</p>
+            <h3>LinkedIn</h3><label for="linkedin-variant">LinkedIn variant</label><textarea id="linkedin-variant" rows="4">{html.escape(variants["linkedin"]["text"])}</textarea><p id="linkedin-attribution">UTM source linkedin · attribution attr-linkedin</p>
+            <h3>Mastodon</h3><label for="mastodon-variant">Mastodon variant</label><textarea id="mastodon-variant" rows="4">{html.escape(variants["mastodon"]["text"])}</textarea><p id="mastodon-attribution">UTM source mastodon · attribution attr-mastodon</p>
             <p class="meta">Generation actions create draft variants only and require explicit acceptance.</p>
           </article>
           <article class="panel">
@@ -2999,16 +3019,105 @@ def render_owned_publication_workspace_page() -> str:
             <p><strong>Public URL</strong> {html.escape(workspace["website_preview"]["public_url"])}</p>
             <p><strong>Content path</strong> {html.escape(workspace["website_preview"]["relative_path"])}</p>
             <pre>{html.escape(workspace["frontmatter_preview"])}</pre>
-            <ul>{validation_rows}</ul>
+            <div id="markdown-preview" aria-label="Markdown preview">{workspace["markdown_preview_html"]}</div>
+            <div id="unsafe-preview-fixture" aria-label="Unsafe preview fixture">{unsafe_preview_fixture}</div>
+            <ul id="validation-errors">{validation_rows}</ul>
             <p>Overall readiness: <strong>{html.escape(readiness["overall"])}</strong></p>
+            <button id="publish-plan" type="button" aria-describedby="publish-help" disabled>Publish website</button>
+            <p id="publish-help" class="meta">Disabled until validation and dependencies are ready.</p>
           </article>
         </div>
         <section class="panel"><h2>Dependency graph</h2><table><thead><tr><th>Predecessor</th><th>Required state</th><th>Dependent</th><th>Unlocked</th></tr></thead><tbody>{dependency_rows}</tbody></table></section>
         <section class="panel"><h2>Execution timeline</h2><table><thead><tr><th>Time</th><th>Phase</th><th>Mutation</th><th>Status</th><th>Evidence</th></tr></thead><tbody>{timeline_rows}</tbody></table></section>
         <section class="panel"><h2>Evidence viewer</h2><table><thead><tr><th>Channel</th><th>Target</th><th>Status</th><th>Safe reference</th></tr></thead><tbody>{evidence_rows}</tbody></table></section>
-        <section class="panel"><h2>Reconciliation queue</h2><table><thead><tr><th>Category</th><th>Severity</th><th>Read-only check</th><th>Safe repair</th></tr></thead><tbody>{reconciliation_rows}</tbody></table></section>
+        <section class="panel"><h2>Reconciliation queue</h2><button id="reconciliation-check" type="button">Run read-only reconciliation check</button><p id="reconciliation-status" role="status" aria-live="polite"></p><table><thead><tr><th>Category</th><th>Severity</th><th>Read-only check</th><th>Safe repair</th></tr></thead><tbody>{reconciliation_rows}</tbody></table></section>
         <section class="panel"><h2>Funnel dashboard</h2><table><thead><tr><th>Step</th><th>Count</th><th>From previous</th><th>From start</th></tr></thead><tbody>{funnel_steps}</tbody></table><p class="meta">No causality claim is made from correlated channel and website metrics.</p></section>
       </section>
+      <script>
+      (() => {{
+        const form = document.querySelector("#owned-composer-form");
+        if (!form) return;
+        const status = document.querySelector("#autosave-status");
+        const conflict = document.querySelector("#conflict-status");
+        let version = Number(form.dataset.version || "1");
+        let timer = 0;
+        let requestCount = 0;
+        window.__ownedPublicationAutosaveRequests = 0;
+        window.__ownedPublicationMutationRequests = 0;
+        const body = () => ({{
+          expected_version: version,
+          title: document.querySelector("#owned-title").value,
+          summary: document.querySelector("#owned-summary").value,
+          markdown_body: document.querySelector("#owned-body").value,
+          language: document.querySelector("#owned-language").value,
+          author: document.querySelector("#owned-author").value,
+          tags: document.querySelector("#owned-tags").value.split(",").map((value) => value.trim()).filter(Boolean),
+          idempotency_key: "browser-autosave-" + form.dataset.contentId + "-" + version + "-" + requestCount
+        }});
+        async function autosave() {{
+          requestCount += 1;
+          window.__ownedPublicationAutosaveRequests += 1;
+          status.textContent = "Autosave: saving";
+          try {{
+            const response = await fetch("/api/content/" + encodeURIComponent(form.dataset.contentId), {{
+              method: "PATCH",
+              headers: {{"Content-Type": "application/json"}},
+              body: JSON.stringify(body())
+            }});
+            const payload = await response.json();
+            if (response.status === 409) {{
+              conflict.textContent = "Conflict: newer draft version is available.";
+              conflict.focus();
+              status.textContent = "Autosave: conflict";
+              return;
+            }}
+            if (!response.ok) throw new Error(payload.error ? payload.error.code : "autosave.failed");
+            version = payload.draft.version;
+            form.dataset.version = String(version);
+            status.textContent = "Autosave: saved · version " + version;
+            conflict.textContent = "";
+          }} catch (error) {{
+            status.textContent = "Autosave: error";
+          }}
+        }}
+        function scheduleAutosave() {{
+          status.textContent = "Autosave: pending";
+          clearTimeout(timer);
+          timer = setTimeout(autosave, 250);
+        }}
+        form.querySelectorAll("input, textarea, select").forEach((field) => field.addEventListener("input", scheduleAutosave));
+        document.querySelectorAll('[role="tab"]').forEach((tab, index, tabs) => {{
+          tab.addEventListener("keydown", (event) => {{
+            if (!["ArrowRight", "ArrowLeft"].includes(event.key)) return;
+            event.preventDefault();
+            const next = event.key === "ArrowRight" ? (index + 1) % tabs.length : (index + tabs.length - 1) % tabs.length;
+            tabs.forEach((item) => {{ item.setAttribute("aria-selected", "false"); item.tabIndex = -1; }});
+            tabs[next].setAttribute("aria-selected", "true");
+            tabs[next].tabIndex = 0;
+            tabs[next].focus();
+          }});
+        }});
+        document.querySelector("#create-revision").addEventListener("click", async () => {{
+          const response = await fetch("/api/content/" + encodeURIComponent(form.dataset.contentId) + "/revisions", {{
+            method: "POST",
+            headers: {{"Content-Type": "application/json"}},
+            body: JSON.stringify({{expected_version: version, idempotency_key: "browser-revision-" + version}})
+          }});
+          const payload = await response.json();
+          status.textContent = response.ok ? "Revision created: " + payload.revision.id : "Revision error";
+        }});
+        document.querySelector("#create-plan").addEventListener("click", async () => {{
+          const response = await fetch("/api/publication-plans", {{method: "POST", headers: {{"Content-Type": "application/json"}}, body: "{{}}" }});
+          window.__ownedPublicationMutationRequests += 1;
+          status.textContent = response.ok ? "Publication plan created" : "Publication plan error";
+        }});
+        document.querySelector("#reconciliation-check").addEventListener("click", async () => {{
+          const response = await fetch("/api/reconciliation/rec-deployment-pending/check", {{method: "POST", headers: {{"Content-Type": "application/json"}}, body: "{{}}" }});
+          const payload = await response.json();
+          document.querySelector("#reconciliation-status").textContent = response.ok && payload.read_only ? "Read-only reconciliation resolved without mutation" : "Reconciliation check failed";
+        }});
+      }})();
+      </script>
     """
 
 

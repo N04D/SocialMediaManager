@@ -24,6 +24,7 @@ from .models import (
 )
 from .persistence import DatabaseOwnedPublicationRepository, InMemoryOwnedPublicationRepository
 from .service import OwnedPublicationWorkspaceService
+from .worker import OwnedPublicationOperationsWorker, OwnedPublicationWorkerStats, run_worker_thread
 
 __all__ = [
     "OWNED_PUBLICATION_WORKSPACE_VERSION",
@@ -36,6 +37,8 @@ __all__ = [
     "InMemoryOwnedPublicationRepository",
     "OWNED_PUBLICATION_MIGRATION_CONTRACT_VERSION",
     "OwnedPublicationMCP",
+    "OwnedPublicationOperationsWorker",
+    "OwnedPublicationWorkerStats",
     "OwnedPublicationWorkspace",
     "OwnedPublicationWorkspaceService",
     "OWNED_PUBLICATION_PERSISTENCE_VERSION",
@@ -47,4 +50,5 @@ __all__ = [
     "ReconciliationItem",
     "WorkspaceValidationResult",
     "build_complete_workspace_fixture",
+    "run_worker_thread",
 ]
