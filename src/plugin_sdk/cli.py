@@ -908,6 +908,26 @@ def owned_publication_cmd(args: argparse.Namespace) -> int:
         payload = service.reconciliation()
     elif args.owned_command == "funnel":
         payload = service.funnel(content_id)
+    elif args.owned_command == "storage-health":
+        payload = service.storage_health()
+    elif args.owned_command == "migrations":
+        payload = service.migrations()
+    elif args.owned_command == "recovery":
+        payload = service.recovery()
+    elif args.owned_command == "reconciliation-list":
+        payload = service.reconciliation()
+    elif args.owned_command == "reconciliation-show":
+        payload = service.reconciliation(args.reconciliation_id)
+    elif args.owned_command == "reconciliation-check":
+        payload = service.reconciliation_check(args.reconciliation_id)
+    elif args.owned_command == "readmodels-status":
+        payload = service.readmodels_status()
+    elif args.owned_command == "readmodels-rebuild":
+        payload = service.rebuild_readmodels({"subject_id": content_id})
+    elif args.owned_command == "campaigns":
+        payload = service.list_campaigns()
+    elif args.owned_command == "campaign-show":
+        payload = service.campaign(args.campaign_id)
     elif args.owned_command == "mcp":
         mcp = mcp_module.OwnedPublicationMCP(service)
         payload = getattr(mcp, args.query)(content_id)
@@ -1169,10 +1189,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     owned = sub.add_parser("owned-publication")
     owned_sub = owned.add_subparsers(dest="owned_command", required=True)
-    for name in {"workspace", "validate", "funnel", "reconciliation"}:
+    for name in {
+        "workspace",
+        "validate",
+        "funnel",
+        "reconciliation",
+        "storage-health",
+        "migrations",
+        "recovery",
+        "reconciliation-list",
+        "readmodels-status",
+        "readmodels-rebuild",
+        "campaigns",
+    }:
         cmd = owned_sub.add_parser(name)
         cmd.add_argument("--content-item-id", default="content-owned-1")
         cmd.set_defaults(func=owned_publication_cmd)
+    for name in {"reconciliation-show", "reconciliation-check"}:
+        cmd = owned_sub.add_parser(name)
+        cmd.add_argument("reconciliation_id")
+        cmd.set_defaults(func=owned_publication_cmd)
+    campaign_show = owned_sub.add_parser("campaign-show")
+    campaign_show.add_argument("campaign_id")
+    campaign_show.set_defaults(func=owned_publication_cmd)
     preview = owned_sub.add_parser("preview")
     preview.add_argument("--content-item-id", default="content-owned-1")
     preview.add_argument("--channel", default="website", choices=["website", "linkedin", "mastodon"])

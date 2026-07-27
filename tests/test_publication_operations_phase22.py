@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from src.core.owned_publication import OwnedPublicationWorkspaceService
 from src.core.owned_publication.errors import OwnedPublicationError
@@ -13,7 +15,11 @@ from src.core.publication_dependencies import (
 
 class PublicationOperationsPhase22Tests(unittest.TestCase):
     def setUp(self) -> None:
-        self.service = OwnedPublicationWorkspaceService()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.service = OwnedPublicationWorkspaceService(database_path=Path(self.tmp.name) / "operations.sqlite3")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
 
     def test_plan_builder_dependencies_and_scheduling(self) -> None:
         plan = self.service.plan_payload("plan-owned-1")

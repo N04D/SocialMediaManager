@@ -96,6 +96,15 @@ class OwnedPublicationMCP:
             **self.service.quality(content_item_id),
         }
 
+    def get_campaign_performance(self, campaign_id: str) -> dict[str, Any]:
+        return {
+            "tool": "owned_publication.get_campaign_performance",
+            "read_only": True,
+            "campaign": self.service.campaign(campaign_id).get("campaign", {}),
+            "readmodels": self.service.readmodels_status(),
+            "phase20_2": {"production_ready": False},
+        }
+
 
 def _binding(workspace: dict[str, Any]) -> dict[str, str]:
     return {

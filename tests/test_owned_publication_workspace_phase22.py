@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from src.core.owned_publication import OWNED_PUBLICATION_WORKSPACE_VERSION, OwnedPublicationWorkspaceService
 from src.core.owned_publication.errors import OwnedPublicationError
@@ -8,7 +10,12 @@ from src.core.owned_publication.errors import OwnedPublicationError
 
 class OwnedPublicationWorkspacePhase22Tests(unittest.TestCase):
     def setUp(self) -> None:
-        self.service = OwnedPublicationWorkspaceService()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.database_path = Path(self.tmp.name) / "workspace.sqlite3"
+        self.service = OwnedPublicationWorkspaceService(database_path=self.database_path)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
 
     def test_workspace_loads_with_routes_navigation_and_safe_sections(self) -> None:
         workspace = self.service.workspace_payload("content-owned-1")
@@ -53,7 +60,7 @@ class OwnedPublicationWorkspacePhase22Tests(unittest.TestCase):
         )
 
     def test_validation_and_readiness_block_bad_article(self) -> None:
-        service = OwnedPublicationWorkspaceService()
+        service = OwnedPublicationWorkspaceService(database_path=self.database_path)
         created = service.create_content(
             {"id": "content-empty", "workspace_id": "workspace-1", "title": "", "markdown_body": ""}
         )

@@ -4,6 +4,8 @@ Phase 22 adds an Owned Publication Workspace for website-first funnels: compose 
 
 The workspace does not build or host a website. Git push is distinct from public URL verification, and phase 20.2 Linux sandbox certification remains separately blocked until a supported Linux host proves `linux_production_ready=true`.
 
+Phase 23 persists owned-publication drafts, immutable revisions, variants, publication plans, evidence, reconciliation leases, campaigns, and funnel readmodels in a host-owned SQLite store.
+
 SocialMediaManager turns long-form content into channel-specific publication targets.
 
 ## Markdown Website Channel

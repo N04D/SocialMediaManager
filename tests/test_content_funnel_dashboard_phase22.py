@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from src.core.owned_publication import OwnedPublicationWorkspaceService
 
 
 class ContentFunnelDashboardPhase22Tests(unittest.TestCase):
     def setUp(self) -> None:
-        self.service = OwnedPublicationWorkspaceService()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.service = OwnedPublicationWorkspaceService(database_path=Path(self.tmp.name) / "funnel.sqlite3")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
 
     def test_funnel_steps_rates_quality_and_no_causality_claim(self) -> None:
         funnel = self.service.funnel("content-owned-1")

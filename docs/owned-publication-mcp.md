@@ -17,3 +17,5 @@ Read-only MCP-style helpers expose:
 - `get_attribution_quality`
 
 Every response includes exact binding to content item, content revision, channel variant, publication target, publication attempt, campaign, or analytics window where relevant.
+
+Phase 23 serves these helpers from the database-backed workspace service rather than an in-memory singleton, so answers survive application restart.

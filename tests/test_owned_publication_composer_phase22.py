@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from dashboard import render_owned_publication_workspace_page
 from src.core.owned_publication import OwnedPublicationWorkspaceService
@@ -8,7 +10,11 @@ from src.core.owned_publication import OwnedPublicationWorkspaceService
 
 class OwnedPublicationComposerPhase22Tests(unittest.TestCase):
     def setUp(self) -> None:
-        self.service = OwnedPublicationWorkspaceService()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.service = OwnedPublicationWorkspaceService(database_path=Path(self.tmp.name) / "composer.sqlite3")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
 
     def test_website_editor_preview_uses_publication_renderer(self) -> None:
         preview = self.service.preview("content-owned-1", "website")

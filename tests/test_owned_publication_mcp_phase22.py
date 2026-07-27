@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from src.core.owned_publication import OwnedPublicationMCP, OwnedPublicationWorkspaceService
 
 
 class OwnedPublicationMCPPhase22Tests(unittest.TestCase):
     def setUp(self) -> None:
-        self.service = OwnedPublicationWorkspaceService()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.service = OwnedPublicationWorkspaceService(database_path=Path(self.tmp.name) / "mcp.sqlite3")
         self.mcp = OwnedPublicationMCP(self.service)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
 
     def test_mcp_article_plan_dependencies_timeline_and_evidence(self) -> None:
         article = self.mcp.get_article_with_channel_variants("content-owned-1")

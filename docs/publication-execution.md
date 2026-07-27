@@ -5,3 +5,5 @@ Owned-publication execution is website-first. Social distribution targets remain
 Owned website publication uses the existing execution phases: `prepared`, `mutation_started`, `mutation_acknowledged`, `mutation_verified`, `remote_acknowledged`, and `publication_verified`.
 
 The Markdown Website channel does not create a second retry engine. Uncertain Git pushes require reconciliation before any further mutation.
+
+Phase 23 stores owned-publication execution events as append-only durable records. Post-mutation restart recovery creates or updates reconciliation work instead of blindly repeating filesystem, Git, push, or social mutations.

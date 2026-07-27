@@ -3,33 +3,137 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 from .errors import OwnedPublicationError
-from .fixtures import build_complete_workspace_fixture, fixture_draft, fixture_revision
+from .fixtures import build_complete_workspace_fixture, fixture_draft
 from .models import (
     ChannelVariantDraft,
     ContentDraft,
-    ContentRevision,
     OwnedPublicationWorkspace,
     stable_checksum,
     utc_now_iso,
 )
+from .persistence import DatabaseOwnedPublicationRepository, default_database_path
 
 
 class OwnedPublicationWorkspaceService:
-    """In-memory deterministic workspace service used by dashboard, CLI, and tests.
+    """Workspace service used by dashboard, CLI, MCP, and tests.
 
-    The service models the phase-22 workflows without touching project-owned content files.
-    Persistent application storage can later back the same payload shapes.
+    Phase 23 keeps the phase-22 payload shapes and backs operational writes with
+    SQLite. The deterministic fixture is seeded only into the managed database;
+    project `content/` and `drafts/` directories are never used as fixtures.
     """
 
-    def __init__(self, workspace: OwnedPublicationWorkspace | None = None) -> None:
+    def __init__(
+        self,
+        workspace: OwnedPublicationWorkspace | None = None,
+        repository: DatabaseOwnedPublicationRepository | None = None,
+        database_path: str | Path | None = None,
+    ) -> None:
         self._workspace = workspace or build_complete_workspace_fixture()
-        self._drafts: dict[str, ContentDraft] = {self._workspace.draft.id: self._workspace.draft}
-        self._revisions: dict[str, list[ContentRevision]] = {
-            self._workspace.draft.id: [self._workspace.active_revision]
-        }
+        self.repository = repository or DatabaseOwnedPublicationRepository(database_path or default_database_path())
+        self._ensure_seeded()
+
+    def _ensure_seeded(self) -> None:
+        if self.repository.list_drafts(self._workspace.workspace_id):
+            return
+        draft = self.repository.save_draft(
+            self._workspace.draft,
+            expected_version=None,
+            idempotency_key="seed-draft-" + self._workspace.draft.id,
+            actor="fixture",
+        )
+        revision = self.repository.create_revision(
+            draft.id,
+            expected_version=draft.version,
+            idempotency_key="seed-revision-" + draft.id,
+            actor="fixture",
+        )
+        variant_ids: dict[str, str] = {}
+        for channel, variant in self._workspace.variants.items():
+            persisted = self.repository.create_variant(
+                revision,
+                variant.channel,
+                variant.text,
+                idempotency_key="seed-variant-" + channel,
+                generation_metadata=variant.generation_binding,
+            )
+            variant_ids[channel] = persisted.id
+        targets = [
+            {
+                "id": target.id,
+                "channel_id": target.channel,
+                "account_id": target.account_id,
+                "variant_id": variant_ids.get(
+                    "website"
+                    if target.channel == "channel.markdown_website"
+                    else target.channel.removeprefix("channel."),
+                    target.variant_id,
+                ),
+                "schedule_id": "schedule-" + target.id,
+                "verification_policy": target.verification_policy,
+                "status": target.status,
+                "execution_state": target.status,
+            }
+            for target in self._workspace.publication_plan.targets
+        ]
+        dependencies = [
+            {
+                "id": item["id"],
+                "predecessor_target_id": item["predecessor_target_id"],
+                "dependent_target_id": item["dependent_target_id"],
+                "required_state": item["required_state"],
+                "dependency_type": item.get("dependency_type", "publication_state"),
+                "timeout_policy": "wait",
+                "failure_policy": "block",
+            }
+            for item in self._workspace.dependency_graph["dependencies"]
+        ]
+        plan = self.repository.create_plan(
+            self._workspace.workspace_id,
+            draft.id,
+            revision.id,
+            targets,
+            dependencies,
+            campaign_id=self._workspace.publication_plan.campaign,
+            idempotency_key="seed-plan-" + draft.id,
+            actor="fixture",
+        )
+        for target in plan.targets:
+            self.repository.materialize_occurrence(
+                self._workspace.workspace_id,
+                "schedule-" + target.id,
+                target.id,
+                target.schedule or "2026-07-27T09:00:00Z",
+                timezone=self._workspace.schedule["timezone"],
+                idempotency_key="seed-occurrence-" + target.id,
+            )
+        for index, event in enumerate(self._workspace.timeline):
+            self.repository.append_execution_event(
+                self._workspace.workspace_id,
+                "attempt-website-1",
+                "target-website",
+                event,
+                idempotency_key=f"seed-event-{index}",
+            )
+        for index, evidence in enumerate(self._workspace.evidence):
+            self.repository.add_evidence(
+                self._workspace.workspace_id,
+                "public_url_evidence"
+                if evidence.channel == "channel.markdown_website"
+                else "social_acknowledgment_evidence",
+                evidence,
+                idempotency_key=f"seed-evidence-{index}",
+            )
+        for item in self._workspace.reconciliation_queue:
+            self.repository.detect_reconciliation(
+                item,
+                plan_id=plan.id,
+                attempt_id="attempt-website-2",
+                idempotency_key="seed-reconciliation-" + item.id,
+            )
 
     def list_content(self) -> list[dict[str, Any]]:
         return [
@@ -38,10 +142,12 @@ class OwnedPublicationWorkspaceService:
                 "workspace_id": draft.workspace_id,
                 "title": draft.title,
                 "status": draft.status,
-                "active_revision_id": self._revisions[draft.id][-1].id,
+                "active_revision_id": (self.repository.list_revisions(draft.id) or [self._workspace.active_revision])[
+                    -1
+                ].id,
                 "version": draft.version,
             }
-            for draft in self._drafts.values()
+            for draft in self.repository.list_drafts()
         ]
 
     def create_content(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -61,15 +167,22 @@ class OwnedPublicationWorkspaceService:
             1,
             utc_now_iso(),
         )
-        self._drafts[draft.id] = draft
-        self._revisions[draft.id] = []
-        return asdict(draft)
+        saved = self.repository.save_draft(
+            draft,
+            expected_version=None,
+            idempotency_key=str(payload.get("idempotency_key") or "content-create-" + content_id),
+            actor=str(payload.get("actor") or "api"),
+        )
+        return asdict(saved)
 
     def get_content(self, content_item_id: str) -> dict[str, Any]:
-        return _draft_payload(self._drafts.get(content_item_id) or self._workspace.draft)
+        try:
+            return _draft_payload(self.repository.get_draft(content_item_id))
+        except OwnedPublicationError:
+            return _draft_payload(self._workspace.draft)
 
     def autosave(self, content_item_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        current = self._drafts.get(content_item_id) or self._workspace.draft
+        current = self.repository.get_draft(content_item_id)
         expected = int(payload.get("expected_version", current.version))
         if expected != current.version:
             raise OwnedPublicationError("workspace.conflict", "Draft version conflict.")
@@ -86,8 +199,13 @@ class OwnedPublicationWorkspaceService:
             current.version + 1,
             utc_now_iso(),
         )
-        self._drafts[content_item_id] = updated
-        return {"status": "saved", "draft": asdict(updated), "autosave": {"debounced": True, "body_logged": False}}
+        saved = self.repository.save_draft(
+            updated,
+            expected_version=expected,
+            idempotency_key=str(payload.get("idempotency_key") or f"autosave-{content_item_id}-{expected}"),
+            actor=str(payload.get("actor") or "api"),
+        )
+        return {"status": "saved", "draft": asdict(saved), "autosave": {"debounced": True, "body_logged": False}}
 
     def validate_content(self, content_item_id: str) -> dict[str, Any]:
         if content_item_id == self._workspace.content_item_id:
@@ -99,7 +217,7 @@ class OwnedPublicationWorkspaceService:
             }
         from .validation import WorkspaceValidator
 
-        draft = self._drafts.get(content_item_id) or self._workspace.draft
+        draft = self.repository.get_draft(content_item_id)
         validator = WorkspaceValidator()
         validation = validator.validate(draft, website_renderable=bool(draft.markdown_body), dependencies_present=True)
         return {
@@ -109,19 +227,24 @@ class OwnedPublicationWorkspaceService:
         }
 
     def create_revision(self, content_item_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-        draft = self._drafts.get(content_item_id) or fixture_draft()
+        try:
+            draft = self.repository.get_draft(content_item_id)
+        except OwnedPublicationError:
+            draft = fixture_draft()
         expected = int((payload or {}).get("expected_version", draft.version))
-        if expected != draft.version:
-            raise OwnedPublicationError("workspace.conflict", "Revision source version conflict.")
-        revision = fixture_revision(draft)
-        revisions = self._revisions.setdefault(content_item_id, [])
-        revisions.append(revision)
+        revision = self.repository.create_revision(
+            draft.id,
+            expected_version=expected,
+            idempotency_key=str((payload or {}).get("idempotency_key") or f"revision-{draft.id}-{expected}"),
+            actor=str((payload or {}).get("actor") or "api"),
+        )
         return {"status": "revision_created", "revision": asdict(revision), "immutable": True}
 
     def list_revisions(self, content_item_id: str) -> dict[str, Any]:
         return {
             "revisions": [
-                asdict(item) for item in self._revisions.get(content_item_id, [self._workspace.active_revision])
+                asdict(item)
+                for item in (self.repository.list_revisions(content_item_id) or [self._workspace.active_revision])
             ]
         }
 
@@ -152,6 +275,12 @@ class OwnedPublicationWorkspaceService:
             stable_checksum(text),
             bool(payload.get("accepted", False)),
         )
+        self.repository.create_variant(
+            workspace.active_revision,
+            channel,
+            text,
+            idempotency_key=str(payload.get("idempotency_key") or f"variant-{content_item_id}-{channel}-{expected}"),
+        )
         return {"status": "variant_saved", "variant": asdict(variant), "silent_overwrite": False}
 
     def preview(self, content_item_id: str, channel: str) -> dict[str, Any]:
@@ -175,6 +304,52 @@ class OwnedPublicationWorkspaceService:
             "plan": asdict(workspace.publication_plan),
             "dependencies": workspace.dependency_graph,
             "readiness": asdict(workspace.readiness),
+        }
+
+    def storage_health(self) -> dict[str, Any]:
+        return asdict(self.repository.health())
+
+    def migrations(self) -> dict[str, Any]:
+        return self.repository.migrations()
+
+    def recovery(self) -> dict[str, Any]:
+        return self.repository.recovery()
+
+    def readmodels_status(self) -> dict[str, Any]:
+        return self.repository.readmodels_status()
+
+    def rebuild_readmodels(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        subject_id = str((payload or {}).get("subject_id") or self._workspace.content_item_id)
+        readmodel_type = str((payload or {}).get("readmodel_type") or "ContentFunnelReadModel")
+        return self.repository.rebuild_readmodel(self._workspace.workspace_id, readmodel_type, subject_id)
+
+    def create_campaign(self, payload: dict[str, Any]) -> dict[str, Any]:
+        campaign = self.repository.create_campaign(
+            str(payload.get("workspace_id") or self._workspace.workspace_id),
+            str(payload.get("name") or "Owned publication campaign"),
+            campaign_id=str(payload.get("id") or ""),
+            timezone=str(payload.get("timezone") or "UTC"),
+            start_at=str(payload.get("start_at") or ""),
+            end_at=str(payload.get("end_at") or ""),
+        )
+        return {"campaign": asdict(campaign)}
+
+    def list_campaigns(self, workspace_id: str = "") -> dict[str, Any]:
+        return {"campaigns": [asdict(item) for item in self.repository.list_campaigns(workspace_id)]}
+
+    def campaign(self, campaign_id: str) -> dict[str, Any]:
+        return {"campaign": asdict(self.repository.get_campaign(campaign_id))}
+
+    def pause_campaign(self, campaign_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        expected = int(payload.get("expected_version", self.repository.get_campaign(campaign_id).version))
+        return {
+            "campaign": asdict(self.repository.update_campaign_status(campaign_id, "paused", expected_version=expected))
+        }
+
+    def resume_campaign(self, campaign_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        expected = int(payload.get("expected_version", self.repository.get_campaign(campaign_id).version))
+        return {
+            "campaign": asdict(self.repository.update_campaign_status(campaign_id, "active", expected_version=expected))
         }
 
     def validate_plan(self, plan_id: str) -> dict[str, Any]:

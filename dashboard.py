@@ -2891,6 +2891,21 @@ def owned_publication_service() -> OwnedPublicationWorkspaceService:
     return OwnedPublicationWorkspaceService()
 
 
+def owned_publication_operations_payload() -> dict[str, Any]:
+    service = owned_publication_service()
+    health = service.storage_health()
+    recovery = service.recovery()
+    return {
+        "storage": health,
+        "recovery": recovery,
+        "active_leases": 0,
+        "expired_leases_released": recovery["expired_reconciliation_leases_released"],
+        "queue_depth": len(service.reconciliation()["items"]),
+        "readmodels": service.readmodels_status(),
+        "phase20_2": {"production_ready": False, "blocked": True},
+    }
+
+
 def render_owned_publication_workspace_page() -> str:
     workspace = owned_publication_service().workspace_payload()
     readiness = workspace["readiness"]
@@ -4468,6 +4483,44 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/content":
             json_response(self, {"content": owned_publication_service().list_content()})
             return
+        if parsed.path == "/api/storage/health":
+            json_response(self, owned_publication_service().storage_health())
+            return
+        if parsed.path == "/api/storage/migrations":
+            json_response(self, owned_publication_service().migrations())
+            return
+        if parsed.path == "/api/operations/recovery":
+            json_response(self, owned_publication_operations_payload())
+            return
+        if parsed.path == "/api/readmodels/status":
+            json_response(self, owned_publication_service().readmodels_status())
+            return
+        if parsed.path == "/api/campaigns":
+            json_response(self, owned_publication_service().list_campaigns(query.get("workspace_id", [""])[0]))
+            return
+        if parsed.path.startswith("/api/campaigns/"):
+            suffix = parsed.path.removeprefix("/api/campaigns/")
+            parts = suffix.split("/")
+            campaign_id = parts[0]
+            service = owned_publication_service()
+            try:
+                if len(parts) == 1:
+                    json_response(self, service.campaign(campaign_id))
+                    return
+                if len(parts) == 2 and parts[1] in {"calendar", "performance"}:
+                    json_response(
+                        self,
+                        {
+                            "campaign_id": campaign_id,
+                            "calendar": service.plan_payload()["plan"]["targets"],
+                            "performance": service.funnel()["model"],
+                            "durable": True,
+                        },
+                    )
+                    return
+            except OwnedPublicationError as exc:
+                json_response(self, {"error": {"code": exc.code, "message": str(exc)}}, status=HTTPStatus.NOT_FOUND)
+                return
         if parsed.path.startswith("/api/content/"):
             suffix = parsed.path.removeprefix("/api/content/")
             parts = suffix.split("/")
@@ -5254,7 +5307,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         route = normalize_route(parsed.path)
         if parsed.path not in {"/", route} and parsed.path != route:
-            if parsed.path not in VALID_ROUTES:
+            if (
+                parsed.path not in VALID_ROUTES
+                and not parsed.path.startswith("/content/")
+                and not parsed.path.startswith("/publications/")
+                and not parsed.path.startswith("/funnels/")
+                and not parsed.path.startswith("/campaigns/")
+            ):
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
 
@@ -5404,6 +5463,30 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if path == "/api/content":
             json_response(self, {"content": owned_publication_service().create_content(json_body)})
             return
+        if path == "/api/operations/recovery/run":
+            json_response(self, owned_publication_service().recovery())
+            return
+        if path == "/api/readmodels/rebuild":
+            json_response(self, owned_publication_service().rebuild_readmodels(json_body))
+            return
+        if path == "/api/campaigns":
+            json_response(self, owned_publication_service().create_campaign(json_body), status=HTTPStatus.CREATED)
+            return
+        if path.startswith("/api/campaigns/"):
+            suffix = path.removeprefix("/api/campaigns/")
+            parts = suffix.split("/")
+            campaign_id = parts[0]
+            service = owned_publication_service()
+            try:
+                if len(parts) == 2 and parts[1] == "pause":
+                    json_response(self, service.pause_campaign(campaign_id, json_body))
+                    return
+                if len(parts) == 2 and parts[1] == "resume":
+                    json_response(self, service.resume_campaign(campaign_id, json_body))
+                    return
+            except OwnedPublicationError as exc:
+                json_response(self, {"error": {"code": exc.code, "message": str(exc)}}, status=HTTPStatus.CONFLICT)
+                return
         if path.startswith("/api/content/"):
             suffix = path.removeprefix("/api/content/")
             parts = suffix.split("/")
@@ -5478,6 +5561,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
             suffix = path.removeprefix("/api/reconciliation/")
             item_id, _, action = suffix.partition("/")
             service = owned_publication_service()
+            if action == "claim":
+                lease = service.repository.claim_reconciliation(
+                    item_id,
+                    str(json_body.get("owner") or "dashboard"),
+                    str(json_body.get("lease_expires_at") or "9999-12-31T00:00:00Z"),
+                )
+                json_response(self, {"lease": asdict(lease)})
+                return
+            if action == "heartbeat":
+                ok = service.repository.heartbeat_reconciliation(
+                    item_id,
+                    str(json_body.get("owner") or "dashboard"),
+                    str(json_body.get("lease_expires_at") or "9999-12-31T00:00:00Z"),
+                )
+                json_response(self, {"id": item_id, "heartbeat": ok})
+                return
+            if action == "release":
+                ok = service.repository.release_reconciliation(item_id, str(json_body.get("owner") or "dashboard"))
+                json_response(self, {"id": item_id, "released": ok})
+                return
             if action == "check":
                 json_response(self, service.reconciliation_check(item_id))
                 return
