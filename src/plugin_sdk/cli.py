@@ -956,6 +956,46 @@ def owned_publication_cmd(args: argparse.Namespace) -> int:
     return 0
 
 
+def website_analytics_cmd(args: argparse.Namespace) -> int:
+    from importlib import import_module
+
+    service_module = import_module("src.core.website_analytics.service")
+    scenarios = import_module("integrations.website_analytics.scenarios")
+    service = service_module.WebsiteAnalyticsService()
+    command = args.website_analytics_command
+    account_id = getattr(args, "account_id", "analytics-account-plausible")
+    if command not in {"providers", "accounts"} and not service.repository.list_accounts():
+        service.create_account(scenarios.plausible_account_payload())
+    if command == "providers":
+        payload = service.providers_payload()
+    elif command == "accounts":
+        if not service.repository.list_accounts():
+            service.create_account(scenarios.plausible_account_payload())
+        payload = service.list_accounts()
+    elif command == "account-show":
+        payload = service.account(account_id)
+    elif command == "validate":
+        payload = service.validate(account_id)
+    elif command == "doctor":
+        payload = service.doctor(account_id)
+    elif command == "mappings":
+        if not service.repository.list_mappings(account_id):
+            service.put_mappings(account_id, scenarios.event_mappings_payload())
+        payload = service.mappings(account_id)
+    elif command == "sync":
+        if not service.repository.list_accounts():
+            service.create_account(scenarios.plausible_account_payload())
+        payload = service.sync(account_id)
+    elif command == "sync-status":
+        payload = service.sync_status(account_id)
+    elif command == "quality":
+        payload = service.quality_report(account_id)
+    else:
+        payload = {"status": "unknown"}
+    print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="plugin-sdk")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1258,6 +1298,16 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_cmd.add_argument("query")
     mcp_cmd.add_argument("--content-item-id", default="content-owned-1")
     mcp_cmd.set_defaults(func=owned_publication_cmd)
+
+    analytics = sub.add_parser("website-analytics")
+    analytics_sub = analytics.add_subparsers(dest="website_analytics_command", required=True)
+    for name in {"providers", "accounts"}:
+        cmd = analytics_sub.add_parser(name)
+        cmd.set_defaults(func=website_analytics_cmd)
+    for name in {"account-show", "validate", "doctor", "mappings", "sync", "sync-status", "quality"}:
+        cmd = analytics_sub.add_parser(name)
+        cmd.add_argument("account_id")
+        cmd.set_defaults(func=website_analytics_cmd)
     return parser
 
 

@@ -58,3 +58,33 @@ jobs:
           name: owned-publication-readiness-report
           path: owned-publication-readiness.json
           if-no-files-found: error
+
+  website-analytics-provider-certification:
+    name: Website Analytics Provider Certification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run fixture-only provider certification
+        run: |
+          python -m unittest tests.test_website_analytics_framework_phase25 -v
+          python -m unittest tests.test_plausible_analytics_provider_phase25 -v
+          python -m unittest tests.test_website_analytics_sync_phase25 -v
+          python -m unittest tests.test_website_analytics_attribution_phase25 -v
+          python -m unittest tests.test_website_analytics_funnel_phase25 -v
+          python -m unittest tests.test_website_analytics_security_phase25 -v
+          python -m src.plugin_sdk.cli website-analytics providers > website-analytics-provider-report.json
+      - name: Upload safe website analytics report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-analytics-provider-report
+          path: website-analytics-provider-report.json
+          if-no-files-found: error

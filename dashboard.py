@@ -2127,6 +2127,7 @@ def render_content_planning_page(config: AppConfig) -> str:
             """
         )
     return f"""
+      {render_website_analytics_page()}
       <div class="page-grid">
         <div class="stack">
           <section class="card">
@@ -2891,16 +2892,24 @@ def owned_publication_service() -> OwnedPublicationWorkspaceService:
     return OwnedPublicationWorkspaceService()
 
 
+def website_analytics_service():
+    from src.core.website_analytics.service import WebsiteAnalyticsService
+
+    return WebsiteAnalyticsService()
+
+
 def owned_publication_operations_payload() -> dict[str, Any]:
     service = owned_publication_service()
     health = service.operations_health()
     recovery = service.recovery()
     release = service.release_check_payload(require_certification=False)
+    analytics = website_analytics_service().analytics_health()
     return {
         "storage": health["storage"],
         "recovery": recovery,
         "workers": health["workers"],
         "metrics": health["metrics"],
+        "website_analytics": analytics,
         "backups": service.backup_list(),
         "readiness": release["report"],
         "active_leases": int(health["metrics"]["owned_publication_active_leases"]),
@@ -2909,6 +2918,43 @@ def owned_publication_operations_payload() -> dict[str, Any]:
         "readmodels": service.readmodels_status(),
         "phase20_2": service.phase20_2_status(),
     }
+
+
+def render_website_analytics_page() -> str:
+    service = website_analytics_service()
+    providers = service.providers_payload()["providers"]
+    accounts = service.list_accounts()["accounts"]
+    provider_rows = "".join(
+        f"<tr><td>{html.escape(item['provider_id'])}</td><td>{html.escape(item['provider_version'])}</td>"
+        f"<td>{html.escape(item['data_access'])}</td><td>{len(item['capabilities'])}</td></tr>"
+        for item in providers
+    )
+    account_rows = (
+        "".join(
+            f"<tr><td>{html.escape(item['id'])}</td><td>{html.escape(item['site_identifier'])}</td>"
+            f"<td>{html.escape(item['status'])}</td><td>{html.escape(item['secret_reference_id'])}</td></tr>"
+            for item in accounts
+        )
+        or "<tr><td colspan='4'>No analytics accounts configured.</td></tr>"
+    )
+    health = service.analytics_health()
+    return f"""
+    <section class="panel">
+      <h2>Website Analytics Providers</h2>
+      <table><thead><tr><th>Provider</th><th>Version</th><th>Access</th><th>Capabilities</th></tr></thead><tbody>{provider_rows}</tbody></table>
+    </section>
+    <section class="panel">
+      <h2>Analytics Accounts</h2>
+      <table><thead><tr><th>Account</th><th>Site</th><th>Status</th><th>Secret reference</th></tr></thead><tbody>{account_rows}</tbody></table>
+    </section>
+    <section class="panel">
+      <h2>Data Quality</h2>
+      <p>Publishing ready: {html.escape(str(health["publishing_ready"]))}</p>
+      <p>Analytics ready: {html.escape(str(health["analytics_ready"]))}</p>
+      <p>Freshness: {html.escape(str(health["data_freshness"]))}</p>
+      <p>Attribution conflicts: {html.escape(str(health["attribution_conflicts"]))}</p>
+    </section>
+    """
 
 
 def render_owned_publication_operations_page() -> str:
@@ -4673,8 +4719,54 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/analytics/funnels":
             json_response(self, funnel_payload())
             return
+        if parsed.path == "/api/analytics/providers":
+            json_response(self, website_analytics_service().providers_payload())
+            return
+        if parsed.path.startswith("/api/analytics/providers/"):
+            provider_id = parsed.path.removeprefix("/api/analytics/providers/")
+            json_response(self, website_analytics_service().providers_payload(provider_id))
+            return
+        if parsed.path == "/api/analytics/accounts":
+            json_response(self, website_analytics_service().list_accounts())
+            return
+        if parsed.path.startswith("/api/analytics/accounts/"):
+            suffix = parsed.path.removeprefix("/api/analytics/accounts/")
+            parts = suffix.split("/")
+            account_id = parts[0]
+            service = website_analytics_service()
+            try:
+                if len(parts) == 1:
+                    json_response(self, service.account(account_id))
+                    return
+                if parts[1] == "doctor":
+                    json_response(self, service.doctor(account_id))
+                    return
+                if parts[1] == "mappings":
+                    json_response(self, service.mappings(account_id))
+                    return
+                if parts[1] == "sync":
+                    json_response(self, service.sync_status(account_id))
+                    return
+                if parts[1] == "quality":
+                    json_response(self, service.quality_report(account_id))
+                    return
+            except Exception as exc:
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "website_analytics.error"), "message": str(exc)}},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
         if parsed.path.startswith("/api/analytics/funnels/"):
             json_response(self, funnel_payload(parsed.path.removeprefix("/api/analytics/funnels/")))
+            return
+        if parsed.path.startswith("/api/funnels/") and parsed.path.endswith("/provider-data"):
+            content_id = parsed.path.removeprefix("/api/funnels/").removesuffix("/provider-data").strip("/")
+            json_response(self, website_analytics_service().provider_breakdown(content_id))
+            return
+        if parsed.path.startswith("/api/campaigns/") and parsed.path.endswith("/analytics-quality"):
+            campaign_id = parsed.path.removeprefix("/api/campaigns/").removesuffix("/analytics-quality").strip("/")
+            json_response(self, {"campaign_id": campaign_id, "quality": website_analytics_service().analytics_health()})
             return
         if parsed.path == "/api/content":
             json_response(self, {"content": owned_publication_service().list_content()})
@@ -5675,6 +5767,53 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if path == "/api/operations/support-bundles":
             json_response(self, owned_publication_service().support_bundle_create(), status=HTTPStatus.CREATED)
             return
+        if path == "/api/analytics/accounts":
+            try:
+                json_response(self, website_analytics_service().create_account(json_body), status=HTTPStatus.CREATED)
+            except Exception as exc:
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "website_analytics.error"), "message": str(exc)}},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            return
+        if path.startswith("/api/analytics/accounts/"):
+            suffix = path.removeprefix("/api/analytics/accounts/")
+            parts = suffix.split("/")
+            account_id = parts[0]
+            service = website_analytics_service()
+            try:
+                if len(parts) == 2 and parts[1] == "validate":
+                    json_response(self, service.validate(account_id))
+                    return
+                if len(parts) == 2 and parts[1] == "disable":
+                    json_response(
+                        self,
+                        service.enable(account_id, enabled=False, expected_version=int(json_body["expected_version"])),
+                    )
+                    return
+                if len(parts) == 2 and parts[1] == "enable":
+                    json_response(
+                        self,
+                        service.enable(account_id, enabled=True, expected_version=int(json_body["expected_version"])),
+                    )
+                    return
+                if len(parts) == 2 and parts[1] == "mappings":
+                    json_response(self, service.put_mappings(account_id, list(json_body.get("mappings", []))))
+                    return
+                if len(parts) == 2 and parts[1] == "sync":
+                    json_response(self, service.sync(account_id))
+                    return
+            except Exception as exc:
+                status = (
+                    HTTPStatus.CONFLICT if getattr(exc, "code", "").endswith("conflict") else HTTPStatus.BAD_REQUEST
+                )
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "website_analytics.error"), "message": str(exc)}},
+                    status=status,
+                )
+                return
         if path == "/api/readmodels/rebuild":
             json_response(self, owned_publication_service().rebuild_readmodels(json_body))
             return

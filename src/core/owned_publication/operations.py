@@ -171,6 +171,11 @@ class OwnedPublicationProductionReadinessReport:
     stale_readmodels: int
     integrity_findings: int
     disk_capacity_status: str
+    website_analytics_configured: bool
+    website_analytics_worker_ready: bool
+    website_analytics_accounts_healthy: bool
+    website_analytics_data_fresh: str
+    website_analytics_quality_status: str
     sandbox_phase20_2_status: dict[str, Any]
     owned_publication_operations_ready: bool
     external_plugin_sandbox_ready: bool
@@ -630,6 +635,7 @@ class ProductionReadinessService:
         recovery = self.repository.recovery()
         integrity = self.repository.integrity_scan()
         readmodels = self.repository.readmodels_status()["readmodels"]
+        analytics = _website_analytics_health(self.repository.database_path)
         browser_passed = bool(browser_evidence and browser_evidence.passed and browser_evidence.required_skips == 0)
         worker_passed = bool(worker_evidence and worker_evidence.passed and worker_evidence.required_skips == 0)
         skips = (browser_evidence.required_skips if browser_evidence else 1) + (
@@ -655,32 +661,39 @@ class ProductionReadinessService:
         if not latest_backup_valid:
             warnings.append("no valid backup evidence")
         return OwnedPublicationProductionReadinessReport(
-            OWNED_PUBLICATION_OPERATIONS_VERSION,
-            storage.schema_version,
-            storage.migration_status == "current",
-            storage.ready,
-            storage.foreign_keys_enabled,
-            storage.journal_mode,
-            latest_backup_valid,
-            latest_backup_time,
-            restore_current,
-            worker_health["required_workers_ready"],
-            worker_health["required_workers_ready"],
-            browser_passed,
-            worker_passed,
-            skips,
-            "healthy" if len(self.repository.list_reconciliation()) < 100 else "warning",
-            "0s",
-            int(recovery["expired_reconciliation_leases_released"]),
-            sum(1 for item in readmodels if int(item.get("stale", 0))),
-            len(integrity["findings"]),
-            "critical" if "disk_critical" in storage.safe_warnings else "ok",
-            {"production_ready": external_sandbox_ready, "status": sandbox.controller_status},
-            ops_ready,
-            external_sandbox_ready,
-            ops_ready,
-            utc_now_iso(),
-            tuple(warnings),
+            framework_version=OWNED_PUBLICATION_OPERATIONS_VERSION,
+            database_schema_version=storage.schema_version,
+            migrations_current=storage.migration_status == "current",
+            storage_ready=storage.ready,
+            foreign_keys_enabled=storage.foreign_keys_enabled,
+            journal_mode=storage.journal_mode,
+            latest_backup_valid=latest_backup_valid,
+            backup_age=latest_backup_time,
+            restore_validation_current=restore_current,
+            worker_supervisor_ready=worker_health["required_workers_ready"],
+            required_workers_ready=worker_health["required_workers_ready"],
+            browser_certification_passed=browser_passed,
+            worker_certification_passed=worker_passed,
+            required_certification_skips=skips,
+            reconciliation_queue_health="healthy" if len(self.repository.list_reconciliation()) < 100 else "warning",
+            oldest_reconciliation_age="0s",
+            expired_leases=int(recovery["expired_reconciliation_leases_released"]),
+            stale_readmodels=sum(1 for item in readmodels if int(item.get("stale", 0))),
+            integrity_findings=len(integrity["findings"]),
+            disk_capacity_status="critical" if "disk_critical" in storage.safe_warnings else "ok",
+            website_analytics_configured=bool(analytics["enabled_analytics_accounts"]),
+            website_analytics_worker_ready=bool(analytics["analytics_ready"]),
+            website_analytics_accounts_healthy=not bool(analytics["failed_accounts"]),
+            website_analytics_data_fresh=str(analytics["data_freshness"]),
+            website_analytics_quality_status="not_configured"
+            if not analytics["enabled_analytics_accounts"]
+            else ("degraded" if analytics["analytics_degraded"] else "complete"),
+            sandbox_phase20_2_status={"production_ready": external_sandbox_ready, "status": sandbox.controller_status},
+            owned_publication_operations_ready=ops_ready,
+            external_plugin_sandbox_ready=external_sandbox_ready,
+            production_ready=ops_ready,
+            generated_at=utc_now_iso(),
+            safe_warnings=tuple(warnings),
         )
 
 
@@ -688,6 +701,7 @@ def operations_metrics(repository: DatabaseOwnedPublicationRepository) -> dict[s
     storage = OperationsHealthService(repository).storage_health()
     reconciliation_depth = len(repository.list_reconciliation())
     readmodels = repository.readmodels_status()["readmodels"]
+    analytics = _website_analytics_health(repository.database_path)
     return {
         "owned_publication_worker_up": 1.0,
         "owned_publication_worker_last_heartbeat_age_seconds": 0.0,
@@ -702,7 +716,36 @@ def operations_metrics(repository: DatabaseOwnedPublicationRepository) -> dict[s
         "owned_publication_disk_free_bytes": float(storage.free_disk_bytes),
         "owned_publication_integrity_findings": float(len(repository.integrity_scan()["findings"])),
         "owned_publication_recovery_findings": 0.0,
+        "website_analytics_sync_queue_depth": float(analytics["sync_queue_depth"]),
+        "website_analytics_failed_accounts": float(analytics["failed_accounts"]),
+        "website_analytics_rate_limited_accounts": float(analytics["rate_limited_accounts"]),
+        "website_analytics_attribution_conflicts": float(analytics["attribution_conflicts"]),
     }
+
+
+def _website_analytics_health(database_path: Path) -> dict[str, Any]:
+    try:
+        from src.core.website_analytics.service import WebsiteAnalyticsService
+
+        return WebsiteAnalyticsService(database_path=database_path).analytics_health()
+    except Exception:
+        return {
+            "enabled_analytics_accounts": 0,
+            "sync_worker_required": False,
+            "sync_queue_depth": 0,
+            "oldest_pending_sync": "",
+            "last_successful_sync": "",
+            "failed_accounts": 0,
+            "rate_limited_accounts": 0,
+            "stale_cursors": 0,
+            "partial_queries": 0,
+            "attribution_conflicts": 0,
+            "data_freshness": "not_configured",
+            "provider_availability": "unknown",
+            "publishing_ready": True,
+            "analytics_ready": True,
+            "analytics_degraded": False,
+        }
 
 
 __all__ = [

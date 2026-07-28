@@ -8,6 +8,8 @@ Phase 23 persists owned-publication drafts, immutable revisions, variants, publi
 
 Phase 24 adds production operations for the owned-publication stack: browser/worker CI certification, fail-on-skip release gates, worker supervision, storage health, managed SQLite backups, staged restore validation, support bundles, and a release-check command. External plugin sandbox certification from phase 20.2 remains separately blocked and is reported separately.
 
+Phase 25 adds a read-only website analytics provider framework and first-party Plausible adapter. It stores only secret references, uses host-owned origins and HTTP facades, syncs provider observations into content-aware funnel readmodels, and keeps publishing readiness independent from analytics provider outages.
+
 SocialMediaManager turns long-form content into channel-specific publication targets.
 
 ## Markdown Website Channel
