@@ -14,3 +14,8 @@ Publishing readiness is independent from analytics availability. Analytics
 outages set `analytics_degraded` and keep `publishing_ready=true` unless another
 publishing subsystem is unhealthy. Phase 20.2 external plugin sandbox readiness
 remains separately reported as blocked on this host.
+
+Phase 26 instrumentation supplies the page context and event properties that the
+collector later sees through provider observations. The provider framework
+continues to be read-only: it collects Stats API data and never emits browser
+events or mutates provider configuration.

@@ -10,6 +10,8 @@ Phase 24 adds production operations for the owned-publication stack: browser/wor
 
 Phase 25 adds a read-only website analytics provider framework and first-party Plausible adapter. It stores only secret references, uses host-owned origins and HTTP facades, syncs provider observations into content-aware funnel readmodels, and keeps publishing readiness independent from analytics provider outages.
 
+Phase 26 adds provider-neutral website instrumentation: snapshot-bound manifests, opaque tracking IDs, safe static-site templates, a dependency-free browser runtime, and a Plausible browser bridge. The backend still does not send analytics events; browser-side events only run after a website operator manually installs the reference integration.
+
 SocialMediaManager turns long-form content into channel-specific publication targets.
 
 ## Markdown Website Channel

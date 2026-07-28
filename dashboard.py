@@ -2128,6 +2128,7 @@ def render_content_planning_page(config: AppConfig) -> str:
         )
     return f"""
       {render_website_analytics_page()}
+      {render_website_instrumentation_page()}
       <div class="page-grid">
         <div class="stack">
           <section class="card">
@@ -2898,18 +2899,26 @@ def website_analytics_service():
     return WebsiteAnalyticsService()
 
 
+def website_instrumentation_service():
+    from src.core.website_instrumentation.service import WebsiteInstrumentationService
+
+    return WebsiteInstrumentationService()
+
+
 def owned_publication_operations_payload() -> dict[str, Any]:
     service = owned_publication_service()
     health = service.operations_health()
     recovery = service.recovery()
     release = service.release_check_payload(require_certification=False)
     analytics = website_analytics_service().analytics_health()
+    instrumentation = website_instrumentation_service().operations_health()
     return {
         "storage": health["storage"],
         "recovery": recovery,
         "workers": health["workers"],
         "metrics": health["metrics"],
         "website_analytics": analytics,
+        "website_instrumentation": instrumentation,
         "backups": service.backup_list(),
         "readiness": release["report"],
         "active_leases": int(health["metrics"]["owned_publication_active_leases"]),
@@ -2953,6 +2962,42 @@ def render_website_analytics_page() -> str:
       <p>Analytics ready: {html.escape(str(health["analytics_ready"]))}</p>
       <p>Freshness: {html.escape(str(health["data_freshness"]))}</p>
       <p>Attribution conflicts: {html.escape(str(health["attribution_conflicts"]))}</p>
+    </section>
+    """
+
+
+def render_website_instrumentation_page() -> str:
+    service = website_instrumentation_service()
+    profiles = service.profiles_payload()["profiles"]
+    configs = service.list_configs()["configs"]
+    profile_rows = "".join(
+        f"<tr><td>{html.escape(item['id'])}</td><td>{html.escape(item['website_framework'])}</td>"
+        f"<td>{html.escape(item['analytics_provider_id'] or 'provider-neutral')}</td><td>{html.escape(item['consent_mode'])}</td></tr>"
+        for item in profiles
+    )
+    config_rows = (
+        "".join(
+            f"<tr><td>{html.escape(item['id'])}</td><td>{html.escape(item['website_account_id'])}</td>"
+            f"<td>{html.escape(item['analytics_account_id'])}</td><td>{html.escape(item['profile_id'])}</td></tr>"
+            for item in configs
+        )
+        or "<tr><td colspan='4'>No instrumentation configs configured.</td></tr>"
+    )
+    health = service.operations_health()
+    return f"""
+    <section class="panel">
+      <h2>Website Instrumentation</h2>
+      <p>Instrumentation ready: {html.escape(str(health["instrumentation_ready"]))}</p>
+      <p>Quality: {html.escape(str(health["quality"]))}</p>
+      <p>Mapping drift: {html.escape(str(health["mapping_drift"]))}</p>
+    </section>
+    <section class="panel">
+      <h2>Instrumentation Profiles</h2>
+      <table><thead><tr><th>Profile</th><th>Framework</th><th>Provider</th><th>Consent</th></tr></thead><tbody>{profile_rows}</tbody></table>
+    </section>
+    <section class="panel">
+      <h2>Instrumentation Configs</h2>
+      <table><thead><tr><th>Config</th><th>Website</th><th>Analytics</th><th>Profile</th></tr></thead><tbody>{config_rows}</tbody></table>
     </section>
     """
 
@@ -4722,6 +4767,52 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/analytics/providers":
             json_response(self, website_analytics_service().providers_payload())
             return
+        if parsed.path == "/api/analytics/instrumentation/profiles":
+            json_response(self, website_instrumentation_service().profiles_payload())
+            return
+        if parsed.path.startswith("/api/analytics/instrumentation/profiles/"):
+            profile_id = parsed.path.removeprefix("/api/analytics/instrumentation/profiles/")
+            json_response(self, website_instrumentation_service().profiles_payload(profile_id))
+            return
+        if parsed.path == "/api/analytics/instrumentation/configs":
+            json_response(self, website_instrumentation_service().list_configs())
+            return
+        if parsed.path.startswith("/api/analytics/instrumentation/configs/"):
+            suffix = parsed.path.removeprefix("/api/analytics/instrumentation/configs/")
+            parts = suffix.split("/")
+            config_id = parts[0]
+            service = website_instrumentation_service()
+            try:
+                if len(parts) == 1:
+                    json_response(self, service.config(config_id))
+                    return
+                if parts[1] == "verification":
+                    json_response(self, service.verify(config_id))
+                    return
+                if parts[1] == "quality":
+                    json_response(self, {"quality": service.quality(config_id)})
+                    return
+                if parts[1] == "drift":
+                    json_response(self, {"drift": service.drift(config_id)})
+                    return
+            except Exception as exc:
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "website_instrumentation.error"), "message": str(exc)}},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+        if parsed.path.startswith("/api/analytics/instrumentation/manifests/"):
+            manifest_id = parsed.path.removeprefix("/api/analytics/instrumentation/manifests/")
+            json_response(self, website_instrumentation_service().manifest(manifest_id))
+            return
+        if parsed.path == "/api/analytics/instrumentation/templates":
+            json_response(self, website_instrumentation_service().templates())
+            return
+        if parsed.path.startswith("/api/analytics/instrumentation/templates/"):
+            profile_id = parsed.path.removeprefix("/api/analytics/instrumentation/templates/")
+            json_response(self, website_instrumentation_service().templates(profile_id))
+            return
         if parsed.path.startswith("/api/analytics/providers/"):
             provider_id = parsed.path.removeprefix("/api/analytics/providers/")
             json_response(self, website_analytics_service().providers_payload(provider_id))
@@ -5777,6 +5868,49 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     status=HTTPStatus.BAD_REQUEST,
                 )
             return
+        if path == "/api/analytics/instrumentation/configs":
+            try:
+                json_response(
+                    self, website_instrumentation_service().create_config(json_body), status=HTTPStatus.CREATED
+                )
+            except Exception as exc:
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "website_instrumentation.error"), "message": str(exc)}},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            return
+        if path == "/api/analytics/instrumentation/manifests/preview":
+            json_response(
+                self,
+                website_instrumentation_service().preview_manifest(
+                    str(json_body.get("config_id", "instrumentation-config-owned-1")),
+                    dict(json_body.get("snapshot", {})),
+                ),
+            )
+            return
+        if path.startswith("/api/analytics/instrumentation/configs/"):
+            suffix = path.removeprefix("/api/analytics/instrumentation/configs/")
+            parts = suffix.split("/")
+            config_id = parts[0]
+            service = website_instrumentation_service()
+            try:
+                if len(parts) == 1:
+                    json_response(self, service.update_config(config_id, json_body))
+                    return
+                if len(parts) == 2 and parts[1] == "verify":
+                    json_response(self, service.verify(config_id))
+                    return
+            except Exception as exc:
+                status = (
+                    HTTPStatus.CONFLICT if getattr(exc, "code", "").endswith("conflict") else HTTPStatus.BAD_REQUEST
+                )
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "website_instrumentation.error"), "message": str(exc)}},
+                    status=status,
+                )
+                return
         if path.startswith("/api/analytics/accounts/"):
             suffix = path.removeprefix("/api/analytics/accounts/")
             parts = suffix.split("/")

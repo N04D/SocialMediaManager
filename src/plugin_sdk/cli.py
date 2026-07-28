@@ -996,6 +996,42 @@ def website_analytics_cmd(args: argparse.Namespace) -> int:
     return 0
 
 
+def website_instrumentation_cmd(args: argparse.Namespace) -> int:
+    from importlib import import_module
+
+    service_module = import_module("src.core.website_instrumentation.service")
+    scenarios = import_module("integrations.website_instrumentation.scenarios")
+    service = service_module.WebsiteInstrumentationService()
+    command = args.website_instrumentation_command
+    config_id = getattr(args, "config_id", "instrumentation-config-owned-1")
+    if command not in {"profiles", "templates", "template-show"} and not service.repository.list_configs():
+        service.create_config(scenarios.instrumentation_config_payload())
+    if command == "profiles":
+        payload = service.profiles_payload()
+    elif command == "configs":
+        if not service.repository.list_configs():
+            service.create_config(scenarios.instrumentation_config_payload())
+        payload = service.list_configs()
+    elif command == "config-show":
+        payload = service.config(config_id)
+    elif command == "manifest-preview":
+        payload = service.preview_manifest(config_id, scenarios.default_snapshot_payload())
+    elif command == "verify":
+        payload = service.verify(config_id)
+    elif command == "quality":
+        payload = service.quality(config_id)
+    elif command == "drift":
+        payload = service.drift(config_id)
+    elif command == "templates":
+        payload = service.templates()
+    elif command == "template-show":
+        payload = service.templates(args.profile)
+    else:
+        payload = {"status": "unknown"}
+    print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="plugin-sdk")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1308,6 +1344,23 @@ def build_parser() -> argparse.ArgumentParser:
         cmd = analytics_sub.add_parser(name)
         cmd.add_argument("account_id")
         cmd.set_defaults(func=website_analytics_cmd)
+
+    instrumentation = sub.add_parser("website-instrumentation")
+    instrumentation_sub = instrumentation.add_subparsers(dest="website_instrumentation_command", required=True)
+    for name in {"profiles", "configs", "templates"}:
+        cmd = instrumentation_sub.add_parser(name)
+        cmd.set_defaults(func=website_instrumentation_cmd)
+    for name in {"config-show", "verify", "quality", "drift"}:
+        cmd = instrumentation_sub.add_parser(name)
+        cmd.add_argument("config_id")
+        cmd.set_defaults(func=website_instrumentation_cmd)
+    manifest_preview = instrumentation_sub.add_parser("manifest-preview")
+    manifest_preview.add_argument("publication_target")
+    manifest_preview.add_argument("--config-id", default="instrumentation-config-owned-1")
+    manifest_preview.set_defaults(func=website_instrumentation_cmd)
+    template_show = instrumentation_sub.add_parser("template-show")
+    template_show.add_argument("profile")
+    template_show.set_defaults(func=website_instrumentation_cmd)
     return parser
 
 

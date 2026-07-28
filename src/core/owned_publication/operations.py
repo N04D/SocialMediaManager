@@ -176,6 +176,11 @@ class OwnedPublicationProductionReadinessReport:
     website_analytics_accounts_healthy: bool
     website_analytics_data_fresh: str
     website_analytics_quality_status: str
+    website_instrumentation_configured: bool
+    website_instrumentation_static_verified: bool
+    website_instrumentation_browser_verified: bool
+    website_instrumentation_mapping_aligned: bool
+    website_instrumentation_quality: str
     sandbox_phase20_2_status: dict[str, Any]
     owned_publication_operations_ready: bool
     external_plugin_sandbox_ready: bool
@@ -636,6 +641,7 @@ class ProductionReadinessService:
         integrity = self.repository.integrity_scan()
         readmodels = self.repository.readmodels_status()["readmodels"]
         analytics = _website_analytics_health(self.repository.database_path)
+        instrumentation = _website_instrumentation_health(self.repository.database_path)
         browser_passed = bool(browser_evidence and browser_evidence.passed and browser_evidence.required_skips == 0)
         worker_passed = bool(worker_evidence and worker_evidence.passed and worker_evidence.required_skips == 0)
         skips = (browser_evidence.required_skips if browser_evidence else 1) + (
@@ -688,6 +694,11 @@ class ProductionReadinessService:
             website_analytics_quality_status="not_configured"
             if not analytics["enabled_analytics_accounts"]
             else ("degraded" if analytics["analytics_degraded"] else "complete"),
+            website_instrumentation_configured=bool(instrumentation["configured_websites"]),
+            website_instrumentation_static_verified=instrumentation["quality"] in {"complete", "partial"},
+            website_instrumentation_browser_verified=False,
+            website_instrumentation_mapping_aligned=not bool(instrumentation["mapping_drift"]),
+            website_instrumentation_quality=str(instrumentation["quality"]),
             sandbox_phase20_2_status={"production_ready": external_sandbox_ready, "status": sandbox.controller_status},
             owned_publication_operations_ready=ops_ready,
             external_plugin_sandbox_ready=external_sandbox_ready,
@@ -702,6 +713,7 @@ def operations_metrics(repository: DatabaseOwnedPublicationRepository) -> dict[s
     reconciliation_depth = len(repository.list_reconciliation())
     readmodels = repository.readmodels_status()["readmodels"]
     analytics = _website_analytics_health(repository.database_path)
+    instrumentation = _website_instrumentation_health(repository.database_path)
     return {
         "owned_publication_worker_up": 1.0,
         "owned_publication_worker_last_heartbeat_age_seconds": 0.0,
@@ -720,6 +732,9 @@ def operations_metrics(repository: DatabaseOwnedPublicationRepository) -> dict[s
         "website_analytics_failed_accounts": float(analytics["failed_accounts"]),
         "website_analytics_rate_limited_accounts": float(analytics["rate_limited_accounts"]),
         "website_analytics_attribution_conflicts": float(analytics["attribution_conflicts"]),
+        "website_instrumentation_configured_websites": float(instrumentation["configured_websites"]),
+        "website_instrumentation_mapping_drift": float(instrumentation["mapping_drift"]),
+        "website_instrumentation_partial_websites": float(instrumentation["partial_websites"]),
     }
 
 
@@ -745,6 +760,22 @@ def _website_analytics_health(database_path: Path) -> dict[str, Any]:
             "publishing_ready": True,
             "analytics_ready": True,
             "analytics_degraded": False,
+        }
+
+
+def _website_instrumentation_health(database_path: Path) -> dict[str, Any]:
+    try:
+        from src.core.website_instrumentation.service import WebsiteInstrumentationService
+
+        return WebsiteInstrumentationService(database_path=database_path).operations_health()
+    except Exception:
+        return {
+            "configured_websites": 0,
+            "fully_instrumented_websites": 0,
+            "partial_websites": 0,
+            "mapping_drift": 0,
+            "instrumentation_ready": False,
+            "quality": "not_configured",
         }
 
 
