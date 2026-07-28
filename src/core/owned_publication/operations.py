@@ -195,6 +195,18 @@ class OwnedPublicationProductionReadinessReport:
     certification_evidence_reviewed: bool
     deterministic_certification_status: str
     remote_ci_artifact_status: str
+    host_signer_configured: bool
+    host_signer_healthy: bool
+    host_signer_approved: bool
+    ci_origin_configured: bool
+    ci_origin_healthy: bool
+    ci_artifact_import_status: str
+    ci_artifact_commit_matches: bool
+    ci_artifact_digest_verified: bool
+    ci_package_verified: bool
+    ci_import_attestation_signed: bool
+    ci_evidence_reviewed: bool
+    ci_certification_ready: bool
     sandbox_phase20_2_status: dict[str, Any]
     owned_publication_operations_ready: bool
     external_plugin_sandbox_ready: bool
@@ -658,6 +670,8 @@ class ProductionReadinessService:
         instrumentation = _website_instrumentation_health(self.repository.database_path)
         staging = _staging_analytics_health(self.repository.database_path)
         certification = _certification_evidence_health(self.repository.database_path)
+        trusted_signing = _trusted_signing_health(self.repository.database_path)
+        ci_artifacts = _ci_artifact_health(self.repository.database_path)
         browser_passed = bool(browser_evidence and browser_evidence.passed and browser_evidence.required_skips == 0)
         worker_passed = bool(worker_evidence and worker_evidence.passed and worker_evidence.required_skips == 0)
         skips = (browser_evidence.required_skips if browser_evidence else 1) + (
@@ -731,6 +745,18 @@ class ProductionReadinessService:
             certification_evidence_reviewed=bool(certification["certification_evidence_reviewed"]),
             deterministic_certification_status=str(certification["deterministic_certification_status"]),
             remote_ci_artifact_status=str(certification["remote_ci_status"]["artifact_status"]),
+            host_signer_configured=bool(trusted_signing["host_signer_configured"]),
+            host_signer_healthy=bool(trusted_signing["host_signer_healthy"]),
+            host_signer_approved=bool(trusted_signing["host_signer_approved"]),
+            ci_origin_configured=bool(ci_artifacts["ci_origin_configured"]),
+            ci_origin_healthy=bool(ci_artifacts["ci_origin_healthy"]),
+            ci_artifact_import_status=str(ci_artifacts["ci_artifact_import_status"]),
+            ci_artifact_commit_matches=bool(ci_artifacts["ci_artifact_commit_matches"]),
+            ci_artifact_digest_verified=bool(ci_artifacts["ci_artifact_digest_verified"]),
+            ci_package_verified=bool(ci_artifacts["ci_package_verified"]),
+            ci_import_attestation_signed=bool(ci_artifacts["ci_import_attestation_signed"]),
+            ci_evidence_reviewed=bool(ci_artifacts["ci_evidence_reviewed"]),
+            ci_certification_ready=bool(ci_artifacts["ci_certification_ready"]),
             sandbox_phase20_2_status={"production_ready": external_sandbox_ready, "status": sandbox.controller_status},
             owned_publication_operations_ready=ops_ready,
             external_plugin_sandbox_ready=external_sandbox_ready,
@@ -748,6 +774,8 @@ def operations_metrics(repository: DatabaseOwnedPublicationRepository) -> dict[s
     instrumentation = _website_instrumentation_health(repository.database_path)
     staging = _staging_analytics_health(repository.database_path)
     certification = _certification_evidence_health(repository.database_path)
+    trusted_signing = _trusted_signing_health(repository.database_path)
+    ci_artifacts = _ci_artifact_health(repository.database_path)
     return {
         "owned_publication_worker_up": 1.0,
         "owned_publication_worker_last_heartbeat_age_seconds": 0.0,
@@ -775,6 +803,9 @@ def operations_metrics(repository: DatabaseOwnedPublicationRepository) -> dict[s
         "staging_analytics_uncertain_browser_events": float(staging["uncertain_browser_events"]),
         "certification_evidence_packages": float(certification["evidence_count"]),
         "certification_evidence_stale": float(certification["stale_count"]),
+        "trusted_signers_active": float(trusted_signing["active_signers"]),
+        "ci_artifact_imports_pending": float(ci_artifacts["pending_imports"]),
+        "ci_artifact_imports_verified": float(ci_artifacts["verified_imports"]),
     }
 
 
@@ -862,6 +893,57 @@ def _certification_evidence_health(database_path: Path) -> dict[str, Any]:
             "remote_ci_status": {"artifact_status": "artifact_not_imported"},
             "evidence_count": 0,
             "stale_count": 0,
+        }
+
+
+def _trusted_signing_health(database_path: Path) -> dict[str, Any]:
+    try:
+        from src.core.trusted_signing.service import TrustedSignerService
+
+        status = TrustedSignerService(database_path=database_path).status()
+        signers = status["signers"]
+        active = [item for item in signers if item.get("status") == "active"]
+        return {
+            "host_signer_configured": bool(signers),
+            "host_signer_healthy": bool(active),
+            "host_signer_approved": any(item.get("approved_by") for item in signers),
+            "active_signers": len(active),
+        }
+    except Exception:
+        return {
+            "host_signer_configured": False,
+            "host_signer_healthy": False,
+            "host_signer_approved": False,
+            "active_signers": 0,
+        }
+
+
+def _ci_artifact_health(database_path: Path) -> dict[str, Any]:
+    try:
+        from src.core.ci_artifacts.service import CiArtifactImportService
+
+        service = CiArtifactImportService(database_path=database_path)
+        readiness = service.readiness()
+        imports = service.imports()["imports"]
+        return {
+            **readiness,
+            "ci_origin_healthy": bool(readiness["ci_origin_configured"]),
+            "pending_imports": sum(1 for item in imports if item.get("status") in {"prepared", "validated"}),
+            "verified_imports": sum(1 for item in imports if item.get("status") == "accepted"),
+        }
+    except Exception:
+        return {
+            "ci_origin_configured": False,
+            "ci_origin_healthy": False,
+            "ci_artifact_import_status": "artifact_not_imported",
+            "ci_artifact_commit_matches": False,
+            "ci_artifact_digest_verified": False,
+            "ci_package_verified": False,
+            "ci_import_attestation_signed": False,
+            "ci_evidence_reviewed": False,
+            "ci_certification_ready": False,
+            "pending_imports": 0,
+            "verified_imports": 0,
         }
 
 

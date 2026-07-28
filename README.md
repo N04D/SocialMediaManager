@@ -19,6 +19,12 @@ optional signer verification, managed import/export, replay prevention,
 freshness policies and operator review. A configured CI workflow remains
 `artifact_not_imported` until a real evidence artifact is imported and verified.
 
+Phase 29 adds trusted signer enrollment and a read-only GitHub Actions artifact
+importer. Workflow success is not enough: exact repository, workflow, run
+attempt, commit, artifact ID, provider digest, internal package checksums,
+attestation, freshness, trust policy and operator review are checked separately.
+Private keys remain secret references only.
+
 SocialMediaManager turns long-form content into channel-specific publication targets.
 
 ## Markdown Website Channel

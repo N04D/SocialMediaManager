@@ -4,3 +4,4 @@ requests>=2.31
 playwright>=1.45
 Markdown>=3.6
 PyYAML>=6.0
+cryptography>=42.0

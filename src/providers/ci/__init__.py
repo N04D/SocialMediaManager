@@ -1,0 +1,1 @@
+"""CI provider adapters."""

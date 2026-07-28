@@ -1068,10 +1068,98 @@ def certification_cmd(args: argparse.Namespace) -> int:
         payload = service.freshness(args.evidence_id)
     elif command == "support-bundle":
         payload = service.support_bundle()
+    elif command == "signers":
+        signer_module = import_module("src.core.trusted_signing.service")
+        payload = signer_module.TrustedSignerService().status()
+    elif command in {"signer-show", "signer-validate", "signer-test"}:
+        signer_module = import_module("src.core.trusted_signing.service")
+        signer_service = signer_module.TrustedSignerService()
+        if command == "signer-show":
+            signers = [item for item in signer_service.status()["signers"] if item["id"] == args.signer_id]
+            payload = {"signer": signers[0] if signers else None}
+        elif command == "signer-validate":
+            payload = signer_service.health(args.signer_id)
+        else:
+            payload = signer_service.test_sign(args.signer_id)
+    elif command in {"signer-approve", "signer-activate", "signer-revoke"}:
+        signer_module = import_module("src.core.trusted_signing.service")
+        signer_service = signer_module.TrustedSignerService()
+        if command == "signer-approve":
+            payload = signer_service.approve(
+                args.signer_id, reviewer_id="local-reviewer", requester_id="local-operator"
+            )
+        elif command == "signer-activate":
+            payload = signer_service.activate(args.signer_id)
+        else:
+            payload = signer_service.revoke(args.signer_id, reason=getattr(args, "reason", "administrative_retirement"))
+    elif command == "signer-rotate":
+        payload = {
+            "status": "secret_reference_required",
+            "raw_private_key_argument": False,
+            "signer_id": args.signer_id,
+        }
+    elif command in {"ci-origins", "ci-origin-show"}:
+        ci_module = import_module("src.core.ci_artifacts.service")
+        ci_service = ci_module.CiArtifactImportService()
+        if command == "ci-origins":
+            payload = ci_service.origins()
+        else:
+            origins = [item for item in ci_service.origins()["origins"] if item["id"] == args.origin_id]
+            payload = {"origin": origins[0] if origins else None}
+    elif command in {"ci-origin-doctor", "ci-runs", "ci-artifacts", "ci-import-dry-run", "ci-import"}:
+        ci_service, default_origin, default_run, default_artifact, commit = _fixture_ci_artifact_service()
+        origin_id = getattr(args, "origin_id", default_origin)
+        run_id = getattr(args, "run_id", default_run)
+        artifact_id = getattr(args, "artifact_id", default_artifact)
+        if command == "ci-origin-doctor":
+            payload = ci_service.origin_doctor(origin_id)
+        elif command == "ci-runs":
+            payload = ci_service.list_runs(origin_id, commit_sha=getattr(args, "commit", "") or commit)
+        elif command == "ci-artifacts":
+            payload = ci_service.artifacts(origin_id, run_id)
+        elif command == "ci-import-dry-run":
+            payload = ci_service.dry_run_import(origin_id, run_id, artifact_id, expected_commit_sha=commit)
+        else:
+            created = ci_service.create_import_request(
+                origin_id=origin_id,
+                run_id=run_id,
+                artifact_id=artifact_id,
+                expected_commit_sha=commit,
+            )
+            payload = {"created": created, "dry_run_first": True, "execute_worker": "host-owned worker required"}
+    elif command in {"ci-import-show", "ci-import-reconcile"}:
+        ci_module = import_module("src.core.ci_artifacts.service")
+        ci_service = ci_module.CiArtifactImportService()
+        payload = (
+            ci_service.import_show(args.import_id)
+            if command == "ci-import-show"
+            else ci_service.reconcile(args.import_id)
+        )
     else:
         payload = {"status": "unknown"}
     print(json.dumps(payload, indent=2, sort_keys=True, default=str))
     return 0
+
+
+def _fixture_ci_artifact_service():
+    from integrations.ci_artifacts.fake_source import fake_github_source
+    from src.core.ci_artifacts.service import CiArtifactImportService
+    from src.providers.ci.github_actions.origins import default_github_origin_payload
+
+    commit = "d4eaff40f239e750aab38652176d6581621ae069"
+    evidence = __import__("src.core.certification_evidence.service", fromlist=["CertificationEvidenceService"])
+    service = evidence.CertificationEvidenceService()
+    created = service.create_from_staging_run(
+        service.staging.deterministic_certification()["run"]["id"],
+        source_type="ci",
+        commit_sha=commit,
+    )
+    package = service.export_evidence(created["evidence"]["package_id"])["data"]
+    source = fake_github_source(package, commit_sha=commit)
+    ci_service = CiArtifactImportService(source=source)
+    origin = default_github_origin_payload()
+    ci_service.register_origin(origin)
+    return ci_service, origin["id"], "1001", "5001", commit
 
 
 def website_instrumentation_cmd(args: argparse.Namespace) -> int:
@@ -1446,6 +1534,47 @@ def build_parser() -> argparse.ArgumentParser:
     revoke.add_argument("evidence_id")
     revoke.add_argument("--reason", default="operator_revoked")
     revoke.set_defaults(func=certification_cmd)
+    for name in {"signers", "ci-origins"}:
+        cmd = certification_sub.add_parser(name)
+        cmd.set_defaults(func=certification_cmd)
+    for name in {
+        "signer-show",
+        "signer-validate",
+        "signer-approve",
+        "signer-activate",
+        "signer-test",
+        "signer-rotate",
+        "signer-revoke",
+    }:
+        cmd = certification_sub.add_parser(name)
+        cmd.add_argument("signer_id")
+        if name == "signer-revoke":
+            cmd.add_argument("--reason", default="administrative_retirement")
+        cmd.set_defaults(func=certification_cmd)
+    ci_origin_show = certification_sub.add_parser("ci-origin-show")
+    ci_origin_show.add_argument("origin_id")
+    ci_origin_show.set_defaults(func=certification_cmd)
+    ci_origin_doctor = certification_sub.add_parser("ci-origin-doctor")
+    ci_origin_doctor.add_argument("origin_id")
+    ci_origin_doctor.set_defaults(func=certification_cmd)
+    ci_runs = certification_sub.add_parser("ci-runs")
+    ci_runs.add_argument("origin_id")
+    ci_runs.add_argument("--commit", default="")
+    ci_runs.set_defaults(func=certification_cmd)
+    ci_artifacts = certification_sub.add_parser("ci-artifacts")
+    ci_artifacts.add_argument("origin_id")
+    ci_artifacts.add_argument("run_id")
+    ci_artifacts.set_defaults(func=certification_cmd)
+    for name in {"ci-import-dry-run", "ci-import"}:
+        cmd = certification_sub.add_parser(name)
+        cmd.add_argument("origin_id")
+        cmd.add_argument("run_id")
+        cmd.add_argument("artifact_id")
+        cmd.set_defaults(func=certification_cmd)
+    for name in {"ci-import-show", "ci-import-reconcile"}:
+        cmd = certification_sub.add_parser(name)
+        cmd.add_argument("import_id")
+        cmd.set_defaults(func=certification_cmd)
 
     analytics = sub.add_parser("website-analytics")
     analytics_sub = analytics.add_subparsers(dest="website_analytics_command", required=True)

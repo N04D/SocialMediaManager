@@ -248,6 +248,20 @@ class CertificationEvidenceService:
         }
 
     def remote_ci_status(self) -> dict[str, str]:
+        try:
+            from src.core.ci_artifacts.service import CiArtifactImportService
+
+            readiness = CiArtifactImportService(database_path=self.repository.database_path).readiness(
+                current_commit=local_commit_sha()
+            )
+            artifact_status = str(readiness["remote_ci_status"])
+            return {
+                "workflow_configured": "true",
+                "artifact_status": artifact_status,
+                "ci_passed_claim": "not_claimed" if artifact_status == "artifact_not_imported" else "import_verified",
+            }
+        except Exception:
+            pass
         return {
             "workflow_configured": "true",
             "artifact_status": "artifact_not_imported",

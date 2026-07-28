@@ -21,3 +21,9 @@
 - Added host-owned worker supervisor health, startup, cycle, heartbeat, and graceful shutdown reporting.
 - Added managed SQLite backup, restore validation, backup retention preview, production readiness, support bundles, health endpoints, operations metrics, and operations dashboard.
 - Added CI workflow definitions for browser/worker certification and owned-publication release gate.
+
+## 0.1.3
+
+- Added trusted signer readiness fields for host-owned certification evidence.
+- Added CI artifact import readiness fields for exact imported artifact evidence.
+- Kept phase 20.2 sandbox readiness separate and false until independently certified.

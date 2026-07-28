@@ -2917,6 +2917,18 @@ def certification_evidence_service():
     return CertificationEvidenceService()
 
 
+def trusted_signer_service():
+    from src.core.trusted_signing.service import TrustedSignerService
+
+    return TrustedSignerService()
+
+
+def ci_artifact_service():
+    from src.core.ci_artifacts.service import CiArtifactImportService
+
+    return CiArtifactImportService()
+
+
 def owned_publication_operations_payload() -> dict[str, Any]:
     service = owned_publication_service()
     health = service.operations_health()
@@ -2926,6 +2938,8 @@ def owned_publication_operations_payload() -> dict[str, Any]:
     instrumentation = website_instrumentation_service().operations_health()
     staging = staging_analytics_service().operations_health()
     certification = certification_evidence_service()
+    ci_artifacts = ci_artifact_service()
+    trusted_signing = trusted_signer_service()
     return {
         "storage": health["storage"],
         "recovery": recovery,
@@ -2936,6 +2950,9 @@ def owned_publication_operations_payload() -> dict[str, Any]:
         "staging_analytics": staging,
         "certification_evidence": certification.list_evidence(),
         "certification_readiness": certification.readiness(),
+        "trusted_signing": trusted_signing.status(),
+        "ci_artifacts": ci_artifacts.imports(),
+        "ci_origins": ci_artifacts.origins(),
         "backups": service.backup_list(),
         "readiness": release["report"],
         "active_leases": int(health["metrics"]["owned_publication_active_leases"]),
@@ -3062,6 +3079,9 @@ def render_certification_evidence_page() -> str:
     service = certification_evidence_service()
     payload = service.list_evidence()
     readiness = service.readiness()
+    signer_status = trusted_signer_service().status()
+    ci_payload = ci_artifact_service().imports()
+    ci_origins = ci_artifact_service().origins()
     evidence_rows = (
         "".join(
             f"<tr><td>{html.escape(item['package_id'])}</td><td>{html.escape(item['evidence_type'])}</td>"
@@ -3078,10 +3098,64 @@ def render_certification_evidence_page() -> str:
       <p>Trusted: {html.escape(str(readiness["certification_evidence_trusted"]))}</p>
       <p>Fresh: {html.escape(str(readiness["certification_evidence_fresh"]))}</p>
       <p>Remote CI: {html.escape(payload["remote_ci_status"]["artifact_status"])}</p>
+      <p>Host signers: {html.escape(str(len(signer_status["signers"])))}</p>
+      <p>CI origins: {html.escape(str(len(ci_origins["origins"])))}</p>
+      <p>CI imports: {html.escape(str(len(ci_payload["imports"])))}</p>
     </section>
     <section class="panel">
       <h2>Evidence Packages</h2>
       <table><thead><tr><th>Evidence</th><th>Type</th><th>Trust</th><th>Freshness</th><th>Signature</th><th>Commit</th></tr></thead><tbody>{evidence_rows}</tbody></table>
+    </section>
+    """
+
+
+def render_certification_operations_page() -> str:
+    signers = trusted_signer_service().status()["signers"]
+    origins = ci_artifact_service().origins()["origins"]
+    imports = ci_artifact_service().imports()["imports"]
+    signer_rows = (
+        "".join(
+            f"<tr><td>{html.escape(item['id'])}</td><td>{html.escape(item['algorithm_identifier'])}</td>"
+            f"<td>{html.escape(item['status'])}</td><td>{html.escape(item.get('public_key_fingerprint', '')[:16])}</td>"
+            f"<td>{html.escape('approved' if item.get('approved_by') else 'pending')}</td></tr>"
+            for item in signers
+        )
+        or "<tr><td colspan='5'>No host signers configured.</td></tr>"
+    )
+    origin_rows = (
+        "".join(
+            f"<tr><td>{html.escape(item['id'])}</td>"
+            f"<td>{html.escape(item['repository_owner'] + '/' + item['repository_name'])}</td>"
+            f"<td>{html.escape(item['workflow_identity'])}</td><td>{html.escape(str(item['enabled']))}</td></tr>"
+            for item in origins
+        )
+        or "<tr><td colspan='4'>No CI origins configured.</td></tr>"
+    )
+    import_rows = (
+        "".join(
+            f"<tr><td>{html.escape(item['id'])}</td><td>{html.escape(item['workflow_run_id'])}</td>"
+            f"<td>{html.escape(item['artifact_id'])}</td><td>{html.escape(item['status'])}</td>"
+            f"<td>{html.escape(item['expected_commit_sha'][:12])}</td></tr>"
+            for item in imports
+        )
+        or "<tr><td colspan='5'>No CI imports requested.</td></tr>"
+    )
+    return f"""
+    <section class="panel">
+      <h2>Certification Operator Control</h2>
+      <p>GitHub run success is not readiness until a concrete artifact is imported, verified, and reviewed.</p>
+    </section>
+    <section class="panel">
+      <h2>Signers</h2>
+      <table><thead><tr><th>Signer</th><th>Algorithm</th><th>Status</th><th>Fingerprint</th><th>Approval</th></tr></thead><tbody>{signer_rows}</tbody></table>
+    </section>
+    <section class="panel">
+      <h2>CI Origins</h2>
+      <table><thead><tr><th>Origin</th><th>Repository</th><th>Workflow</th><th>Enabled</th></tr></thead><tbody>{origin_rows}</tbody></table>
+    </section>
+    <section class="panel">
+      <h2>CI Imports</h2>
+      <table><thead><tr><th>Import</th><th>Run</th><th>Artifact</th><th>Status</th><th>Commit</th></tr></thead><tbody>{import_rows}</tbody></table>
     </section>
     """
 
@@ -3144,6 +3218,7 @@ def render_owned_publication_operations_page() -> str:
         <section class="panel"><h3>Backups</h3><table><thead><tr><th>ID</th><th>Status</th><th>Validation</th><th>Bytes</th></tr></thead><tbody>{backup_rows}</tbody></table></section>
         <section class="panel"><h3>Metrics</h3><table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody>{metrics_rows}</tbody></table></section>
         {render_certification_evidence_page()}
+        {render_certification_operations_page()}
       </section>
     """
 
@@ -4888,6 +4963,47 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/certification/policies":
             json_response(self, certification_evidence_service().policies())
             return
+        if parsed.path == "/api/certification/signers":
+            json_response(self, trusted_signer_service().status())
+            return
+        if parsed.path.startswith("/api/certification/signers/"):
+            suffix = parsed.path.removeprefix("/api/certification/signers/")
+            signer_id = suffix.split("/")[0]
+            service = trusted_signer_service()
+            if suffix.endswith("/validate"):
+                json_response(self, service.health(signer_id))
+            elif suffix.endswith("/test"):
+                json_response(self, service.test_sign(signer_id))
+            else:
+                signers = [item for item in service.status()["signers"] if item["id"] == signer_id]
+                json_response(self, {"signer": signers[0] if signers else None})
+            return
+        if parsed.path == "/api/certification/ci-origins":
+            json_response(self, ci_artifact_service().origins())
+            return
+        if parsed.path.startswith("/api/certification/ci-origins/"):
+            suffix = parsed.path.removeprefix("/api/certification/ci-origins/")
+            parts = suffix.split("/")
+            origin_id = parts[0]
+            service = ci_artifact_service()
+            if len(parts) == 2 and parts[1] == "doctor":
+                json_response(self, service.origin_doctor(origin_id))
+            elif len(parts) == 2 and parts[1] == "runs":
+                query = parse_qs(parsed.query)
+                json_response(self, service.list_runs(origin_id, commit_sha=query.get("commit", [""])[0]))
+            elif len(parts) == 4 and parts[1] == "runs" and parts[3] == "artifacts":
+                json_response(self, service.artifacts(origin_id, parts[2]))
+            else:
+                origins = [item for item in service.origins()["origins"] if item["id"] == origin_id]
+                json_response(self, {"origin": origins[0] if origins else None})
+            return
+        if parsed.path == "/api/certification/ci-imports":
+            json_response(self, ci_artifact_service().imports())
+            return
+        if parsed.path.startswith("/api/certification/ci-imports/"):
+            import_id = parsed.path.removeprefix("/api/certification/ci-imports/").split("/")[0]
+            json_response(self, ci_artifact_service().import_show(import_id))
+            return
         if parsed.path == "/api/analytics/instrumentation/profiles":
             json_response(self, website_instrumentation_service().profiles_payload())
             return
@@ -6104,6 +6220,108 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/certification/"):
             service = certification_evidence_service()
             try:
+                if path == "/api/certification/signers":
+                    signer_service = trusted_signer_service()
+                    json_response(
+                        self,
+                        signer_service.enroll(
+                            signer_id=str(json_body.get("id", "")),
+                            display_name=str(json_body.get("display_name", "Host signer")),
+                            private_key_secret_reference=str(json_body.get("private_key_secret_reference", "")),
+                            operator_id=str(json_body.get("operator_id", "operator-a")),
+                        ),
+                        status=HTTPStatus.CREATED,
+                    )
+                    return
+                if path.startswith("/api/certification/signers/"):
+                    signer_service = trusted_signer_service()
+                    suffix = path.removeprefix("/api/certification/signers/")
+                    parts = suffix.split("/")
+                    signer_id = parts[0]
+                    action = parts[1] if len(parts) > 1 else ""
+                    if action == "approve":
+                        json_response(
+                            self,
+                            signer_service.approve(
+                                signer_id,
+                                reviewer_id=str(json_body.get("reviewer_id", "operator-b")),
+                                requester_id=str(json_body.get("requester_id", "operator-a")),
+                            ),
+                        )
+                        return
+                    if action == "activate":
+                        json_response(self, signer_service.activate(signer_id))
+                        return
+                    if action == "rotate":
+                        json_response(
+                            self,
+                            signer_service.rotate(
+                                signer_id,
+                                new_signer_id=str(json_body.get("new_signer_id", "")),
+                                new_secret_reference=str(json_body.get("new_secret_reference", "")),
+                            ),
+                        )
+                        return
+                    if action == "revoke":
+                        json_response(
+                            self,
+                            signer_service.revoke(
+                                signer_id,
+                                reason=str(json_body.get("reason", "administrative_retirement")),
+                            ),
+                        )
+                        return
+                    if action == "test":
+                        json_response(self, signer_service.test_sign(signer_id))
+                        return
+                if path == "/api/certification/ci-origins":
+                    json_response(self, ci_artifact_service().register_origin(json_body), status=HTTPStatus.CREATED)
+                    return
+                if path == "/api/certification/ci-imports":
+                    json_response(
+                        self,
+                        ci_artifact_service().create_import_request(
+                            origin_id=str(json_body.get("origin_reference_id", "")),
+                            run_id=str(json_body.get("workflow_run_id", "")),
+                            artifact_id=str(json_body.get("artifact_id", "")),
+                            expected_commit_sha=str(json_body.get("expected_commit_sha", "")),
+                            run_attempt=int(json_body.get("run_attempt", 1)),
+                            requested_by=str(json_body.get("requested_by", "operator")),
+                        ),
+                        status=HTTPStatus.CREATED,
+                    )
+                    return
+                if path.startswith("/api/certification/ci-imports/"):
+                    ci_service = ci_artifact_service()
+                    suffix = path.removeprefix("/api/certification/ci-imports/")
+                    parts = suffix.split("/")
+                    import_id = parts[0]
+                    action = parts[1] if len(parts) > 1 else ""
+                    if action == "dry-run":
+                        request = ci_service.repository.get_request(import_id)
+                        json_response(
+                            self,
+                            ci_service.dry_run_import(
+                                request["origin_reference_id"],
+                                request["workflow_run_id"],
+                                request["artifact_id"],
+                                expected_commit_sha=request["expected_commit_sha"],
+                            ),
+                        )
+                        return
+                    if action == "reconcile":
+                        json_response(self, ci_service.reconcile(import_id))
+                        return
+                    if action == "review":
+                        json_response(
+                            self,
+                            ci_service.review_import(
+                                import_id,
+                                decision=str(json_body.get("decision", "approved")),
+                                reviewer_id=str(json_body.get("reviewer_id", "operator")),
+                            ),
+                        )
+                        return
                 if path == "/api/certification/evidence/export":
                     json_response(self, service.export_evidence(str(json_body.get("evidence_id", ""))))
                     return
