@@ -975,6 +975,9 @@ def website_analytics_cmd(args: argparse.Namespace) -> int:
             payload = staging_service.profile(args.profile_id)
         elif command == "staging-profile-validate":
             payload = staging_service.validate_profile(args.profile_id)
+        elif command == "staging-dry-run":
+            certification_module = import_module("src.core.certification_evidence.service")
+            payload = certification_module.CertificationEvidenceService().dry_run_staging_profile(args.profile_id)
         elif command == "staging-run":
             if not staging_service.repository.list_profiles():
                 staging_service.create_profile(scenarios.staging_profile_payload())
@@ -1016,6 +1019,55 @@ def website_analytics_cmd(args: argparse.Namespace) -> int:
         payload = service.sync_status(account_id)
     elif command == "quality":
         payload = service.quality_report(account_id)
+    else:
+        payload = {"status": "unknown"}
+    print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+    return 0
+
+
+def certification_cmd(args: argparse.Namespace) -> int:
+    from importlib import import_module
+
+    service_module = import_module("src.core.certification_evidence.service")
+    service = service_module.CertificationEvidenceService()
+    command = args.certification_command
+    if command == "evidence-list":
+        payload = service.list_evidence()
+    elif command == "generate-deterministic":
+        payload = service.generate_deterministic_evidence(
+            signer_reference_id="signer.local.deterministic-test" if getattr(args, "signed", False) else ""
+        )
+        payload.pop("artifacts", None)
+    elif command == "evidence-show":
+        payload = service.get_evidence(args.evidence_id)
+    elif command == "export":
+        payload = service.export_evidence(args.evidence_id)
+        payload.pop("data", None)
+    elif command == "import":
+        payload = {
+            "status": "managed_reference_required",
+            "arbitrary_artifact_url": False,
+            "reference": args.managed_reference,
+        }
+    elif command == "verify":
+        payload = service.verify(args.evidence_id)
+    elif command == "compare":
+        payload = service.compare(args.left_id, args.right_id)
+    elif command == "review":
+        payload = service.review(
+            args.evidence_id,
+            decision=args.decision,
+            reviewer_id="local-operator",
+            safe_comment=getattr(args, "comment", ""),
+        )
+    elif command == "revoke":
+        payload = service.revoke(args.evidence_id, reason=getattr(args, "reason", "operator_revoked"))
+    elif command == "policies":
+        payload = service.policies()
+    elif command == "freshness":
+        payload = service.freshness(args.evidence_id)
+    elif command == "support-bundle":
+        payload = service.support_bundle()
     else:
         payload = {"status": "unknown"}
     print(json.dumps(payload, indent=2, sort_keys=True, default=str))
@@ -1364,6 +1416,37 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_cmd.add_argument("--content-item-id", default="content-owned-1")
     mcp_cmd.set_defaults(func=owned_publication_cmd)
 
+    certification = sub.add_parser("certification")
+    certification_sub = certification.add_subparsers(dest="certification_command", required=True)
+    for name in {"evidence-list", "policies", "support-bundle"}:
+        cmd = certification_sub.add_parser(name)
+        cmd.set_defaults(func=certification_cmd)
+    generate = certification_sub.add_parser("generate-deterministic")
+    generate.add_argument("--signed", action="store_true")
+    generate.set_defaults(func=certification_cmd)
+    for name in {"evidence-show", "export", "verify", "freshness"}:
+        cmd = certification_sub.add_parser(name)
+        cmd.add_argument("evidence_id")
+        cmd.set_defaults(func=certification_cmd)
+    import_cmd = certification_sub.add_parser("import")
+    import_cmd.add_argument("managed_reference")
+    import_cmd.set_defaults(func=certification_cmd)
+    compare = certification_sub.add_parser("compare")
+    compare.add_argument("left_id")
+    compare.add_argument("right_id")
+    compare.set_defaults(func=certification_cmd)
+    review = certification_sub.add_parser("review")
+    review.add_argument("evidence_id")
+    review.add_argument(
+        "--decision", default="approved", choices=["approved", "rejected", "needs_follow_up", "acknowledged_stale"]
+    )
+    review.add_argument("--comment", default="")
+    review.set_defaults(func=certification_cmd)
+    revoke = certification_sub.add_parser("revoke")
+    revoke.add_argument("evidence_id")
+    revoke.add_argument("--reason", default="operator_revoked")
+    revoke.set_defaults(func=certification_cmd)
+
     analytics = sub.add_parser("website-analytics")
     analytics_sub = analytics.add_subparsers(dest="website_analytics_command", required=True)
     for name in {"providers", "accounts"}:
@@ -1381,6 +1464,9 @@ def build_parser() -> argparse.ArgumentParser:
     staging_profile_validate = analytics_sub.add_parser("staging-profile-validate")
     staging_profile_validate.add_argument("profile_id")
     staging_profile_validate.set_defaults(func=website_analytics_cmd)
+    staging_dry_run = analytics_sub.add_parser("staging-dry-run")
+    staging_dry_run.add_argument("profile_id")
+    staging_dry_run.set_defaults(func=website_analytics_cmd)
     staging_run = analytics_sub.add_parser("staging-run")
     staging_run.add_argument("profile_id")
     staging_run.add_argument("--execute-staging", action="store_true")

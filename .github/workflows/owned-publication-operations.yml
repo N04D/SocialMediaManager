@@ -158,6 +158,39 @@ jobs:
           path: staging-analytics-deterministic-report.json
           if-no-files-found: error
 
+  certification-evidence-integrity:
+    name: Certification Evidence Integrity
+    runs-on: ubuntu-24.04
+    needs: staging-analytics-deterministic-certification
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Run certification evidence integrity checks
+        run: |
+          python -m unittest tests.test_certification_evidence_framework_phase28 -v
+          python -m unittest tests.test_certification_evidence_signing_phase28 -v
+          python -m unittest tests.test_certification_evidence_import_phase28 -v
+          python -m unittest tests.test_certification_evidence_trust_phase28 -v
+          python -m unittest tests.test_certification_evidence_freshness_phase28 -v
+          python -m unittest tests.test_certification_evidence_operator_phase28 -v
+          python -m unittest tests.test_certification_evidence_security_phase28 -v
+          python -m src.plugin_sdk.cli certification generate-deterministic > certification-evidence-integrity.json
+      - name: Upload safe certification evidence report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: certification-evidence-integrity-report
+          path: certification-evidence-integrity.json
+          if-no-files-found: error
+
   staging-analytics-provider-smoke:
     name: Staging Analytics Provider Smoke
     runs-on: ubuntu-24.04

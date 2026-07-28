@@ -14,6 +14,11 @@ Phase 26 adds provider-neutral website instrumentation: snapshot-bound manifests
 
 Phase 27 adds staging analytics certification. Required certification is deterministic and fixture-only; optional provider staging smoke is explicitly opt-in and reports `staging_provider_certification_not_run` when no safe staging configuration exists.
 
+Phase 28 adds certification evidence trust: canonical packages, provenance,
+optional signer verification, managed import/export, replay prevention,
+freshness policies and operator review. A configured CI workflow remains
+`artifact_not_imported` until a real evidence artifact is imported and verified.
+
 SocialMediaManager turns long-form content into channel-specific publication targets.
 
 ## Markdown Website Channel

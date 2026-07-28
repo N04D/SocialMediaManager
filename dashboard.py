@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import cgi
 import html
 import json
@@ -2912,6 +2911,12 @@ def staging_analytics_service():
     return StagingAnalyticsCertificationService()
 
 
+def certification_evidence_service():
+    from src.core.certification_evidence.service import CertificationEvidenceService
+
+    return CertificationEvidenceService()
+
+
 def owned_publication_operations_payload() -> dict[str, Any]:
     service = owned_publication_service()
     health = service.operations_health()
@@ -2920,6 +2925,7 @@ def owned_publication_operations_payload() -> dict[str, Any]:
     analytics = website_analytics_service().analytics_health()
     instrumentation = website_instrumentation_service().operations_health()
     staging = staging_analytics_service().operations_health()
+    certification = certification_evidence_service()
     return {
         "storage": health["storage"],
         "recovery": recovery,
@@ -2928,6 +2934,8 @@ def owned_publication_operations_payload() -> dict[str, Any]:
         "website_analytics": analytics,
         "website_instrumentation": instrumentation,
         "staging_analytics": staging,
+        "certification_evidence": certification.list_evidence(),
+        "certification_readiness": certification.readiness(),
         "backups": service.backup_list(),
         "readiness": release["report"],
         "active_leases": int(health["metrics"]["owned_publication_active_leases"]),
@@ -3050,6 +3058,34 @@ def render_staging_analytics_page() -> str:
     """
 
 
+def render_certification_evidence_page() -> str:
+    service = certification_evidence_service()
+    payload = service.list_evidence()
+    readiness = service.readiness()
+    evidence_rows = (
+        "".join(
+            f"<tr><td>{html.escape(item['package_id'])}</td><td>{html.escape(item['evidence_type'])}</td>"
+            f"<td>{html.escape(item['trust_status'])}</td><td>{html.escape(item['freshness_status'])}</td>"
+            f"<td>{html.escape(item['signature_status'])}</td><td>{html.escape((item.get('provenance') or {}).get('commit_sha', ''))}</td></tr>"
+            for item in payload["evidence"]
+        )
+        or "<tr><td colspan='6'>No certification evidence imported.</td></tr>"
+    )
+    return f"""
+    <section class="panel">
+      <h2>Certification Evidence</h2>
+      <p>Valid: {html.escape(str(readiness["certification_evidence_valid"]))}</p>
+      <p>Trusted: {html.escape(str(readiness["certification_evidence_trusted"]))}</p>
+      <p>Fresh: {html.escape(str(readiness["certification_evidence_fresh"]))}</p>
+      <p>Remote CI: {html.escape(payload["remote_ci_status"]["artifact_status"])}</p>
+    </section>
+    <section class="panel">
+      <h2>Evidence Packages</h2>
+      <table><thead><tr><th>Evidence</th><th>Type</th><th>Trust</th><th>Freshness</th><th>Signature</th><th>Commit</th></tr></thead><tbody>{evidence_rows}</tbody></table>
+    </section>
+    """
+
+
 def render_owned_publication_operations_page() -> str:
     operations = owned_publication_operations_payload()
     readiness = operations["readiness"]
@@ -3100,11 +3136,14 @@ def render_owned_publication_operations_page() -> str:
             <p>Browser certification: {html.escape(str(readiness["browser_certification_passed"]))}</p>
             <p>Worker certification: {html.escape(str(readiness["worker_certification_passed"]))}</p>
             <p>Required skips: {html.escape(str(readiness["required_certification_skips"]))}</p>
+            <p>Evidence: {html.escape(str(readiness.get("deterministic_certification_status", "missing")))}</p>
+            <p>Remote CI artifact: {html.escape(str(readiness.get("remote_ci_artifact_status", "artifact_not_imported")))}</p>
           </article>
         </div>
         <section class="panel"><h3>Workers</h3><table><thead><tr><th>Type</th><th>Status</th><th>Heartbeat</th><th>Processed</th><th>Error</th></tr></thead><tbody>{worker_rows}</tbody></table></section>
         <section class="panel"><h3>Backups</h3><table><thead><tr><th>ID</th><th>Status</th><th>Validation</th><th>Bytes</th></tr></thead><tbody>{backup_rows}</tbody></table></section>
         <section class="panel"><h3>Metrics</h3><table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody>{metrics_rows}</tbody></table></section>
+        {render_certification_evidence_page()}
       </section>
     """
 
@@ -4839,6 +4878,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if parts[1] == "report":
                 json_response(self, service.report(run_id))
                 return
+        if parsed.path == "/api/certification/evidence":
+            json_response(self, certification_evidence_service().list_evidence())
+            return
+        if parsed.path.startswith("/api/certification/evidence/"):
+            evidence_id = parsed.path.removeprefix("/api/certification/evidence/").split("/")[0]
+            json_response(self, certification_evidence_service().get_evidence(evidence_id))
+            return
+        if parsed.path == "/api/certification/policies":
+            json_response(self, certification_evidence_service().policies())
+            return
         if parsed.path == "/api/analytics/instrumentation/profiles":
             json_response(self, website_instrumentation_service().profiles_payload())
             return
@@ -6007,6 +6056,32 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         status=HTTPStatus.BAD_REQUEST,
                     )
                 return
+            if len(parts) == 2 and parts[1] == "dry-run":
+                try:
+                    json_response(self, certification_evidence_service().dry_run_staging_profile(profile_id))
+                except Exception as exc:
+                    json_response(
+                        self,
+                        {"error": {"code": getattr(exc, "code", "certification.error"), "message": str(exc)}},
+                        status=HTTPStatus.BAD_REQUEST,
+                    )
+                return
+            if len(parts) == 2 and parts[1] == "execute":
+                try:
+                    json_response(
+                        self,
+                        certification_evidence_service().execute_staging_profile(
+                            profile_id, confirm=bool(json_body.get("confirm", False))
+                        ),
+                        status=HTTPStatus.CREATED,
+                    )
+                except Exception as exc:
+                    json_response(
+                        self,
+                        {"error": {"code": getattr(exc, "code", "certification.error"), "message": str(exc)}},
+                        status=HTTPStatus.BAD_REQUEST,
+                    )
+                return
         if path == "/api/analytics/staging/runs":
             execute = bool(json_body.get("execute_staging", False))
             try:
@@ -6026,6 +6101,60 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     status=HTTPStatus.BAD_REQUEST,
                 )
             return
+        if path.startswith("/api/certification/"):
+            service = certification_evidence_service()
+            try:
+                if path == "/api/certification/evidence/export":
+                    json_response(self, service.export_evidence(str(json_body.get("evidence_id", ""))))
+                    return
+                if path == "/api/certification/evidence/import":
+                    import base64
+
+                    data = base64.b64decode(str(json_body.get("package_base64", "")))
+                    json_response(self, service.import_evidence(data), status=HTTPStatus.CREATED)
+                    return
+                if path == "/api/certification/compare":
+                    json_response(
+                        self,
+                        service.compare(str(json_body.get("left_id", "")), str(json_body.get("right_id", ""))),
+                    )
+                    return
+                if path.startswith("/api/certification/evidence/"):
+                    suffix = path.removeprefix("/api/certification/evidence/")
+                    parts = suffix.split("/")
+                    evidence_id = parts[0]
+                    action = parts[1] if len(parts) > 1 else ""
+                    if action == "verify":
+                        json_response(self, service.verify(evidence_id))
+                        return
+                    if action == "review":
+                        json_response(
+                            self,
+                            service.review(
+                                evidence_id,
+                                decision=str(json_body.get("decision", "approved")),
+                                reviewer_id=str(json_body.get("reviewer_id", "operator")),
+                                safe_comment=str(json_body.get("safe_comment", "")),
+                            ),
+                        )
+                        return
+                    if action == "revoke":
+                        json_response(
+                            self,
+                            service.revoke(
+                                evidence_id,
+                                reason=str(json_body.get("reason", "operator_revoked")),
+                                reviewer_id=str(json_body.get("reviewer_id", "operator")),
+                            ),
+                        )
+                        return
+            except Exception as exc:
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "certification.error"), "message": str(exc)}},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
         if path.startswith("/api/analytics/staging/runs/"):
             suffix = path.removeprefix("/api/analytics/staging/runs/")
             parts = suffix.split("/")

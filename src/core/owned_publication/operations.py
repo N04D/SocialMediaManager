@@ -188,6 +188,13 @@ class OwnedPublicationProductionReadinessReport:
     staging_certification_fresh: str
     staging_certification_status: str
     staging_certification_ready: bool
+    certification_evidence_valid: bool
+    certification_evidence_trusted: bool
+    certification_evidence_fresh: bool
+    certification_evidence_commit_matches: bool
+    certification_evidence_reviewed: bool
+    deterministic_certification_status: str
+    remote_ci_artifact_status: str
     sandbox_phase20_2_status: dict[str, Any]
     owned_publication_operations_ready: bool
     external_plugin_sandbox_ready: bool
@@ -650,6 +657,7 @@ class ProductionReadinessService:
         analytics = _website_analytics_health(self.repository.database_path)
         instrumentation = _website_instrumentation_health(self.repository.database_path)
         staging = _staging_analytics_health(self.repository.database_path)
+        certification = _certification_evidence_health(self.repository.database_path)
         browser_passed = bool(browser_evidence and browser_evidence.passed and browser_evidence.required_skips == 0)
         worker_passed = bool(worker_evidence and worker_evidence.passed and worker_evidence.required_skips == 0)
         skips = (browser_evidence.required_skips if browser_evidence else 1) + (
@@ -716,6 +724,13 @@ class ProductionReadinessService:
             else ("fresh" if staging["latest_status"] == "passed" else "staging_provider_certification_not_run"),
             staging_certification_status=str(staging["latest_status"]),
             staging_certification_ready=bool(staging["staging_certification_ready"]),
+            certification_evidence_valid=bool(certification["certification_evidence_valid"]),
+            certification_evidence_trusted=bool(certification["certification_evidence_trusted"]),
+            certification_evidence_fresh=bool(certification["certification_evidence_fresh"]),
+            certification_evidence_commit_matches=bool(certification["certification_evidence_commit_matches"]),
+            certification_evidence_reviewed=bool(certification["certification_evidence_reviewed"]),
+            deterministic_certification_status=str(certification["deterministic_certification_status"]),
+            remote_ci_artifact_status=str(certification["remote_ci_status"]["artifact_status"]),
             sandbox_phase20_2_status={"production_ready": external_sandbox_ready, "status": sandbox.controller_status},
             owned_publication_operations_ready=ops_ready,
             external_plugin_sandbox_ready=external_sandbox_ready,
@@ -732,6 +747,7 @@ def operations_metrics(repository: DatabaseOwnedPublicationRepository) -> dict[s
     analytics = _website_analytics_health(repository.database_path)
     instrumentation = _website_instrumentation_health(repository.database_path)
     staging = _staging_analytics_health(repository.database_path)
+    certification = _certification_evidence_health(repository.database_path)
     return {
         "owned_publication_worker_up": 1.0,
         "owned_publication_worker_last_heartbeat_age_seconds": 0.0,
@@ -757,6 +773,8 @@ def operations_metrics(repository: DatabaseOwnedPublicationRepository) -> dict[s
         "staging_analytics_open_runs": float(staging["open_runs"]),
         "staging_analytics_awaiting_provider": float(staging["awaiting_provider"]),
         "staging_analytics_uncertain_browser_events": float(staging["uncertain_browser_events"]),
+        "certification_evidence_packages": float(certification["evidence_count"]),
+        "certification_evidence_stale": float(certification["stale_count"]),
     }
 
 
@@ -816,6 +834,34 @@ def _staging_analytics_health(database_path: Path) -> dict[str, Any]:
             "uncertain_browser_events": 0,
             "latest_status": "staging_provider_certification_not_run",
             "staging_certification_ready": False,
+        }
+
+
+def _certification_evidence_health(database_path: Path) -> dict[str, Any]:
+    try:
+        from src.core.certification_evidence.service import CertificationEvidenceService
+
+        service = CertificationEvidenceService(database_path=database_path)
+        readiness = service.readiness()
+        evidence = service.list_evidence()["evidence"]
+        return {
+            **readiness,
+            "evidence_count": len(evidence),
+            "stale_count": sum(1 for item in evidence if item.get("freshness_status") == "stale"),
+            "remote_ci_status": service.remote_ci_status(),
+        }
+    except Exception:
+        return {
+            "certification_evidence_valid": False,
+            "certification_evidence_trusted": False,
+            "certification_evidence_fresh": False,
+            "certification_evidence_commit_matches": False,
+            "certification_evidence_reviewed": False,
+            "deterministic_certification_status": "missing",
+            "staging_certification_status": "not_configured",
+            "remote_ci_status": {"artifact_status": "artifact_not_imported"},
+            "evidence_count": 0,
+            "stale_count": 0,
         }
 
 
