@@ -963,6 +963,32 @@ def website_analytics_cmd(args: argparse.Namespace) -> int:
     scenarios = import_module("integrations.website_analytics.scenarios")
     service = service_module.WebsiteAnalyticsService()
     command = args.website_analytics_command
+    if command.startswith("staging-"):
+        staging_module = import_module("src.core.staging_analytics.service")
+        staging_service = staging_module.StagingAnalyticsCertificationService()
+        scenarios = import_module("integrations.staging_analytics.scenarios")
+        if command == "staging-profiles":
+            if not staging_service.repository.list_profiles():
+                staging_service.create_profile(scenarios.staging_profile_payload())
+            payload = staging_service.list_profiles()
+        elif command == "staging-profile-show":
+            payload = staging_service.profile(args.profile_id)
+        elif command == "staging-profile-validate":
+            payload = staging_service.validate_profile(args.profile_id)
+        elif command == "staging-run":
+            if not staging_service.repository.list_profiles():
+                staging_service.create_profile(scenarios.staging_profile_payload())
+            payload = staging_service.create_run(args.profile_id, execute_staging=bool(args.execute_staging))
+        elif command == "staging-run-show":
+            payload = staging_service.run(args.run_id)
+        elif command == "staging-reconcile":
+            payload = staging_service.reconcile_run(args.run_id)
+        elif command == "staging-report":
+            payload = staging_service.report(args.run_id)
+        else:
+            payload = {"status": "unknown"}
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return 0
     account_id = getattr(args, "account_id", "analytics-account-plausible")
     if command not in {"providers", "accounts"} and not service.repository.list_accounts():
         service.create_account(scenarios.plausible_account_payload())
@@ -1026,6 +1052,9 @@ def website_instrumentation_cmd(args: argparse.Namespace) -> int:
         payload = service.templates()
     elif command == "template-show":
         payload = service.templates(args.profile)
+    elif command == "support-bundle-create":
+        staging_module = import_module("src.core.staging_analytics.service")
+        payload = staging_module.StagingAnalyticsCertificationService().support_bundle()
     else:
         payload = {"status": "unknown"}
     print(json.dumps(payload, indent=2, sort_keys=True, default=str))
@@ -1344,12 +1373,30 @@ def build_parser() -> argparse.ArgumentParser:
         cmd = analytics_sub.add_parser(name)
         cmd.add_argument("account_id")
         cmd.set_defaults(func=website_analytics_cmd)
+    staging_profiles = analytics_sub.add_parser("staging-profiles")
+    staging_profiles.set_defaults(func=website_analytics_cmd)
+    staging_profile_show = analytics_sub.add_parser("staging-profile-show")
+    staging_profile_show.add_argument("profile_id")
+    staging_profile_show.set_defaults(func=website_analytics_cmd)
+    staging_profile_validate = analytics_sub.add_parser("staging-profile-validate")
+    staging_profile_validate.add_argument("profile_id")
+    staging_profile_validate.set_defaults(func=website_analytics_cmd)
+    staging_run = analytics_sub.add_parser("staging-run")
+    staging_run.add_argument("profile_id")
+    staging_run.add_argument("--execute-staging", action="store_true")
+    staging_run.set_defaults(func=website_analytics_cmd)
+    for name in {"staging-run-show", "staging-reconcile", "staging-report"}:
+        cmd = analytics_sub.add_parser(name)
+        cmd.add_argument("run_id")
+        cmd.set_defaults(func=website_analytics_cmd)
 
     instrumentation = sub.add_parser("website-instrumentation")
     instrumentation_sub = instrumentation.add_subparsers(dest="website_instrumentation_command", required=True)
     for name in {"profiles", "configs", "templates"}:
         cmd = instrumentation_sub.add_parser(name)
         cmd.set_defaults(func=website_instrumentation_cmd)
+    support_bundle = instrumentation_sub.add_parser("support-bundle-create")
+    support_bundle.set_defaults(func=website_instrumentation_cmd)
     for name in {"config-show", "verify", "quality", "drift"}:
         cmd = instrumentation_sub.add_parser(name)
         cmd.add_argument("config_id")

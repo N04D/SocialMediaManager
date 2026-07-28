@@ -18,7 +18,8 @@
     utm_source: true,
     utm_medium: true,
     utm_campaign: true,
-    utm_content: true
+    utm_content: true,
+    smm_synthetic_run_id: true
   };
 
   function clean(props) {

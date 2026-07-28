@@ -13,3 +13,7 @@ The backend may render manifests, templates, frontmatter bindings, sidecar JSON,
 and verification reports. It must not send tracking events to providers, install
 tracking code into user-owned repositories, overwrite active website files, or
 place cookies or persistent visitor storage.
+
+Phase 27 staging certification preserves this boundary. Browser-side synthetic
+events may be triggered from an isolated Chromium context, but backend services
+never reproduce or retry those event writes.

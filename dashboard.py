@@ -2129,6 +2129,7 @@ def render_content_planning_page(config: AppConfig) -> str:
     return f"""
       {render_website_analytics_page()}
       {render_website_instrumentation_page()}
+      {render_staging_analytics_page()}
       <div class="page-grid">
         <div class="stack">
           <section class="card">
@@ -2905,6 +2906,12 @@ def website_instrumentation_service():
     return WebsiteInstrumentationService()
 
 
+def staging_analytics_service():
+    from src.core.staging_analytics.service import StagingAnalyticsCertificationService
+
+    return StagingAnalyticsCertificationService()
+
+
 def owned_publication_operations_payload() -> dict[str, Any]:
     service = owned_publication_service()
     health = service.operations_health()
@@ -2912,6 +2919,7 @@ def owned_publication_operations_payload() -> dict[str, Any]:
     release = service.release_check_payload(require_certification=False)
     analytics = website_analytics_service().analytics_health()
     instrumentation = website_instrumentation_service().operations_health()
+    staging = staging_analytics_service().operations_health()
     return {
         "storage": health["storage"],
         "recovery": recovery,
@@ -2919,6 +2927,7 @@ def owned_publication_operations_payload() -> dict[str, Any]:
         "metrics": health["metrics"],
         "website_analytics": analytics,
         "website_instrumentation": instrumentation,
+        "staging_analytics": staging,
         "backups": service.backup_list(),
         "readiness": release["report"],
         "active_leases": int(health["metrics"]["owned_publication_active_leases"]),
@@ -2998,6 +3007,45 @@ def render_website_instrumentation_page() -> str:
     <section class="panel">
       <h2>Instrumentation Configs</h2>
       <table><thead><tr><th>Config</th><th>Website</th><th>Analytics</th><th>Profile</th></tr></thead><tbody>{config_rows}</tbody></table>
+    </section>
+    """
+
+
+def render_staging_analytics_page() -> str:
+    service = staging_analytics_service()
+    health = service.operations_health()
+    profiles = service.list_profiles()["profiles"]
+    runs = service.list_runs()["runs"]
+    profile_rows = (
+        "".join(
+            f"<tr><td>{html.escape(item['id'])}</td><td>{html.escape(item['staging_origin_reference_id'])}</td>"
+            f"<td>{html.escape(item['analytics_account_id'])}</td><td>{html.escape(str(item['enabled']))}</td></tr>"
+            for item in profiles
+        )
+        or "<tr><td colspan='4'>No staging certification profiles configured.</td></tr>"
+    )
+    run_rows = (
+        "".join(
+            f"<tr><td>{html.escape(item['id'])}</td><td>{html.escape(item['status'])}</td>"
+            f"<td>{html.escape(item['reconciliation_status'])}</td><td>{html.escape(item['run_id'])}</td></tr>"
+            for item in runs[:10]
+        )
+        or "<tr><td colspan='4'>No staging certification runs.</td></tr>"
+    )
+    return f"""
+    <section class="panel">
+      <h2>Staging Analytics Certification</h2>
+      <p>Latest status: {html.escape(str(health["latest_status"]))}</p>
+      <p>Awaiting provider: {html.escape(str(health["awaiting_provider"]))}</p>
+      <p>Uncertain browser events: {html.escape(str(health["uncertain_browser_events"]))}</p>
+    </section>
+    <section class="panel">
+      <h2>Staging Profiles</h2>
+      <table><thead><tr><th>Profile</th><th>Origin</th><th>Analytics</th><th>Enabled</th></tr></thead><tbody>{profile_rows}</tbody></table>
+    </section>
+    <section class="panel">
+      <h2>Staging Runs</h2>
+      <table><thead><tr><th>Run</th><th>Status</th><th>Reconciliation</th><th>Synthetic ID</th></tr></thead><tbody>{run_rows}</tbody></table>
     </section>
     """
 
@@ -4767,6 +4815,30 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/analytics/providers":
             json_response(self, website_analytics_service().providers_payload())
             return
+        if parsed.path == "/api/analytics/staging/profiles":
+            json_response(self, staging_analytics_service().list_profiles())
+            return
+        if parsed.path.startswith("/api/analytics/staging/profiles/"):
+            profile_id = parsed.path.removeprefix("/api/analytics/staging/profiles/").split("/")[0]
+            json_response(self, staging_analytics_service().profile(profile_id))
+            return
+        if parsed.path == "/api/analytics/staging/runs":
+            json_response(self, staging_analytics_service().list_runs())
+            return
+        if parsed.path.startswith("/api/analytics/staging/runs/"):
+            suffix = parsed.path.removeprefix("/api/analytics/staging/runs/")
+            parts = suffix.split("/")
+            run_id = parts[0]
+            service = staging_analytics_service()
+            if len(parts) == 1:
+                json_response(self, service.run(run_id))
+                return
+            if parts[1] == "evidence":
+                json_response(self, service.evidence(run_id))
+                return
+            if parts[1] == "report":
+                json_response(self, service.report(run_id))
+                return
         if parsed.path == "/api/analytics/instrumentation/profiles":
             json_response(self, website_instrumentation_service().profiles_payload())
             return
@@ -5909,6 +5981,70 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     self,
                     {"error": {"code": getattr(exc, "code", "website_instrumentation.error"), "message": str(exc)}},
                     status=status,
+                )
+                return
+        if path == "/api/analytics/staging/profiles":
+            try:
+                json_response(self, staging_analytics_service().create_profile(json_body), status=HTTPStatus.CREATED)
+            except Exception as exc:
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "staging_analytics.error"), "message": str(exc)}},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            return
+        if path.startswith("/api/analytics/staging/profiles/"):
+            suffix = path.removeprefix("/api/analytics/staging/profiles/")
+            parts = suffix.split("/")
+            profile_id = parts[0]
+            if len(parts) == 2 and parts[1] == "validate":
+                try:
+                    json_response(self, staging_analytics_service().validate_profile(profile_id))
+                except Exception as exc:
+                    json_response(
+                        self,
+                        {"error": {"code": getattr(exc, "code", "staging_analytics.error"), "message": str(exc)}},
+                        status=HTTPStatus.BAD_REQUEST,
+                    )
+                return
+        if path == "/api/analytics/staging/runs":
+            execute = bool(json_body.get("execute_staging", False))
+            try:
+                json_response(
+                    self,
+                    staging_analytics_service().create_run(
+                        str(json_body.get("profile_id", "staging-cert-profile-1")),
+                        execute_staging=execute,
+                        idempotency_key=str(json_body.get("idempotency_key", "")),
+                    ),
+                    status=HTTPStatus.CREATED,
+                )
+            except Exception as exc:
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "staging_analytics.error"), "message": str(exc)}},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            return
+        if path.startswith("/api/analytics/staging/runs/"):
+            suffix = path.removeprefix("/api/analytics/staging/runs/")
+            parts = suffix.split("/")
+            run_id = parts[0]
+            service = staging_analytics_service()
+            try:
+                if len(parts) == 2 and parts[1] == "cancel":
+                    json_response(self, service.mark_uncertain(run_id) | {"cancel_requested": True})
+                    return
+                if len(parts) == 2 and parts[1] == "reconcile":
+                    json_response(
+                        self, service.reconcile_run(run_id, observed_events=list(json_body.get("observed_events", [])))
+                    )
+                    return
+            except Exception as exc:
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "staging_analytics.error"), "message": str(exc)}},
+                    status=HTTPStatus.BAD_REQUEST,
                 )
                 return
         if path.startswith("/api/analytics/accounts/"):

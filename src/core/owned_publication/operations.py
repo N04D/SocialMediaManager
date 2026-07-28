@@ -181,6 +181,13 @@ class OwnedPublicationProductionReadinessReport:
     website_instrumentation_browser_verified: bool
     website_instrumentation_mapping_aligned: bool
     website_instrumentation_quality: str
+    staging_analytics_configured: bool
+    staging_analytics_profile_valid: bool
+    staging_browser_certification_passed: bool
+    staging_provider_observed: bool
+    staging_certification_fresh: str
+    staging_certification_status: str
+    staging_certification_ready: bool
     sandbox_phase20_2_status: dict[str, Any]
     owned_publication_operations_ready: bool
     external_plugin_sandbox_ready: bool
@@ -642,6 +649,7 @@ class ProductionReadinessService:
         readmodels = self.repository.readmodels_status()["readmodels"]
         analytics = _website_analytics_health(self.repository.database_path)
         instrumentation = _website_instrumentation_health(self.repository.database_path)
+        staging = _staging_analytics_health(self.repository.database_path)
         browser_passed = bool(browser_evidence and browser_evidence.passed and browser_evidence.required_skips == 0)
         worker_passed = bool(worker_evidence and worker_evidence.passed and worker_evidence.required_skips == 0)
         skips = (browser_evidence.required_skips if browser_evidence else 1) + (
@@ -699,6 +707,15 @@ class ProductionReadinessService:
             website_instrumentation_browser_verified=False,
             website_instrumentation_mapping_aligned=not bool(instrumentation["mapping_drift"]),
             website_instrumentation_quality=str(instrumentation["quality"]),
+            staging_analytics_configured=bool(staging["enabled_staging_profiles"]),
+            staging_analytics_profile_valid=bool(staging["enabled_staging_profiles"]),
+            staging_browser_certification_passed=staging["latest_status"] == "passed",
+            staging_provider_observed=staging["latest_status"] == "passed",
+            staging_certification_fresh="not_configured"
+            if not staging["enabled_staging_profiles"]
+            else ("fresh" if staging["latest_status"] == "passed" else "staging_provider_certification_not_run"),
+            staging_certification_status=str(staging["latest_status"]),
+            staging_certification_ready=bool(staging["staging_certification_ready"]),
             sandbox_phase20_2_status={"production_ready": external_sandbox_ready, "status": sandbox.controller_status},
             owned_publication_operations_ready=ops_ready,
             external_plugin_sandbox_ready=external_sandbox_ready,
@@ -714,6 +731,7 @@ def operations_metrics(repository: DatabaseOwnedPublicationRepository) -> dict[s
     readmodels = repository.readmodels_status()["readmodels"]
     analytics = _website_analytics_health(repository.database_path)
     instrumentation = _website_instrumentation_health(repository.database_path)
+    staging = _staging_analytics_health(repository.database_path)
     return {
         "owned_publication_worker_up": 1.0,
         "owned_publication_worker_last_heartbeat_age_seconds": 0.0,
@@ -735,6 +753,10 @@ def operations_metrics(repository: DatabaseOwnedPublicationRepository) -> dict[s
         "website_instrumentation_configured_websites": float(instrumentation["configured_websites"]),
         "website_instrumentation_mapping_drift": float(instrumentation["mapping_drift"]),
         "website_instrumentation_partial_websites": float(instrumentation["partial_websites"]),
+        "staging_analytics_enabled_profiles": float(staging["enabled_staging_profiles"]),
+        "staging_analytics_open_runs": float(staging["open_runs"]),
+        "staging_analytics_awaiting_provider": float(staging["awaiting_provider"]),
+        "staging_analytics_uncertain_browser_events": float(staging["uncertain_browser_events"]),
     }
 
 
@@ -776,6 +798,24 @@ def _website_instrumentation_health(database_path: Path) -> dict[str, Any]:
             "mapping_drift": 0,
             "instrumentation_ready": False,
             "quality": "not_configured",
+        }
+
+
+def _staging_analytics_health(database_path: Path) -> dict[str, Any]:
+    try:
+        from src.core.staging_analytics.service import StagingAnalyticsCertificationService
+
+        return StagingAnalyticsCertificationService(database_path=database_path).operations_health()
+    except Exception:
+        return {
+            "enabled_staging_profiles": 0,
+            "open_runs": 0,
+            "awaiting_provider": 0,
+            "partial_observed": 0,
+            "timed_out": 0,
+            "uncertain_browser_events": 0,
+            "latest_status": "staging_provider_certification_not_run",
+            "staging_certification_ready": False,
         }
 
 

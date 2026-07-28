@@ -7,6 +7,7 @@
     consentMode: "after_external_consent",
     pageContext: {},
     events: {},
+    syntheticRunId: "",
     sentKeys: {},
     sink: null
   };
@@ -28,7 +29,8 @@
     utm_source: 80,
     utm_medium: 80,
     utm_campaign: 120,
-    utm_content: 120
+    utm_content: 120,
+    smm_synthetic_run_id: 80
   };
 
   function safeText(value, limit) {
@@ -52,6 +54,9 @@
     ["page_id", "content_id", "revision_id", "publication_id", "campaign_id"].forEach(function (key) {
       raw[key] = state.pageContext[key.replace("_id", "Id")] || state.pageContext[key] || "";
     });
+    if (state.syntheticRunId) {
+      raw.smm_synthetic_run_id = state.syntheticRunId;
+    }
     Object.keys(extra || {}).forEach(function (key) {
       raw[key] = extra[key];
     });
@@ -142,6 +147,7 @@
     state.consentMode = cfg.consentMode || "after_external_consent";
     state.consent = state.consentMode === "always_enabled";
     state.pageContext = cfg.pageContext || {};
+    state.syntheticRunId = safeText(cfg.syntheticRunId || "", propertyRules.smm_synthetic_run_id);
     state.sink = cfg.testSink || null;
     (cfg.events || []).forEach(function (item) {
       state.events[item.event_type] = item.event_name;

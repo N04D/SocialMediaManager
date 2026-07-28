@@ -1,6 +1,12 @@
 name: Owned Publication Operations
 
 on:
+  workflow_dispatch:
+    inputs:
+      execute_staging_provider_smoke:
+        description: "Run optional synthetic staging provider smoke"
+        required: false
+        default: "false"
   pull_request:
   push:
     branches:
@@ -119,4 +125,57 @@ jobs:
         with:
           name: website-instrumentation-report
           path: website-instrumentation-report.json
+          if-no-files-found: error
+
+  staging-analytics-deterministic-certification:
+    name: Staging Analytics Deterministic Certification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Run deterministic staging certification
+        run: |
+          python -m unittest tests.test_staging_analytics_framework_phase27 -v
+          python -m unittest tests.test_staging_analytics_browser_phase27 -v
+          python -m unittest tests.test_staging_analytics_reconciliation_phase27 -v
+          python -m unittest tests.test_staging_analytics_uncertainty_phase27 -v
+          python -m unittest tests.test_staging_analytics_support_bundle_phase27 -v
+          python -m unittest tests.test_staging_analytics_security_phase27 -v
+          python -m src.plugin_sdk.cli website-analytics staging-profiles > staging-analytics-deterministic-report.json
+      - name: Upload safe deterministic staging report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-analytics-deterministic-report
+          path: staging-analytics-deterministic-report.json
+          if-no-files-found: error
+
+  staging-analytics-provider-smoke:
+    name: Staging Analytics Provider Smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: github.event_name == 'workflow_dispatch' && inputs.execute_staging_provider_smoke == 'true'
+    concurrency: staging-analytics-provider-smoke
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Report optional staging status
+        run: |
+          echo '{"status":"not_configured","staging_provider_certification_not_run":true,"reason":"host-owned staging secret references are required"}' > staging-provider-smoke.json
+      - name: Upload safe optional staging smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-provider-smoke-report
+          path: staging-provider-smoke.json
           if-no-files-found: error

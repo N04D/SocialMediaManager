@@ -48,6 +48,7 @@ PROPERTY_RULES: dict[str, EventPropertyRule] = {
     "utm_medium": EventPropertyRule("utm_medium", "string", 80, False),
     "utm_campaign": EventPropertyRule("utm_campaign", "string", 120, False),
     "utm_content": EventPropertyRule("utm_content", "string", 120, False),
+    "smm_synthetic_run_id": EventPropertyRule("smm_synthetic_run_id", "string", 80, False),
 }
 
 
