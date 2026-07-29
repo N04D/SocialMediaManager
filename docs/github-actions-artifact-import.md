@@ -28,3 +28,9 @@ package verification, freshness, review, and policy.
 
 No workflow dispatch, rerun, cancel, artifact deletion, repository write, or
 arbitrary artifact URL is supported.
+
+## Phase 31 Operator Binding
+
+Operators must select a concrete run attempt and concrete artifact ID. Artifact
+name is not identity. Dry-run downloads nothing, execution revalidates metadata
+immediately before download, and temporary provider redirect URLs are not stored.

@@ -221,6 +221,25 @@ class OwnedPublicationProductionReadinessReport:
     host_signer_activation_status: str
     github_credential_status: str
     real_github_import_status: str
+    current_commit_sha: str
+    github_origin_status: str
+    github_run_status: str
+    github_run_id: str
+    github_run_attempt: int
+    github_artifact_status: str
+    github_artifact_id: str
+    provider_digest_status: str
+    ci_package_status: str
+    ci_import_attestation_status: str
+    ci_review_status: str
+    ci_promotion_status: str
+    ci_run_found_for_current_commit: bool
+    ci_artifact_selected_for_current_commit: bool
+    ci_artifact_imported_for_current_commit: bool
+    ci_evidence_verified_for_current_commit: bool
+    ci_evidence_reviewed_for_current_commit: bool
+    ci_evidence_promoted_for_current_commit: bool
+    ci_evidence_fresh_for_current_commit: bool
     sandbox_phase20_2_status: dict[str, Any]
     owned_publication_operations_ready: bool
     external_plugin_sandbox_ready: bool
@@ -786,6 +805,25 @@ class ProductionReadinessService:
             host_signer_activation_status=str(managed_secrets["host_signer_activation_status"]),
             github_credential_status=str(managed_secrets["github_credential_status"]),
             real_github_import_status=str(managed_secrets["real_github_import_status"]),
+            current_commit_sha=str(ci_artifacts["current_commit_sha"]),
+            github_origin_status=str(ci_artifacts["github_origin_status"]),
+            github_run_status=str(ci_artifacts["github_run_status"]),
+            github_run_id=str(ci_artifacts["github_run_id"]),
+            github_run_attempt=int(ci_artifacts["github_run_attempt"]),
+            github_artifact_status=str(ci_artifacts["github_artifact_status"]),
+            github_artifact_id=str(ci_artifacts["github_artifact_id"]),
+            provider_digest_status=str(ci_artifacts["provider_digest_status"]),
+            ci_package_status=str(ci_artifacts["ci_package_status"]),
+            ci_import_attestation_status=str(ci_artifacts["ci_import_attestation_status"]),
+            ci_review_status=str(ci_artifacts["ci_review_status"]),
+            ci_promotion_status=str(ci_artifacts["ci_promotion_status"]),
+            ci_run_found_for_current_commit=bool(ci_artifacts["ci_run_found_for_current_commit"]),
+            ci_artifact_selected_for_current_commit=bool(ci_artifacts["ci_artifact_selected_for_current_commit"]),
+            ci_artifact_imported_for_current_commit=bool(ci_artifacts["ci_artifact_imported_for_current_commit"]),
+            ci_evidence_verified_for_current_commit=bool(ci_artifacts["ci_evidence_verified_for_current_commit"]),
+            ci_evidence_reviewed_for_current_commit=bool(ci_artifacts["ci_evidence_reviewed_for_current_commit"]),
+            ci_evidence_promoted_for_current_commit=bool(ci_artifacts["ci_evidence_promoted_for_current_commit"]),
+            ci_evidence_fresh_for_current_commit=bool(ci_artifacts["ci_evidence_fresh_for_current_commit"]),
             sandbox_phase20_2_status={"production_ready": external_sandbox_ready, "status": sandbox.controller_status},
             owned_publication_operations_ready=ops_ready,
             external_plugin_sandbox_ready=external_sandbox_ready,
@@ -952,13 +990,35 @@ def _trusted_signing_health(database_path: Path) -> dict[str, Any]:
 
 def _ci_artifact_health(database_path: Path) -> dict[str, Any]:
     try:
+        from src.core.ci_artifacts.operator_flow import CiEvidenceOperatorService
         from src.core.ci_artifacts.service import CiArtifactImportService
 
         service = CiArtifactImportService(database_path=database_path)
         readiness = service.readiness()
+        operator = CiEvidenceOperatorService(database_path=database_path, import_service=service)
+        operator_readiness = operator.readiness()
+        flows = service.repository.list_operator_flows()
+        selected = flows[-1] if flows else {}
+        promotions = service.repository.promotions()
         imports = service.imports()["imports"]
         return {
             **readiness,
+            **operator_readiness,
+            "github_origin_status": "configured" if readiness["ci_origin_configured"] else "not_configured",
+            "github_run_status": "selected" if selected.get("selected_run_id") else "run_not_found",
+            "github_run_id": str(selected.get("selected_run_id", "")),
+            "github_run_attempt": int(selected.get("selected_run_attempt", 0) or 0),
+            "github_artifact_status": "selected" if selected.get("selected_artifact_id") else "artifact_not_selected",
+            "github_artifact_id": str(selected.get("selected_artifact_id", "")),
+            "provider_digest_status": "provider_digest_verified"
+            if any(item.get("provider_digest") for item in service.repository.attestations())
+            else "provider_digest_missing",
+            "ci_package_status": "verified" if service.repository.attestations() else "not_imported",
+            "ci_import_attestation_status": "created" if service.repository.attestations() else "missing",
+            "ci_review_status": "reviewed"
+            if operator_readiness["ci_evidence_reviewed_for_current_commit"]
+            else "awaiting_review",
+            "ci_promotion_status": "promoted" if promotions else "not_promoted",
             "ci_origin_healthy": bool(readiness["ci_origin_configured"]),
             "pending_imports": sum(1 for item in imports if item.get("status") in {"prepared", "validated"}),
             "verified_imports": sum(1 for item in imports if item.get("status") == "accepted"),
@@ -974,6 +1034,27 @@ def _ci_artifact_health(database_path: Path) -> dict[str, Any]:
             "ci_import_attestation_signed": False,
             "ci_evidence_reviewed": False,
             "ci_certification_ready": False,
+            "current_commit_sha": "",
+            "github_origin_status": "not_configured",
+            "github_run_status": "run_not_found",
+            "github_run_id": "",
+            "github_run_attempt": 0,
+            "github_artifact_status": "artifact_not_selected",
+            "github_artifact_id": "",
+            "provider_digest_status": "provider_digest_missing",
+            "ci_package_status": "not_imported",
+            "ci_import_attestation_status": "missing",
+            "ci_review_status": "awaiting_review",
+            "ci_promotion_status": "not_promoted",
+            "ci_run_found_for_current_commit": False,
+            "ci_artifact_selected_for_current_commit": False,
+            "ci_artifact_imported_for_current_commit": False,
+            "ci_evidence_verified_for_current_commit": False,
+            "ci_evidence_reviewed_for_current_commit": False,
+            "ci_evidence_promoted_for_current_commit": False,
+            "ci_evidence_fresh_for_current_commit": False,
+            "remote_ci_status": "artifact_not_imported",
+            "real_github_import_status": "real_github_import_not_run",
             "pending_imports": 0,
             "verified_imports": 0,
         }

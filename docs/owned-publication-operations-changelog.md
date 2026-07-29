@@ -1,5 +1,13 @@
 # Owned Publication Operations Changelog
 
+## Phase 31
+
+- Added GitHub CI evidence operator flow status to operations and release-check.
+- Added exact current commit fields, run attempt, artifact ID, package,
+  attestation, review, and promotion statuses.
+- Preserved `remote_ci_status = artifact_not_imported` unless a concrete
+  artifact is imported, verified, reviewed, and promoted.
+
 ## Phase 30
 
 - Added managed secret readiness fields for vault, signer secret, GitHub

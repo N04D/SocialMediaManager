@@ -255,6 +255,38 @@ jobs:
           path: managed-secrets-operator-trust-controls.json
           if-no-files-found: error
 
+  github-ci-evidence-operator-flow:
+    name: GitHub CI Evidence Operator Flow
+    runs-on: ubuntu-24.04
+    needs: managed-secrets-operator-trust-controls
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Run GitHub CI operator flow checks
+        run: |
+          python -m unittest tests.test_ci_operator_flow_phase31 -v
+          python -m unittest tests.test_ci_operator_browser_phase31 -v
+          python -m unittest tests.test_ci_operator_review_phase31 -v
+          python -m unittest tests.test_ci_operator_recovery_phase31 -v
+          python -m unittest tests.test_ci_operator_readiness_phase31 -v
+          python -m unittest tests.test_ci_operator_security_phase31 -v
+          python -m src.plugin_sdk.cli certification github status > github-ci-evidence-operator-flow.json
+      - name: Upload safe GitHub CI operator report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-ci-evidence-operator-flow-report
+          path: github-ci-evidence-operator-flow.json
+          if-no-files-found: error
+
   staging-analytics-provider-smoke:
     name: Staging Analytics Provider Smoke
     runs-on: ubuntu-24.04

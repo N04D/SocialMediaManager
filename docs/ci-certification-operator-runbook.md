@@ -20,3 +20,10 @@ and review.
 
 Remote CI remains `artifact_not_imported` until an artifact is actually
 imported.
+
+## Phase 31 Promotion Gate
+
+GitHub CI evidence readiness requires import, package verification, host import
+attestation, independent review, and exact-commit promotion. A configured
+workflow or successful run without imported evidence remains
+`remote_ci_status = artifact_not_imported`.

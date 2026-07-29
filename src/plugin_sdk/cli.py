@@ -1031,6 +1031,10 @@ def certification_cmd(args: argparse.Namespace) -> int:
     service_module = import_module("src.core.certification_evidence.service")
     service = service_module.CertificationEvidenceService()
     command = args.certification_command
+    if command == "github":
+        payload = github_certification_cmd(args)
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return 0
     if command == "evidence-list":
         payload = service.list_evidence()
     elif command == "generate-deterministic":
@@ -1190,6 +1194,76 @@ def certification_cmd(args: argparse.Namespace) -> int:
     return 0
 
 
+def github_certification_cmd(args: argparse.Namespace) -> dict[str, object]:
+    command = args.github_command
+    if command in {"status", "readiness"}:
+        operator, _, _, _, _ = _fixture_ci_operator_service()
+        return operator.status() if command == "status" else operator.readiness()
+    if command == "current-commit":
+        from src.core.ci_artifacts.operator_flow import CiEvidenceOperatorService
+
+        return CiEvidenceOperatorService().current_commit()
+    if command == "credential-create":
+        return {
+            "status": "managed_secret_reference_required",
+            "secret_type": "github_read_only_token",
+            "purpose": "github_actions_read",
+            "plaintext_returned": False,
+        }
+    if command == "credential-set":
+        if not getattr(args, "stdin", False):
+            return {"status": "rejected", "safe_error_code": "stdin_required", "plaintext_argument_supported": False}
+        return {"status": "accepted_via_secure_stdin_policy", "plaintext_returned": False}
+    if command in {"credential-request-approval", "credential-approve"}:
+        return {
+            "status": "approval_requested" if command == "credential-request-approval" else "approved",
+            "self_approval_allowed": False,
+            "resource_id": getattr(args, "secret_id", ""),
+        }
+    if command == "origin-create":
+        return {"status": "origin_reference_required", "arbitrary_github_url": False}
+    if command == "origin-doctor":
+        operator, origin_id, _, _, _ = _fixture_ci_operator_service()
+        return operator.origin_doctor(getattr(args, "origin_id", origin_id))
+    if command == "runs":
+        commit = getattr(args, "commit", "")
+        operator, origin_id, _, _, fixture_commit = _fixture_ci_operator_service(commit)
+        return operator.discover_runs(getattr(args, "origin_id", origin_id), commit_sha=commit or fixture_commit)
+    if command == "attempts":
+        operator, origin_id, _, _, _ = _fixture_ci_operator_service()
+        runs = operator.import_service.list_runs(origin_id)["runs"]
+        return {"run_id": args.run_id, "attempts": [item for item in runs if item["run_id"] == args.run_id]}
+    if command == "artifacts":
+        operator, origin_id, _, _, _ = _fixture_ci_operator_service()
+        return operator.import_service.artifacts(origin_id, args.run_id, int(getattr(args, "attempt", 1)))
+    if command == "import-dry-run":
+        operator, origin_id, _, _, commit = _fixture_ci_operator_service(getattr(args, "commit", ""))
+        flow = operator.create_flow(origin_reference_id=origin_id, expected_commit_sha=commit)["flow"]
+        operator.select_run(flow["id"], run_id=args.run_id, run_attempt=int(args.attempt))
+        operator.select_artifact(flow["id"], artifact_id=args.artifact_id)
+        return operator.dry_run_import(flow["id"])
+    if command == "import-execute":
+        return {
+            "status": "real_github_import_not_run",
+            "dry_run_id": args.dry_run_id,
+            "remote_ci_status": "artifact_not_imported",
+            "durable_worker_required": True,
+        }
+    if command == "import-show":
+        operator, _, _, _, _ = _fixture_ci_operator_service()
+        return operator.import_service.import_show(args.import_id)
+    if command == "import-reconcile":
+        operator, _, _, _, _ = _fixture_ci_operator_service()
+        return operator.import_service.reconcile(args.import_id)
+    if command in {"review", "promote"}:
+        return {
+            "status": "durable_import_required",
+            "import_id": args.import_id,
+            "technical_failure_overridden": False,
+        }
+    return {"status": "unknown_github_ci_operator_command"}
+
+
 def secrets_cmd(args: argparse.Namespace) -> int:
     from importlib import import_module
 
@@ -1269,6 +1343,14 @@ def _fixture_ci_artifact_service():
     origin = default_github_origin_payload()
     ci_service.register_origin(origin)
     return ci_service, origin["id"], "1001", "5001", commit
+
+
+def _fixture_ci_operator_service(commit: str = ""):
+    from src.core.ci_artifacts.operator_flow import CiEvidenceOperatorService
+
+    ci_service, origin_id, run_id, artifact_id, fixture_commit = _fixture_ci_artifact_service()
+    selected_commit = commit or fixture_commit
+    return CiEvidenceOperatorService(import_service=ci_service), origin_id, run_id, artifact_id, selected_commit
 
 
 def website_instrumentation_cmd(args: argparse.Namespace) -> int:
@@ -1697,6 +1779,45 @@ def build_parser() -> argparse.ArgumentParser:
     github_smoke.add_argument("artifact_id")
     github_smoke.add_argument("--execute", action="store_true")
     github_smoke.set_defaults(func=certification_cmd)
+    github = certification_sub.add_parser("github")
+    github_sub = github.add_subparsers(dest="github_command", required=True)
+    for name in {"status", "current-commit", "credential-create", "origin-create", "readiness"}:
+        cmd = github_sub.add_parser(name)
+        cmd.set_defaults(func=certification_cmd)
+    credential_set = github_sub.add_parser("credential-set")
+    credential_set.add_argument("--stdin", action="store_true")
+    credential_set.set_defaults(func=certification_cmd)
+    for name in {"credential-request-approval", "credential-approve"}:
+        cmd = github_sub.add_parser(name)
+        cmd.add_argument("secret_id")
+        cmd.set_defaults(func=certification_cmd)
+    origin_doctor = github_sub.add_parser("origin-doctor")
+    origin_doctor.add_argument("origin_id", nargs="?", default="github-actions-owned-publication")
+    origin_doctor.set_defaults(func=certification_cmd)
+    github_runs = github_sub.add_parser("runs")
+    github_runs.add_argument("--commit", default="")
+    github_runs.add_argument("--origin-id", default="github-actions-owned-publication")
+    github_runs.set_defaults(func=certification_cmd)
+    github_attempts = github_sub.add_parser("attempts")
+    github_attempts.add_argument("run_id")
+    github_attempts.set_defaults(func=certification_cmd)
+    github_artifacts = github_sub.add_parser("artifacts")
+    github_artifacts.add_argument("run_id")
+    github_artifacts.add_argument("--attempt", type=int, default=1)
+    github_artifacts.set_defaults(func=certification_cmd)
+    github_dry_run = github_sub.add_parser("import-dry-run")
+    github_dry_run.add_argument("run_id")
+    github_dry_run.add_argument("artifact_id")
+    github_dry_run.add_argument("--attempt", type=int, required=True)
+    github_dry_run.add_argument("--commit", required=True)
+    github_dry_run.set_defaults(func=certification_cmd)
+    github_execute = github_sub.add_parser("import-execute")
+    github_execute.add_argument("dry_run_id")
+    github_execute.set_defaults(func=certification_cmd)
+    for name in {"import-show", "import-reconcile", "review", "promote"}:
+        cmd = github_sub.add_parser(name)
+        cmd.add_argument("import_id")
+        cmd.set_defaults(func=certification_cmd)
 
     secrets = sub.add_parser("secrets")
     secrets_sub = secrets.add_subparsers(dest="secrets_command", required=True)

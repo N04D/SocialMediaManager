@@ -32,6 +32,14 @@ secret consumption uses purpose-bound call-scoped leases. Remote CI remains
 `artifact_not_imported` and real GitHub import remains
 `real_github_import_not_run` until an operator performs a concrete import.
 
+Phase 31 adds the GitHub CI evidence operator flow. Operators can onboard a
+managed GitHub credential, validate a registered origin, discover runs for an
+exact commit, select a concrete run attempt and artifact ID, dry-run metadata,
+execute a durable import, review evidence, and promote it only for that exact
+commit. The flow does not start GitHub Actions and keeps remote CI at
+`artifact_not_imported` until a concrete artifact is imported, verified,
+reviewed, and promoted.
+
 SocialMediaManager turns long-form content into channel-specific publication targets.
 
 ## Markdown Website Channel

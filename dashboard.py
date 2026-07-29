@@ -2939,6 +2939,12 @@ def ci_artifact_service():
     return CiArtifactImportService()
 
 
+def ci_operator_service():
+    from src.core.ci_artifacts.operator_flow import CiEvidenceOperatorService
+
+    return CiEvidenceOperatorService(import_service=ci_artifact_service())
+
+
 def owned_publication_operations_payload() -> dict[str, Any]:
     service = owned_publication_service()
     health = service.operations_health()
@@ -3188,6 +3194,87 @@ def render_certification_operations_page() -> str:
     """
 
 
+def render_github_ci_operator_page() -> str:
+    service = ci_operator_service()
+    status = service.status()
+    readiness = status["readiness"]
+    flows = status["flows"]
+    dry_runs = status["dry_runs"]
+    promotions = status["promotions"]
+    flow_rows = (
+        "".join(
+            "<tr>"
+            f"<td>{html.escape(item['id'])}</td><td>{html.escape(item['status'])}</td>"
+            f"<td>{html.escape(item.get('expected_commit_sha', '')[:12])}</td>"
+            f"<td>{html.escape(str(item.get('selected_run_id', '')))}</td>"
+            f"<td>{html.escape(str(item.get('selected_run_attempt', '')))}</td>"
+            f"<td>{html.escape(str(item.get('selected_artifact_id', '')))}</td>"
+            "</tr>"
+            for item in flows
+        )
+        or "<tr><td colspan='6'>No GitHub CI operator flow has been started.</td></tr>"
+    )
+    dry_rows = (
+        "".join(
+            "<tr>"
+            f"<td>{html.escape(item['id'])}</td><td>{html.escape(item['expected_result'])}</td>"
+            f"<td>{html.escape(item['run_id'])}</td><td>{html.escape(str(item['run_attempt']))}</td>"
+            f"<td>{html.escape(item['artifact_id'])}</td><td>{html.escape(item['provider_digest_status'])}</td>"
+            "</tr>"
+            for item in dry_runs
+        )
+        or "<tr><td colspan='6'>No dry-run report has been generated.</td></tr>"
+    )
+    promotion_rows = (
+        "".join(
+            "<tr>"
+            f"<td>{html.escape(item['id'])}</td><td>{html.escape(item['target_commit_sha'][:12])}</td>"
+            f"<td>{html.escape(item['trust_status'])}</td><td>{html.escape(item['freshness_status'])}</td>"
+            "</tr>"
+            for item in promotions
+        )
+        or "<tr><td colspan='4'>No CI evidence has been promoted for a commit.</td></tr>"
+    )
+    steps = [
+        ("Managed credential", "complete" if readiness.get("remote_ci_status") != "credential_required" else "blocked"),
+        ("CI-origin", "attention" if not flows else "complete"),
+        ("Current commit", "complete"),
+        ("Run discovery", "complete" if readiness["ci_run_found_for_current_commit"] else "not_started"),
+        ("Artifact selection", "complete" if readiness["ci_artifact_selected_for_current_commit"] else "not_started"),
+        ("Dry-run", "complete" if dry_runs else "not_started"),
+        ("Import", "complete" if readiness["ci_artifact_imported_for_current_commit"] else "not_started"),
+        ("Review", "complete" if readiness["ci_evidence_reviewed_for_current_commit"] else "not_started"),
+        ("Promotion", "complete" if readiness["ci_evidence_promoted_for_current_commit"] else "not_started"),
+    ]
+    step_rows = "".join(
+        f"<tr><td>{html.escape(label)}</td><td>{html.escape(state)}</td></tr>" for label, state in steps
+    )
+    return f"""
+    <section class="panel">
+      <h2>GitHub CI Evidence Operator Flow</h2>
+      <p>Remote CI status: {html.escape(str(readiness["remote_ci_status"]))}</p>
+      <p>Current commit: {html.escape(str(readiness.get("current_commit_sha", ""))[:12])}</p>
+      <p>Artifact name is display only; identity uses origin, run, attempt and artifact ID.</p>
+    </section>
+    <section class="panel">
+      <h2>Wizard Status</h2>
+      <table><thead><tr><th>Step</th><th>Status</th></tr></thead><tbody>{step_rows}</tbody></table>
+    </section>
+    <section class="panel">
+      <h2>Operator Flows</h2>
+      <table><thead><tr><th>Flow</th><th>Status</th><th>Commit</th><th>Run</th><th>Attempt</th><th>Artifact ID</th></tr></thead><tbody>{flow_rows}</tbody></table>
+    </section>
+    <section class="panel">
+      <h2>Dry-runs</h2>
+      <table><thead><tr><th>Dry-run</th><th>Expected result</th><th>Run</th><th>Attempt</th><th>Artifact ID</th><th>Digest</th></tr></thead><tbody>{dry_rows}</tbody></table>
+    </section>
+    <section class="panel">
+      <h2>Promotions</h2>
+      <table><thead><tr><th>Promotion</th><th>Commit</th><th>Trust</th><th>Freshness</th></tr></thead><tbody>{promotion_rows}</tbody></table>
+    </section>
+    """
+
+
 def render_owned_publication_operations_page() -> str:
     operations = owned_publication_operations_payload()
     readiness = operations["readiness"]
@@ -3247,6 +3334,7 @@ def render_owned_publication_operations_page() -> str:
         <section class="panel"><h3>Metrics</h3><table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody>{metrics_rows}</tbody></table></section>
         {render_certification_evidence_page()}
         {render_certification_operations_page()}
+        {render_github_ci_operator_page()}
       </section>
     """
 
@@ -4991,6 +5079,47 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/certification/policies":
             json_response(self, certification_evidence_service().policies())
             return
+        if parsed.path == "/api/certification/github/operator-flow":
+            json_response(self, ci_operator_service().status())
+            return
+        if parsed.path == "/api/certification/github/current-commit":
+            json_response(self, ci_operator_service().current_commit())
+            return
+        if parsed.path == "/api/certification/github/runs":
+            query = parse_qs(parsed.query)
+            json_response(
+                self,
+                ci_operator_service().discover_runs(
+                    query.get("origin_reference_id", ["github-actions-owned-publication"])[0],
+                    commit_sha=query.get("commit", [""])[0],
+                ),
+            )
+            return
+        if parsed.path.startswith("/api/certification/github/runs/"):
+            suffix = parsed.path.removeprefix("/api/certification/github/runs/")
+            parts = suffix.split("/")
+            query = parse_qs(parsed.query)
+            origin_id = query.get("origin_reference_id", ["github-actions-owned-publication"])[0]
+            run_id = parts[0]
+            if len(parts) > 1 and parts[1] == "attempts":
+                runs = [item for item in ci_artifact_service().list_runs(origin_id)["runs"] if item["run_id"] == run_id]
+                json_response(self, {"run_id": run_id, "attempts": runs})
+                return
+            if len(parts) > 1 and parts[1] == "artifacts":
+                attempt = int(query.get("attempt", ["1"])[0])
+                json_response(self, ci_artifact_service().artifacts(origin_id, run_id, attempt))
+                return
+        if parsed.path.startswith("/api/certification/github/imports/"):
+            suffix = parsed.path.removeprefix("/api/certification/github/imports/")
+            import_id = suffix.split("/")[0]
+            if suffix.endswith("/timeline"):
+                json_response(self, ci_operator_service().import_timeline(import_id))
+            else:
+                json_response(self, ci_artifact_service().import_show(import_id))
+            return
+        if parsed.path == "/api/certification/github/readiness":
+            json_response(self, ci_operator_service().readiness())
+            return
         if parsed.path == "/api/secrets":
             json_response(self, managed_secrets_service().status())
             return
@@ -5009,6 +5138,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
             else:
                 refs = [item for item in service.status()["references"] if item["id"] == secret_id]
                 json_response(self, {"secret": refs[0] if refs else None})
+            return
+        if parsed.path.startswith("/operations/certification/github"):
+            payload = render_page(
+                ROUTE_OPERATIONS,
+                self.config,
+                None,
+                [],
+                {"total": 0, "queued": 0, "processing": 0, "done": 0, "failed": 0, "records": []},
+                None,
+                None,
+                None,
+                [],
+                None,
+            ).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
             return
         if parsed.path == "/api/certification/signers":
             json_response(self, trusted_signer_service().status())
@@ -6264,6 +6412,128 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     status=HTTPStatus.BAD_REQUEST,
                 )
             return
+        if path.startswith("/api/certification/github/"):
+            service = ci_operator_service()
+            try:
+                if path == "/api/certification/github/operator-flow":
+                    json_response(
+                        self,
+                        service.create_flow(
+                            origin_reference_id=str(json_body.get("origin_reference_id", "")),
+                            expected_commit_sha=str(json_body.get("expected_commit_sha", "")),
+                            actor=str(json_body.get("actor", "release-operator")),
+                        ),
+                        status=HTTPStatus.CREATED,
+                    )
+                    return
+                if path == "/api/certification/github/credential":
+                    secret_service = managed_secrets_service()
+                    json_response(
+                        self,
+                        secret_service.create_reference(
+                            secret_type="github_read_only_token",
+                            display_name=str(json_body.get("display_name", "GitHub Actions read credential")),
+                            purpose_allowlist=("github_actions_read",),
+                            created_by=str(json_body.get("created_by", "secret-operator")),
+                        ),
+                        status=HTTPStatus.CREATED,
+                    )
+                    return
+                if path == "/api/certification/github/credential/request-approval":
+                    json_response(
+                        self, {"status": "approval_requested", "secret_reference_id": json_body.get("secret_id", "")}
+                    )
+                    return
+                if path == "/api/certification/github/credential/approve":
+                    secret_service = managed_secrets_service()
+                    json_response(
+                        self,
+                        secret_service.approve(
+                            str(json_body.get("secret_id", "")),
+                            action_type="approve_github_credential",
+                            requester_id=str(json_body.get("requester_id", "operator-a")),
+                            approver_id=str(json_body.get("approver_id", "operator-b")),
+                        ),
+                    )
+                    return
+                if path == "/api/certification/github/origin":
+                    json_response(self, ci_artifact_service().register_origin(json_body), status=HTTPStatus.CREATED)
+                    return
+                if path == "/api/certification/github/origin/doctor":
+                    json_response(self, service.origin_doctor(str(json_body.get("origin_reference_id", ""))))
+                    return
+                if path == "/api/certification/github/import/dry-run":
+                    flow_id = str(json_body.get("flow_id", ""))
+                    if not flow_id:
+                        flow = service.create_flow(
+                            origin_reference_id=str(json_body.get("origin_reference_id", "")),
+                            expected_commit_sha=str(json_body.get("expected_commit_sha", "")),
+                            actor=str(json_body.get("actor", "release-operator")),
+                        )["flow"]
+                        service.select_run(
+                            flow["id"],
+                            run_id=str(json_body.get("run_id", "")),
+                            run_attempt=int(json_body.get("run_attempt", 1)),
+                        )
+                        service.select_artifact(flow["id"], artifact_id=str(json_body.get("artifact_id", "")))
+                        flow_id = flow["id"]
+                    json_response(self, service.dry_run_import(flow_id))
+                    return
+                if path == "/api/certification/github/import/execute":
+                    json_response(
+                        self,
+                        service.execute_import(
+                            str(json_body.get("dry_run_id", "")),
+                            confirmed_by=str(json_body.get("confirmed_by", "release-operator")),
+                            signer_id=str(json_body.get("signer_id", "")),
+                        ),
+                    )
+                    return
+                if path.startswith("/api/certification/github/imports/"):
+                    suffix = path.removeprefix("/api/certification/github/imports/")
+                    parts = suffix.split("/")
+                    import_id = parts[0]
+                    action = parts[1] if len(parts) > 1 else ""
+                    if action == "cancel":
+                        request = ci_artifact_service().repository.get_request(import_id)
+                        json_response(
+                            self,
+                            {"import_request": ci_artifact_service().repository.update_request(request, "cancelled")},
+                        )
+                        return
+                    if action == "reconcile":
+                        flow_id = str(json_body.get("flow_id", ""))
+                        json_response(
+                            self,
+                            service.reconcile_flow(flow_id) if flow_id else ci_artifact_service().reconcile(import_id),
+                        )
+                        return
+                    if action == "review":
+                        json_response(
+                            self,
+                            service.review_import(
+                                import_id,
+                                reviewer_id=str(json_body.get("reviewer_id", "operator-b")),
+                                requester_id=str(json_body.get("requester_id", "operator-a")),
+                                decision=str(json_body.get("decision", "approved")),
+                            ),
+                        )
+                        return
+                    if action == "promote":
+                        json_response(
+                            self,
+                            service.promote_import(
+                                import_id, promoted_by=str(json_body.get("promoted_by", "release-operator"))
+                            ),
+                        )
+                        return
+            except Exception as exc:
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "github_ci_operator.error"), "message": str(exc)}},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
         if path.startswith("/api/certification/"):
             service = certification_evidence_service()
             try:

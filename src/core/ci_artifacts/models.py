@@ -8,6 +8,94 @@ from src.core.certification_evidence.models import CertificationSignatureEnvelop
 
 
 @dataclass(frozen=True)
+class CurrentCommitContext:
+    repository_identity: str
+    commit_sha: str
+    branch: str
+    worktree_state: str
+    user_owned_dirty: bool
+    generated_dirty: bool
+    other_dirty: bool
+    resolved_at: str
+
+
+@dataclass(frozen=True)
+class CiEvidenceOperatorFlow:
+    id: str
+    workspace_id: str
+    origin_reference_id: str
+    expected_commit_sha: str
+    selected_run_id: str
+    selected_run_attempt: int
+    selected_artifact_id: str
+    import_request_id: str
+    evidence_package_id: str
+    import_attestation_id: str
+    review_id: str
+    promotion_id: str
+    status: str
+    created_by: str
+    created_at: str
+    updated_at: str
+    version: int = 1
+
+
+@dataclass(frozen=True)
+class CiArtifactImportDryRunReport:
+    id: str
+    flow_id: str
+    origin_status: str
+    credential_status: str
+    credential_privilege_status: str
+    repository_status: str
+    workflow_status: str
+    run_status: str
+    run_attempt_status: str
+    commit_status: str
+    branch_status: str
+    event_status: str
+    artifact_status: str
+    artifact_expiry_status: str
+    artifact_size_status: str
+    provider_digest_status: str
+    trust_policy_status: str
+    signer_status: str
+    approval_policy_status: str
+    import_worker_status: str
+    storage_capacity_status: str
+    expected_result: str
+    safe_warnings: tuple[str, ...]
+    generated_at: str
+    checksum: str
+    origin_version: int
+    credential_reference_version: int
+    run_id: str
+    run_attempt: int
+    artifact_id: str
+    artifact_updated_at: str
+    expected_commit_sha: str
+    trust_policy_version: int
+    approval_policy_version: int
+
+
+@dataclass(frozen=True)
+class CiEvidencePromotion:
+    id: str
+    workspace_id: str
+    evidence_package_id: str
+    import_attestation_id: str
+    review_id: str
+    target_repository_identity: str
+    target_commit_sha: str
+    trust_status: str
+    freshness_status: str
+    promoted_by: str
+    promoted_at: str
+    revoked_at: str
+    checksum: str
+
+
+@dataclass(frozen=True)
 class CiWorkflowRun:
     source_id: str
     origin_reference_id: str
@@ -135,11 +223,15 @@ def import_request_id(origin_id: str, run_id: str, run_attempt: int, artifact_id
 
 __all__ = [
     "CiArtifactImportAttestation",
+    "CiArtifactImportDryRunReport",
     "CiArtifactImportRequest",
     "CiArtifactRetentionPolicy",
+    "CiEvidenceOperatorFlow",
+    "CiEvidencePromotion",
     "CiImportAuditEvent",
     "CiWorkflowArtifact",
     "CiWorkflowRun",
+    "CurrentCommitContext",
     "default_retention_policy",
     "import_request_id",
     "utc_now_iso",

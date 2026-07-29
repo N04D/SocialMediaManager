@@ -106,9 +106,17 @@ class CiArtifactImportService:
         return {"import_request": self.repository.save_request(request)}
 
     def dry_run_import(
-        self, origin_id: str, run_id: str, artifact_id: str, *, expected_commit_sha: str
+        self,
+        origin_id: str,
+        run_id: str,
+        artifact_id: str,
+        *,
+        expected_commit_sha: str,
+        run_attempt: int = 1,
     ) -> dict[str, Any]:
-        origin, run, artifact = self._validate_run_artifact(origin_id, run_id, 1, artifact_id, expected_commit_sha)
+        origin, run, artifact = self._validate_run_artifact(
+            origin_id, run_id, run_attempt, artifact_id, expected_commit_sha
+        )
         return {
             "dry_run": True,
             "downloads_artifact": False,

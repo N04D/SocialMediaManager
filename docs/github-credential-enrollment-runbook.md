@@ -8,3 +8,10 @@
 6. Perform dry-run import validation.
 
 The doctor performs read-only checks and does not probe write permissions.
+
+## Phase 31 Operator Flow
+
+Enroll the credential before creating or validating the CI origin. The origin
+doctor leases the secret only for read-only metadata calls and releases it
+before returning. A broader credential is reported as `credential_overprivileged`
+according to policy, but no write probe is executed.
