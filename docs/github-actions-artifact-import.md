@@ -10,6 +10,10 @@ Documentation basis: official GitHub REST API documentation retrieved on
 
 The adapter is first-party, built-in, in-process and read-only:
 
+Phase 30 binds GitHub credentials through managed secrets with purpose
+`github_actions_read`. The importer still performs only read-only operations
+and never dispatches, reruns, cancels, or deletes workflow artifacts.
+
 ```text
 provider_id = "ci.github_actions"
 provider_version = "0.1.0"

@@ -1,5 +1,13 @@
 # Owned Publication Operations Changelog
 
+## Phase 30
+
+- Added managed secret readiness fields for vault, signer secret, GitHub
+  credential, and real GitHub import status.
+- Kept remote CI status at `artifact_not_imported` until a concrete artifact is
+  imported.
+- Kept phase 20.2 reported separately as not production-ready.
+
 ## 0.1.0
 
 - Added SQLite-backed owned-publication repositories and migrations.

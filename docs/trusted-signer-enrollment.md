@@ -10,4 +10,8 @@ Enrollment uses an existing secret reference:
 6. The signer is stored as `pending_approval`.
 7. An independent operator approves and activates it.
 
+Phase 30 adds `plugin-sdk certification signer-generate` for the managed path.
+Existing key import must use hidden/stdin or a managed one-time reference;
+command-line private-key arguments are not accepted.
+
 No key file path or raw key argument is accepted by public API or CLI.

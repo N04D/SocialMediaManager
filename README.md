@@ -25,6 +25,13 @@ attempt, commit, artifact ID, provider digest, internal package checksums,
 attestation, freshness, trust policy and operator review are checked separately.
 Private keys remain secret references only.
 
+Phase 30 adds managed secrets and operator trust controls. Local host signer
+keys can be generated directly into an encrypted host-owned vault, GitHub
+read-only credentials can be registered as managed secret references, and all
+secret consumption uses purpose-bound call-scoped leases. Remote CI remains
+`artifact_not_imported` and real GitHub import remains
+`real_github_import_not_run` until an operator performs a concrete import.
+
 SocialMediaManager turns long-form content into channel-specific publication targets.
 
 ## Markdown Website Channel

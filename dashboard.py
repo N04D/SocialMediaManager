@@ -2917,10 +2917,20 @@ def certification_evidence_service():
     return CertificationEvidenceService()
 
 
+def managed_secrets_service():
+    from src.core.managed_secrets.service import configured_managed_secret_facade
+
+    return configured_managed_secret_facade()
+
+
 def trusted_signer_service():
+    from src.core.managed_secrets.service import PurposeBoundSecretReader
     from src.core.trusted_signing.service import TrustedSignerService
 
-    return TrustedSignerService()
+    facade = managed_secrets_service()
+    return TrustedSignerService(
+        secret_reader=PurposeBoundSecretReader(facade, purpose="certification_signing", consumer="trusted_signer")
+    )
 
 
 def ci_artifact_service():
@@ -2940,6 +2950,7 @@ def owned_publication_operations_payload() -> dict[str, Any]:
     certification = certification_evidence_service()
     ci_artifacts = ci_artifact_service()
     trusted_signing = trusted_signer_service()
+    managed_secrets = managed_secrets_service()
     return {
         "storage": health["storage"],
         "recovery": recovery,
@@ -2951,6 +2962,7 @@ def owned_publication_operations_payload() -> dict[str, Any]:
         "certification_evidence": certification.list_evidence(),
         "certification_readiness": certification.readiness(),
         "trusted_signing": trusted_signing.status(),
+        "managed_secrets": managed_secrets.status(),
         "ci_artifacts": ci_artifacts.imports(),
         "ci_origins": ci_artifacts.origins(),
         "backups": service.backup_list(),
@@ -3111,8 +3123,19 @@ def render_certification_evidence_page() -> str:
 
 def render_certification_operations_page() -> str:
     signers = trusted_signer_service().status()["signers"]
+    secrets = managed_secrets_service().status()
     origins = ci_artifact_service().origins()["origins"]
     imports = ci_artifact_service().imports()["imports"]
+    secret_rows = (
+        "".join(
+            f"<tr><td>{html.escape(item['id'])}</td><td>{html.escape(item['secret_type'])}</td>"
+            f"<td>{html.escape(item['backend_id'])}</td><td>{html.escape(item['status'])}</td>"
+            f"<td>{html.escape(', '.join(item.get('purpose_allowlist', ())))}</td>"
+            f"<td>{html.escape(item.get('safe_fingerprint', '')[:16])}</td></tr>"
+            for item in secrets["references"]
+        )
+        or "<tr><td colspan='6'>No managed secrets configured.</td></tr>"
+    )
     signer_rows = (
         "".join(
             f"<tr><td>{html.escape(item['id'])}</td><td>{html.escape(item['algorithm_identifier'])}</td>"
@@ -3144,6 +3167,11 @@ def render_certification_operations_page() -> str:
     <section class="panel">
       <h2>Certification Operator Control</h2>
       <p>GitHub run success is not readiness until a concrete artifact is imported, verified, and reviewed.</p>
+      <p>Managed secrets: {html.escape(str(secrets["managed_secrets_status"]))} · Vault: {html.escape(str(secrets["vault_health"].get("ready", False)))}</p>
+    </section>
+    <section class="panel">
+      <h2>Managed Secrets</h2>
+      <table><thead><tr><th>Reference</th><th>Type</th><th>Backend</th><th>Status</th><th>Purposes</th><th>Fingerprint</th></tr></thead><tbody>{secret_rows}</tbody></table>
     </section>
     <section class="panel">
       <h2>Signers</h2>
@@ -4963,6 +4991,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/certification/policies":
             json_response(self, certification_evidence_service().policies())
             return
+        if parsed.path == "/api/secrets":
+            json_response(self, managed_secrets_service().status())
+            return
+        if parsed.path == "/api/secrets/vault/health":
+            json_response(self, managed_secrets_service().vault_health())
+            return
+        if parsed.path == "/api/secrets/audit":
+            json_response(self, {"events": managed_secrets_service().repository.audit_events()})
+            return
+        if parsed.path.startswith("/api/secrets/"):
+            suffix = parsed.path.removeprefix("/api/secrets/")
+            secret_id = suffix.split("/")[0]
+            service = managed_secrets_service()
+            if suffix.endswith("/health"):
+                json_response(self, service.health(secret_id))
+            else:
+                refs = [item for item in service.status()["references"] if item["id"] == secret_id]
+                json_response(self, {"secret": refs[0] if refs else None})
+            return
         if parsed.path == "/api/certification/signers":
             json_response(self, trusted_signer_service().status())
             return
@@ -6277,6 +6324,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 if path == "/api/certification/ci-origins":
                     json_response(self, ci_artifact_service().register_origin(json_body), status=HTTPStatus.CREATED)
                     return
+                if path.startswith("/api/certification/signers/") and path.endswith("/activate-with-secret"):
+                    signer_id = (
+                        path.removeprefix("/api/certification/signers/")
+                        .removesuffix("/activate-with-secret")
+                        .strip("/")
+                    )
+                    json_response(self, trusted_signer_service().activate(signer_id))
+                    return
+                if path.startswith("/api/certification/ci-origins/") and path.endswith("/bind-credential"):
+                    suffix = path.removeprefix("/api/certification/ci-origins/")
+                    origin_id = suffix.removesuffix("/bind-credential").strip("/")
+                    ci_service = ci_artifact_service()
+                    origin = ci_service.repository.get_origin(origin_id)
+                    origin["credential_secret_reference"] = str(json_body.get("secret_reference_id", ""))
+                    json_response(self, ci_service.register_origin(origin))
+                    return
                 if path == "/api/certification/ci-imports":
                     json_response(
                         self,
@@ -6370,6 +6433,72 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 json_response(
                     self,
                     {"error": {"code": getattr(exc, "code", "certification.error"), "message": str(exc)}},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+        if path.startswith("/api/secrets"):
+            secret_service = managed_secrets_service()
+            try:
+                if path == "/api/secrets":
+                    json_response(
+                        self,
+                        secret_service.create_reference(
+                            secret_type=str(json_body.get("secret_type", "")),
+                            display_name=str(json_body.get("display_name", "")),
+                            purpose_allowlist=tuple(json_body.get("purpose_allowlist", ())),
+                            created_by=str(json_body.get("created_by", "operator")),
+                        ),
+                        status=HTTPStatus.CREATED,
+                    )
+                    return
+                suffix = path.removeprefix("/api/secrets/").strip("/")
+                parts = suffix.split("/")
+                secret_id = parts[0]
+                action = parts[1] if len(parts) > 1 else ""
+                if action == "set-value":
+                    value = str(json_body.get("value", "")).encode("utf-8")
+                    json_response(self, secret_service.set_value(secret_id, value))
+                    return
+                if action == "generate":
+                    json_response(self, secret_service.generate_ed25519(secret_id))
+                    return
+                if action == "validate":
+                    json_response(self, secret_service.validate(secret_id))
+                    return
+                if action == "request-approval":
+                    json_response(self, {"status": "approval_request_recorded", "secret_reference_id": secret_id})
+                    return
+                if action == "approve":
+                    json_response(
+                        self,
+                        secret_service.approve(
+                            secret_id,
+                            action_type=str(json_body.get("action_type", "approve_github_credential")),
+                            requester_id=str(json_body.get("requester_id", "operator-a")),
+                            approver_id=str(json_body.get("approver_id", "operator-b")),
+                        ),
+                    )
+                    return
+                if action == "activate":
+                    json_response(
+                        self,
+                        secret_service.activate(
+                            secret_id,
+                            action_type=str(json_body.get("action_type", "approve_github_credential")),
+                        ),
+                    )
+                    return
+                if action == "rotate":
+                    value = str(json_body.get("value", "")).encode("utf-8")
+                    json_response(self, secret_service.rotate(secret_id, value))
+                    return
+                if action == "revoke":
+                    json_response(self, secret_service.revoke(secret_id, reason=str(json_body.get("reason", ""))))
+                    return
+            except Exception as exc:
+                json_response(
+                    self,
+                    {"error": {"code": getattr(exc, "code", "secret.error"), "message": str(exc)}},
                     status=HTTPStatus.BAD_REQUEST,
                 )
                 return

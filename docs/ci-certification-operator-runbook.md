@@ -10,6 +10,11 @@
 7. Let the CI import worker download and verify the package.
 8. Review the attestation and package metadata.
 9. Approve or reject.
+
+Before a real import, enroll a managed `github_read_only_token` secret and bind
+its reference to the CI origin. Workflow success is not enough; readiness
+requires actual artifact import, package verification, trust policy, freshness,
+and review.
 10. Confirm readiness uses `artifact_imported_verified`, not workflow success
     alone.
 

@@ -10,6 +10,11 @@ support bundles, CLI output, API responses, or logs. The persistent signer
 record stores only a `private_key_secret_reference`, public key, fingerprint,
 status, approval metadata, allowed evidence types, and allowed source types.
 
+Phase 30 wires signers to managed secrets. The preferred local path is
+host-side Ed25519 generation directly into `secret.local_encrypted`; private
+key material is not exported and is read only through a `certification_signing`
+lease.
+
 Host import attestations are local statements that this host imported and
 verified a concrete CI artifact. They are not Sigstore, SLSA, or universal
 supply-chain attestations.

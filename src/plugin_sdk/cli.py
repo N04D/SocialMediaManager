@@ -1068,6 +1068,31 @@ def certification_cmd(args: argparse.Namespace) -> int:
         payload = service.freshness(args.evidence_id)
     elif command == "support-bundle":
         payload = service.support_bundle()
+    elif command == "signer-generate":
+        secrets_module = import_module("src.core.managed_secrets.service")
+        signer_module = import_module("src.core.trusted_signing.service")
+        facade = secrets_module.configured_managed_secret_facade()
+        created = facade.create_reference(
+            secret_type="ed25519_private_key",
+            display_name=getattr(args, "display_name", "Local certification signer"),
+            purpose_allowlist=("certification_signing",),
+            created_by="local-secret-operator",
+        )
+        reference_id = created["secret"]["id"]
+        generated = facade.generate_ed25519(reference_id, actor="local-secret-operator")
+        validated = facade.validate(reference_id)
+        signer_service = signer_module.TrustedSignerService(
+            secret_reader=secrets_module.PurposeBoundSecretReader(
+                facade, purpose="certification_signing", consumer="trusted_signer"
+            )
+        )
+        enrolled = signer_service.enroll(
+            signer_id="signer.local.managed",
+            display_name=str(getattr(args, "display_name", "Local certification signer")),
+            private_key_secret_reference=reference_id,
+            operator_id="local-secret-operator",
+        )
+        payload = {"secret": generated["secret"], "validation": validated, "signer": enrolled}
     elif command == "signers":
         signer_module = import_module("src.core.trusted_signing.service")
         payload = signer_module.TrustedSignerService().status()
@@ -1135,6 +1160,90 @@ def certification_cmd(args: argparse.Namespace) -> int:
             if command == "ci-import-show"
             else ci_service.reconcile(args.import_id)
         )
+    elif command == "ci-origin-bind-credential":
+        ci_module = import_module("src.core.ci_artifacts.service")
+        ci_service = ci_module.CiArtifactImportService()
+        origin = ci_service.repository.get_origin(args.origin_id)
+        if not args.secret_ref.startswith("secretref:"):
+            payload = {"status": "rejected", "safe_error_code": "secret_reference_required"}
+        else:
+            origin["credential_secret_reference"] = args.secret_ref
+            payload = ci_service.register_origin(origin)
+    elif command == "github-import-smoke":
+        if not getattr(args, "execute", False):
+            payload = {
+                "status": "dry_run",
+                "real_github_import_status": "real_github_import_not_run",
+                "remote_ci_status": "artifact_not_imported",
+                "execute_required": True,
+            }
+        else:
+            payload = {
+                "status": "github_ci_artifact_smoke_not_configured",
+                "real_github_import_status": "real_github_import_not_run",
+                "remote_ci_status": "artifact_not_imported",
+                "reason": "managed read-only GitHub credential and concrete artifact are required",
+            }
+    else:
+        payload = {"status": "unknown"}
+    print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+    return 0
+
+
+def secrets_cmd(args: argparse.Namespace) -> int:
+    from importlib import import_module
+
+    secrets_module = import_module("src.core.managed_secrets.service")
+    facade = secrets_module.configured_managed_secret_facade()
+    command = args.secrets_command
+    if command == "list":
+        payload = facade.status()
+    elif command == "show":
+        refs = [item for item in facade.status()["references"] if item["id"] == args.secret_id]
+        payload = {"secret": refs[0] if refs else None}
+    elif command == "create":
+        payload = facade.create_reference(
+            secret_type=args.secret_type,
+            display_name=args.display_name,
+            purpose_allowlist=tuple(args.purpose),
+            created_by="local-secret-operator",
+        )
+    elif command == "set":
+        if not getattr(args, "stdin", False):
+            payload = {"status": "stdin_required", "plaintext_cli_argument_supported": False}
+        else:
+            import sys
+
+            value = sys.stdin.buffer.read()
+            payload = facade.set_value(args.secret_id, value, actor="local-secret-operator")
+    elif command == "generate-ed25519":
+        payload = facade.generate_ed25519(args.secret_id, actor="local-secret-operator")
+    elif command == "validate":
+        payload = facade.validate(args.secret_id)
+    elif command == "request-approval":
+        payload = {"status": "approval_request_recorded", "secret_id": args.secret_id}
+    elif command == "approve":
+        payload = facade.approve(
+            args.secret_id,
+            action_type=getattr(args, "action_type", "approve_github_credential"),
+            requester_id="local-secret-operator",
+            approver_id="local-security-approver",
+        )
+    elif command == "activate":
+        payload = facade.activate(args.secret_id, action_type=getattr(args, "action_type", "approve_github_credential"))
+    elif command == "rotate":
+        if not getattr(args, "stdin", False):
+            payload = {"status": "stdin_required", "plaintext_cli_argument_supported": False}
+        else:
+            import sys
+
+            payload = facade.rotate(args.secret_id, sys.stdin.buffer.read(), actor="local-secret-operator")
+    elif command == "revoke":
+        payload = facade.revoke(args.secret_id, reason=getattr(args, "reason", "operator_revoked"))
+    elif command == "health":
+        payload = facade.health(args.secret_id)
+    elif command == "vault-health":
+        payload = facade.vault_health()
     else:
         payload = {"status": "unknown"}
     print(json.dumps(payload, indent=2, sort_keys=True, default=str))
@@ -1512,6 +1621,9 @@ def build_parser() -> argparse.ArgumentParser:
     generate = certification_sub.add_parser("generate-deterministic")
     generate.add_argument("--signed", action="store_true")
     generate.set_defaults(func=certification_cmd)
+    signer_generate = certification_sub.add_parser("signer-generate")
+    signer_generate.add_argument("--display-name", default="Local certification signer")
+    signer_generate.set_defaults(func=certification_cmd)
     for name in {"evidence-show", "export", "verify", "freshness"}:
         cmd = certification_sub.add_parser(name)
         cmd.add_argument("evidence_id")
@@ -1575,6 +1687,48 @@ def build_parser() -> argparse.ArgumentParser:
         cmd = certification_sub.add_parser(name)
         cmd.add_argument("import_id")
         cmd.set_defaults(func=certification_cmd)
+    bind_credential = certification_sub.add_parser("ci-origin-bind-credential")
+    bind_credential.add_argument("origin_id")
+    bind_credential.add_argument("secret_ref")
+    bind_credential.set_defaults(func=certification_cmd)
+    github_smoke = certification_sub.add_parser("github-import-smoke")
+    github_smoke.add_argument("origin_id")
+    github_smoke.add_argument("run_id")
+    github_smoke.add_argument("artifact_id")
+    github_smoke.add_argument("--execute", action="store_true")
+    github_smoke.set_defaults(func=certification_cmd)
+
+    secrets = sub.add_parser("secrets")
+    secrets_sub = secrets.add_subparsers(dest="secrets_command", required=True)
+    for name in {"list", "vault-health"}:
+        cmd = secrets_sub.add_parser(name)
+        cmd.set_defaults(func=secrets_cmd)
+    secret_show = secrets_sub.add_parser("show")
+    secret_show.add_argument("secret_id")
+    secret_show.set_defaults(func=secrets_cmd)
+    secret_create = secrets_sub.add_parser("create")
+    secret_create.add_argument("--secret-type", required=True)
+    secret_create.add_argument("--display-name", required=True)
+    secret_create.add_argument("--purpose", action="append", required=True)
+    secret_create.set_defaults(func=secrets_cmd)
+    for name in {"set", "rotate"}:
+        cmd = secrets_sub.add_parser(name)
+        cmd.add_argument("secret_id")
+        cmd.add_argument("--stdin", action="store_true")
+        cmd.set_defaults(func=secrets_cmd)
+    for name in {"generate-ed25519", "validate", "request-approval", "health"}:
+        cmd = secrets_sub.add_parser(name)
+        cmd.add_argument("secret_id")
+        cmd.set_defaults(func=secrets_cmd)
+    for name in {"approve", "activate"}:
+        cmd = secrets_sub.add_parser(name)
+        cmd.add_argument("secret_id")
+        cmd.add_argument("--action-type", default="approve_github_credential")
+        cmd.set_defaults(func=secrets_cmd)
+    secret_revoke = secrets_sub.add_parser("revoke")
+    secret_revoke.add_argument("secret_id")
+    secret_revoke.add_argument("--reason", default="operator_revoked")
+    secret_revoke.set_defaults(func=secrets_cmd)
 
     analytics = sub.add_parser("website-analytics")
     analytics_sub = analytics.add_subparsers(dest="website_analytics_command", required=True)

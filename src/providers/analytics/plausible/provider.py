@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Protocol
+
 from src.core.website_analytics.contracts import PLAUSIBLE_ANALYTICS_ADAPTER_VERSION
 from src.core.website_analytics.errors import WebsiteAnalyticsProviderError
 from src.core.website_analytics.models import (
@@ -18,6 +20,10 @@ from src.core.website_analytics.sync import WebsiteAnalyticsQueryPlanner
 
 from .parser import parse_plausible_response
 from .queries import PLAUSIBLE_ENDPOINT, plausible_query_body
+
+
+class SecretReader(Protocol):
+    def get_secret(self, secret_reference: str) -> str: ...
 
 
 def plausible_origin_reference() -> AnalyticsProviderOriginReference:
@@ -41,10 +47,14 @@ class PlausibleWebsiteAnalyticsProvider:
     data_access = "read_only"
 
     def __init__(
-        self, http_facade: SafeHttpFacade | None = None, planner: WebsiteAnalyticsQueryPlanner | None = None
+        self,
+        http_facade: SafeHttpFacade | None = None,
+        planner: WebsiteAnalyticsQueryPlanner | None = None,
+        secret_reader: SecretReader | None = None,
     ) -> None:
         self.http = http_facade or InMemorySafeHttpFacade()
         self.planner = planner or WebsiteAnalyticsQueryPlanner()
+        self.secret_reader = secret_reader
 
     def capabilities(self) -> tuple[ProviderCapability, ...]:
         supported = {
@@ -158,6 +168,8 @@ class PlausibleWebsiteAnalyticsProvider:
         }
 
     def _query(self, query: WebsiteAnalyticsQuery, account: WebsiteAnalyticsAccount):
+        if self.secret_reader is not None:
+            self.secret_reader.get_secret(account.secret_reference_id)
         return self.http.send(
             SafeHttpRequest(
                 method="POST",

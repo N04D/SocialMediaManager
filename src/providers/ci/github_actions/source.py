@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+from typing import Protocol
+
 from src.core.ci_artifacts.contracts import GITHUB_ACTIONS_ARTIFACT_SOURCE_VERSION
 from src.core.ci_artifacts.errors import CiArtifactError
 from src.core.ci_artifacts.models import CiWorkflowArtifact, CiWorkflowRun
 from src.core.ci_artifacts.sources import CiArtifactSource
+
+
+class SecretReader(Protocol):
+    def get_secret(self, secret_reference: str) -> str: ...
 
 
 class GitHubActionsArtifactSource(CiArtifactSource):
@@ -21,11 +27,13 @@ class GitHubActionsArtifactSource(CiArtifactSource):
         runs: dict[tuple[str, str, int], CiWorkflowRun],
         artifacts: dict[tuple[str, str, int], list[CiWorkflowArtifact]],
         archives: dict[str, bytes],
+        secret_reader: SecretReader | None = None,
     ) -> None:
         self.origins = origins
         self.runs = runs
         self._artifacts = artifacts
         self.archives = archives
+        self.secret_reader = secret_reader
         self.write_operations: list[str] = []
 
     def validate_origin(self, origin_reference_id: str) -> dict:
@@ -64,16 +72,23 @@ class GitHubActionsArtifactSource(CiArtifactSource):
         return list(self._artifacts.get((origin_reference_id, run_id, run_attempt), ()))
 
     def download_artifact(self, origin_reference_id: str, artifact_id: str) -> bytes:
-        self._origin(origin_reference_id)
+        origin = self._origin(origin_reference_id)
+        self._read_credential(origin)
         if artifact_id not in self.archives:
             raise CiArtifactError("ci.artifact_archive_missing", "Artifact archive is unavailable.")
         return self.archives[artifact_id]
 
     def get_health(self, origin_reference_id: str) -> dict:
-        self._origin(origin_reference_id)
+        origin = self._origin(origin_reference_id)
+        authentication = "PASS"
+        if self.secret_reader is not None:
+            try:
+                self._read_credential(origin)
+            except Exception:
+                authentication = "FAIL"
         return {
             "source_id": self.source_id,
-            "authentication": "PASS",
+            "authentication": authentication,
             "repository_access": "PASS",
             "artifact_listing_access": "PASS",
             "rate_limit": "ok",
@@ -88,6 +103,14 @@ class GitHubActionsArtifactSource(CiArtifactSource):
         if not origin.get("enabled", True):
             raise CiArtifactError("ci.origin_disabled", "GitHub Actions origin is disabled.")
         return origin
+
+    def _read_credential(self, origin: dict) -> None:
+        if self.secret_reader is None:
+            return
+        reference = str(origin.get("credential_secret_reference", ""))
+        if not reference.startswith("secretref:"):
+            raise CiArtifactError("ci.origin_secret", "CI origin requires a managed credential secret reference.")
+        self.secret_reader.get_secret(reference)
 
 
 __all__ = ["GitHubActionsArtifactSource"]

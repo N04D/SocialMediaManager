@@ -223,6 +223,38 @@ jobs:
           path: trusted-signer-ci-artifact-import.json
           if-no-files-found: error
 
+  managed-secrets-operator-trust-controls:
+    name: Managed Secrets and Operator Trust Controls
+    runs-on: ubuntu-24.04
+    needs: trusted-signer-ci-artifact-import
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run managed secret checks
+        run: |
+          python -m unittest tests.test_managed_secrets_framework_phase30 -v
+          python -m unittest tests.test_local_encrypted_secret_backend_phase30 -v
+          python -m unittest tests.test_managed_secret_approvals_phase30 -v
+          python -m unittest tests.test_managed_secret_signer_integration_phase30 -v
+          python -m unittest tests.test_managed_secret_github_integration_phase30 -v
+          python -m unittest tests.test_managed_secret_recovery_phase30 -v
+          python -m unittest tests.test_managed_secret_security_phase30 -v
+          python -m src.plugin_sdk.cli secrets list > managed-secrets-operator-trust-controls.json
+      - name: Upload safe managed secrets report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-secrets-operator-trust-controls-report
+          path: managed-secrets-operator-trust-controls.json
+          if-no-files-found: error
+
   staging-analytics-provider-smoke:
     name: Staging Analytics Provider Smoke
     runs-on: ubuntu-24.04

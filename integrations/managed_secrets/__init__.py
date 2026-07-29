@@ -1,0 +1,1 @@
+"""Managed secret integration fixtures."""

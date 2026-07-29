@@ -5,10 +5,12 @@ from __future__ import annotations
 from src.core.certification_evidence.models import stable_checksum, utc_now_iso
 from src.core.ci_artifacts.models import CiWorkflowArtifact, CiWorkflowRun
 from src.providers.ci.github_actions.origins import default_github_origin_payload
-from src.providers.ci.github_actions.source import GitHubActionsArtifactSource
+from src.providers.ci.github_actions.source import GitHubActionsArtifactSource, SecretReader
 
 
-def fake_github_source(package_bytes: bytes, *, commit_sha: str) -> GitHubActionsArtifactSource:
+def fake_github_source(
+    package_bytes: bytes, *, commit_sha: str, secret_reader: SecretReader | None = None
+) -> GitHubActionsArtifactSource:
     origin = default_github_origin_payload()
     origin_id = origin["id"]
     run = CiWorkflowRun(
@@ -49,6 +51,7 @@ def fake_github_source(package_bytes: bytes, *, commit_sha: str) -> GitHubAction
         runs={(origin_id, run.run_id, 1): run},
         artifacts={(origin_id, run.run_id, 1): [artifact]},
         archives={artifact.artifact_id: package_bytes},
+        secret_reader=secret_reader,
     )
 
 

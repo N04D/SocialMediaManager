@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -32,20 +33,50 @@ class InMemorySecretReferenceService:
         return reference_id in self.secrets and not self.secrets[reference_id].startswith("raw:")
 
 
+class ManagedSecretReferenceService:
+    def __init__(self, facade) -> None:  # noqa: ANN001
+        self.facade = facade
+
+    def exists(self, reference_id: str) -> bool:
+        if not reference_id.startswith("secretref:"):
+            return False
+        try:
+            reference = self.facade.repository.get_reference(reference_id)
+        except KeyError:
+            return False
+        return (
+            reference.get("secret_type") in {"analytics_api_token", "generic_api_token"}
+            and "plausible_stats_read" in reference.get("purpose_allowlist", ())
+            and reference.get("status") in {"pending_approval", "active"}
+        )
+
+
 class WebsiteAnalyticsService:
     def __init__(
         self,
         *,
         database_path: Path | None = None,
         http_facade: InMemorySafeHttpFacade | None = None,
-        secret_service: InMemorySecretReferenceService | None = None,
+        secret_service: InMemorySecretReferenceService | ManagedSecretReferenceService | None = None,
     ) -> None:
         self.repository = DatabaseWebsiteAnalyticsRepository(database_path)
+        managed_facade = None
+        if secret_service is None and os.environ.get("SMM_MANAGED_SECRET_BACKEND"):
+            from src.core.managed_secrets.service import PurposeBoundSecretReader, configured_managed_secret_facade
+
+            managed_facade = configured_managed_secret_facade(database_path=database_path)
+            secret_service = ManagedSecretReferenceService(managed_facade)
+            plausible_secret_reader = PurposeBoundSecretReader(
+                managed_facade, purpose="plausible_stats_read", consumer="plausible_stats_api"
+            )
+        else:
+            plausible_secret_reader = None
         self.secret_service = secret_service or InMemorySecretReferenceService()
         self.origins = {plausible_origin_reference().id: plausible_origin_reference()}
         self.providers = {
             "analytics.plausible": PlausibleWebsiteAnalyticsProvider(
-                http_facade=http_facade or InMemorySafeHttpFacade(plausible_fixture_responses())
+                http_facade=http_facade or InMemorySafeHttpFacade(plausible_fixture_responses()),
+                secret_reader=plausible_secret_reader,
             )
         }
         self.attribution = WebsiteAnalyticsAttributionService()

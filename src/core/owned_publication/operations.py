@@ -207,6 +207,20 @@ class OwnedPublicationProductionReadinessReport:
     ci_import_attestation_signed: bool
     ci_evidence_reviewed: bool
     ci_certification_ready: bool
+    managed_secret_backend_configured: bool
+    managed_secret_vault_healthy: bool
+    managed_secret_master_key_healthy: bool
+    managed_secret_permissions_valid: bool
+    required_secrets_active: bool
+    required_secret_approvals_satisfied: bool
+    signer_secret_active: bool
+    github_credential_active: bool
+    managed_secrets_status: str
+    vault_health: str
+    host_signer_secret_status: str
+    host_signer_activation_status: str
+    github_credential_status: str
+    real_github_import_status: str
     sandbox_phase20_2_status: dict[str, Any]
     owned_publication_operations_ready: bool
     external_plugin_sandbox_ready: bool
@@ -672,6 +686,7 @@ class ProductionReadinessService:
         certification = _certification_evidence_health(self.repository.database_path)
         trusted_signing = _trusted_signing_health(self.repository.database_path)
         ci_artifacts = _ci_artifact_health(self.repository.database_path)
+        managed_secrets = _managed_secret_health(self.repository.database_path)
         browser_passed = bool(browser_evidence and browser_evidence.passed and browser_evidence.required_skips == 0)
         worker_passed = bool(worker_evidence and worker_evidence.passed and worker_evidence.required_skips == 0)
         skips = (browser_evidence.required_skips if browser_evidence else 1) + (
@@ -757,6 +772,20 @@ class ProductionReadinessService:
             ci_import_attestation_signed=bool(ci_artifacts["ci_import_attestation_signed"]),
             ci_evidence_reviewed=bool(ci_artifacts["ci_evidence_reviewed"]),
             ci_certification_ready=bool(ci_artifacts["ci_certification_ready"]),
+            managed_secret_backend_configured=bool(managed_secrets["managed_secret_backend_configured"]),
+            managed_secret_vault_healthy=bool(managed_secrets["managed_secret_vault_healthy"]),
+            managed_secret_master_key_healthy=bool(managed_secrets["managed_secret_master_key_healthy"]),
+            managed_secret_permissions_valid=bool(managed_secrets["managed_secret_permissions_valid"]),
+            required_secrets_active=bool(managed_secrets["required_secrets_active"]),
+            required_secret_approvals_satisfied=bool(managed_secrets["required_secret_approvals_satisfied"]),
+            signer_secret_active=bool(managed_secrets["signer_secret_active"]),
+            github_credential_active=bool(managed_secrets["github_credential_active"]),
+            managed_secrets_status=str(managed_secrets["managed_secrets_status"]),
+            vault_health=str(managed_secrets["vault_health"]),
+            host_signer_secret_status=str(managed_secrets["host_signer_secret_status"]),
+            host_signer_activation_status=str(managed_secrets["host_signer_activation_status"]),
+            github_credential_status=str(managed_secrets["github_credential_status"]),
+            real_github_import_status=str(managed_secrets["real_github_import_status"]),
             sandbox_phase20_2_status={"production_ready": external_sandbox_ready, "status": sandbox.controller_status},
             owned_publication_operations_ready=ops_ready,
             external_plugin_sandbox_ready=external_sandbox_ready,
@@ -776,6 +805,7 @@ def operations_metrics(repository: DatabaseOwnedPublicationRepository) -> dict[s
     certification = _certification_evidence_health(repository.database_path)
     trusted_signing = _trusted_signing_health(repository.database_path)
     ci_artifacts = _ci_artifact_health(repository.database_path)
+    managed_secrets = _managed_secret_health(repository.database_path)
     return {
         "owned_publication_worker_up": 1.0,
         "owned_publication_worker_last_heartbeat_age_seconds": 0.0,
@@ -804,6 +834,8 @@ def operations_metrics(repository: DatabaseOwnedPublicationRepository) -> dict[s
         "certification_evidence_packages": float(certification["evidence_count"]),
         "certification_evidence_stale": float(certification["stale_count"]),
         "trusted_signers_active": float(trusted_signing["active_signers"]),
+        "managed_secret_active_references": float(managed_secrets["active_secret_count"]),
+        "managed_secret_degraded_references": float(managed_secrets["degraded_secret_count"]),
         "ci_artifact_imports_pending": float(ci_artifacts["pending_imports"]),
         "ci_artifact_imports_verified": float(ci_artifacts["verified_imports"]),
     }
@@ -944,6 +976,70 @@ def _ci_artifact_health(database_path: Path) -> dict[str, Any]:
             "ci_certification_ready": False,
             "pending_imports": 0,
             "verified_imports": 0,
+        }
+
+
+def _managed_secret_health(database_path: Path) -> dict[str, Any]:
+    try:
+        from src.core.managed_secrets.service import configured_managed_secret_facade
+
+        facade = configured_managed_secret_facade(database_path=database_path)
+        status = facade.status()
+        vault = status["vault_health"]
+        references = status["references"]
+        active = [item for item in references if item.get("status") == "active"]
+        signer_active = any(
+            item.get("secret_type") == "ed25519_private_key"
+            and item.get("status") == "active"
+            and "certification_signing" in item.get("purpose_allowlist", ())
+            for item in references
+        )
+        github_active = any(
+            item.get("secret_type") == "github_read_only_token"
+            and item.get("status") == "active"
+            and "github_actions_read" in item.get("purpose_allowlist", ())
+            for item in references
+        )
+        configured = status["managed_secrets_status"] == "configured"
+        vault_ready = bool(vault.get("ready"))
+        return {
+            "managed_secret_backend_configured": configured,
+            "managed_secret_vault_healthy": vault_ready,
+            "managed_secret_master_key_healthy": bool(vault.get("master_key_fingerprint")),
+            "managed_secret_permissions_valid": vault.get("permissions_status") in {"PASS", "not_applicable"},
+            "required_secrets_active": bool(active) if references else False,
+            "required_secret_approvals_satisfied": all(bool(item.get("approved_by")) for item in active),
+            "signer_secret_active": signer_active,
+            "github_credential_active": github_active,
+            "managed_secrets_status": str(status["managed_secrets_status"]),
+            "vault_health": "healthy" if vault_ready else "not_configured",
+            "host_signer_secret_status": "active" if signer_active else "not_configured",
+            "host_signer_activation_status": "active" if signer_active else "not_configured",
+            "github_credential_status": "active" if github_active else "not_configured",
+            "real_github_import_status": "real_github_import_not_run",
+            "active_secret_count": len(active),
+            "degraded_secret_count": len(
+                [item for item in references if item.get("status") in {"degraded", "invalid"}]
+            ),
+        }
+    except Exception:
+        return {
+            "managed_secret_backend_configured": False,
+            "managed_secret_vault_healthy": False,
+            "managed_secret_master_key_healthy": False,
+            "managed_secret_permissions_valid": False,
+            "required_secrets_active": False,
+            "required_secret_approvals_satisfied": False,
+            "signer_secret_active": False,
+            "github_credential_active": False,
+            "managed_secrets_status": "not_configured",
+            "vault_health": "not_configured",
+            "host_signer_secret_status": "not_configured",
+            "host_signer_activation_status": "not_configured",
+            "github_credential_status": "not_configured",
+            "real_github_import_status": "real_github_import_not_run",
+            "active_secret_count": 0,
+            "degraded_secret_count": 0,
         }
 
 
