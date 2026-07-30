@@ -19,3 +19,8 @@ The flow is intentionally operator-controlled:
 The operator service does not implement cryptography, package extraction, secret storage, GitHub parsing, HTTP downloads, retries, or a scheduler. It coordinates existing phase-28, phase-29 and phase-30 components.
 
 Without an imported artifact, `remote_ci_status = artifact_not_imported`.
+
+
+## Phase 32 onboarding relationship
+
+Alpha onboarding displays CI readiness separately. Without a real artifact import, remote CI remains `artifact_not_imported` and does not block local alpha authoring or website publication.

@@ -14,3 +14,8 @@ The GitHub CI evidence operator flow uses managed `github_read_only_token`
 references with purpose `github_actions_read`. Token values are not accepted as
 CLI arguments and are never returned by UI, API, CLI, MCP, evidence packages,
 audit records, or support bundles.
+
+
+## Phase 32 onboarding use
+
+Onboarding may create or select managed secret references, but raw values remain in existing secure secret flows. Local vault setup checks master-key source, permissions, and synthetic encrypt/decrypt readiness without storing a master key in application tables.

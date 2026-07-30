@@ -43,3 +43,8 @@
 - Added trusted signer readiness fields for host-owned certification evidence.
 - Added CI artifact import readiness fields for exact imported artifact evidence.
 - Kept phase 20.2 sandbox readiness separate and false until independently certified.
+
+
+## Phase 32
+
+Added safe onboarding summaries to operations/readiness documentation and kept production readiness separate from alpha onboarding status. Phase 20.2 external sandbox certification remains separately blocked.

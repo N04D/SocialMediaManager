@@ -885,6 +885,56 @@ def markdown_website_doctor_cmd(args: argparse.Namespace) -> int:
     return 0
 
 
+def onboarding_cmd(args: argparse.Namespace) -> int:
+    from importlib import import_module
+
+    service_module = import_module("src.core.alpha_onboarding.service")
+    mcp_module = import_module("src.core.alpha_onboarding.mcp")
+    service = service_module.AlphaOnboardingService()
+    command = args.onboarding_command
+    if command == "status":
+        payload = service.status()
+    elif command == "start":
+        payload = service.start(mode="real_setup", workspace_id=args.workspace_id, actor=args.actor)
+    elif command == "demo-start":
+        payload = service.demo_start(actor=args.actor)
+    elif command == "show":
+        payload = service.get(args.session_id)
+    elif command == "steps":
+        payload = service.steps(args.session_id)
+    elif command == "validate":
+        payload = service.validate_step(args.session_id, args.step)
+    elif command == "resume":
+        payload = service.resume(args.session_id)
+    elif command == "cancel":
+        payload = service.cancel(args.session_id)
+    elif command == "readiness":
+        payload = service.readiness(args.session_id).__dict__
+    elif command == "recovery":
+        payload = service.recovery(args.session_id)
+    elif command == "publication-review":
+        payload = service.publication_review(args.session_id)
+    elif command == "publication-confirm":
+        payload = service.publication_confirm(
+            args.session_id,
+            {"confirmation": "Publish this immutable revision using this plan"},
+        )
+    elif command == "publication-status":
+        payload = service.publication_status(args.session_id)
+    elif command == "analytics-sync":
+        payload = service.analytics_sync(args.session_id)
+    elif command == "funnel":
+        payload = service.funnel(args.session_id)
+    elif command == "mcp":
+        mcp = mcp_module.AlphaOnboardingMCP(service)
+        method = getattr(mcp, args.query)
+        payload = method(args.session_id) if args.session_id else method()
+    else:
+        payload = {"status": "unknown"}
+    print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+    return 0
+
+
 def owned_publication_cmd(args: argparse.Namespace) -> int:
     from importlib import import_module
 
@@ -1641,6 +1691,42 @@ def build_parser() -> argparse.ArgumentParser:
     integrity.set_defaults(func=markdown_website_integrity_cmd)
     doctor = markdown_sub.add_parser("doctor")
     doctor.set_defaults(func=markdown_website_doctor_cmd)
+
+    onboarding = sub.add_parser("onboarding")
+    onboarding_sub = onboarding.add_subparsers(dest="onboarding_command", required=True)
+    onboarding_status = onboarding_sub.add_parser("status")
+    onboarding_status.set_defaults(func=onboarding_cmd)
+    onboarding_start = onboarding_sub.add_parser("start")
+    onboarding_start.add_argument("--workspace-id", default="workspace-alpha-1")
+    onboarding_start.add_argument("--actor", default="alpha-operator")
+    onboarding_start.set_defaults(func=onboarding_cmd)
+    onboarding_demo = onboarding_sub.add_parser("demo-start")
+    onboarding_demo.add_argument("--actor", default="demo-operator")
+    onboarding_demo.set_defaults(func=onboarding_cmd)
+    for name in {
+        "show",
+        "steps",
+        "resume",
+        "cancel",
+        "readiness",
+        "recovery",
+        "publication-review",
+        "publication-confirm",
+        "publication-status",
+        "analytics-sync",
+        "funnel",
+    }:
+        cmd = onboarding_sub.add_parser(name)
+        cmd.add_argument("session_id")
+        cmd.set_defaults(func=onboarding_cmd)
+    onboarding_validate = onboarding_sub.add_parser("validate")
+    onboarding_validate.add_argument("session_id")
+    onboarding_validate.add_argument("step")
+    onboarding_validate.set_defaults(func=onboarding_cmd)
+    onboarding_mcp = onboarding_sub.add_parser("mcp")
+    onboarding_mcp.add_argument("query")
+    onboarding_mcp.add_argument("session_id", nargs="?", default="")
+    onboarding_mcp.set_defaults(func=onboarding_cmd)
 
     owned = sub.add_parser("owned-publication")
     owned_sub = owned.add_subparsers(dest="owned_command", required=True)

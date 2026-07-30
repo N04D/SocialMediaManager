@@ -287,6 +287,38 @@ jobs:
           path: github-ci-evidence-operator-flow.json
           if-no-files-found: error
 
+  alpha-onboarding-first-publication:
+    name: Alpha Onboarding and First Publication
+    runs-on: ubuntu-24.04
+    needs: github-ci-evidence-operator-flow
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Run alpha onboarding deterministic checks
+        run: |
+          python -m unittest tests.test_alpha_onboarding_framework_phase32 -v
+          python -m unittest tests.test_alpha_onboarding_browser_phase32 -v
+          python -m unittest tests.test_alpha_onboarding_publication_phase32 -v
+          python -m unittest tests.test_alpha_onboarding_recovery_phase32 -v
+          python -m unittest tests.test_alpha_onboarding_readiness_phase32 -v
+          python -m unittest tests.test_alpha_onboarding_security_phase32 -v
+          python -m src.plugin_sdk.cli onboarding status > alpha-onboarding-first-publication.json
+      - name: Upload safe alpha onboarding report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alpha-onboarding-first-publication-report
+          path: alpha-onboarding-first-publication.json
+          if-no-files-found: error
+
   staging-analytics-provider-smoke:
     name: Staging Analytics Provider Smoke
     runs-on: ubuntu-24.04

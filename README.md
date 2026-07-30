@@ -45,3 +45,8 @@ SocialMediaManager turns long-form content into channel-specific publication tar
 ## Markdown Website Channel
 
 `channel.markdown_website` is the built-in owned-publication endpoint for full Markdown articles. It writes deterministic Markdown and media into an allowlisted Git worktree, commits exact mutation paths, optionally pushes to an allowlisted branch, verifies the public URL, and only then unlocks dependent LinkedIn or Mastodon distribution targets.
+
+
+## Alpha onboarding
+
+Phase 32 adds `plugin-sdk onboarding start` and `plugin-sdk onboarding demo-start` for a resumable alpha first-publication setup. Alpha-ready is not production-ready; analytics and social channels are optional, publication requires explicit confirmation, and deterministic demo mode uses only synthetic temporary resources.
