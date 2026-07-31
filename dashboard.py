@@ -4643,6 +4643,21 @@ def render_page(
     body.sidebar-collapsed .sidebar-section-summary {{ justify-content: center; padding-left: 0; padding-right: 0; }}
     body.sidebar-collapsed .sidebar-section-chevron {{ display: none; }}
     body.sidebar-collapsed .sidebar-subnav {{ padding-left: 0; }}
+    .owned-workspace, .owned-workspace * {{
+      min-width: 0;
+    }}
+    .owned-workspace input,
+    .owned-workspace textarea,
+    .owned-workspace select,
+    .owned-workspace pre {{
+      max-width: 100%;
+    }}
+    .owned-workspace table {{
+      min-width: 640px;
+    }}
+    .owned-workspace .panel {{
+      overflow-wrap: anywhere;
+    }}
     @media (max-width: 980px) {{
       .page-grid {{ grid-template-columns: 1fr; }}
       .editor-two-up, .checkbox-grid, .editor-studio, .writer-layout, .editor-workbench {{ grid-template-columns: 1fr; }}
@@ -4659,6 +4674,20 @@ def render_page(
       .wrap {{ padding: 20px 16px 32px; }}
       .page-header {{ align-items: flex-start; flex-direction: column; }}
       .page-feed {{ max-width: 100%; text-align: left; }}
+      .owned-workspace .workspace-grid {{
+        grid-template-columns: minmax(0, 1fr);
+      }}
+      .owned-workspace .panel {{
+        max-width: 100%;
+        overflow-x: auto;
+      }}
+      .owned-workspace textarea {{
+        min-height: 220px;
+      }}
+      .owned-workspace .tabs,
+      .owned-workspace form {{
+        max-width: 100%;
+      }}
     }}
   </style>
 </head>
@@ -8870,7 +8899,19 @@ def main() -> int:
 
     DashboardHandler.config = config
     DashboardHandler.config_path = args.config
-    server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
+    try:
+        server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
+    except OSError as exc:
+        if exc.errno in {98, 48, 10048}:
+            print(
+                "Dashboard startup failed: "
+                f"{args.host}:{args.port} is not available. "
+                "Another process may be an older incompatible dashboard; check http://"
+                f"{args.host}:{args.port}/health or restart with --port 8090.",
+                file=sys.stderr,
+            )
+            return 2
+        raise
     print(f"Dashboard running at http://{args.host}:{args.port}")
     try:
         server.serve_forever()
