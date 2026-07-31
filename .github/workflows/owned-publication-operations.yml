@@ -319,6 +319,51 @@ jobs:
           path: alpha-onboarding-first-publication.json
           if-no-files-found: error
 
+  mvp-dashboard-and-dogfood-flow:
+    name: MVP Dashboard and Dogfood Flow
+    runs-on: ubuntu-24.04
+    needs: alpha-onboarding-first-publication
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run MVP dashboard and dogfood checks
+        run: |
+          python -m unittest tests.test_mvp_dashboard_phase33 -v
+          python -m unittest tests.test_mvp_onboarding_ui_phase33 -v
+          python -m unittest tests.test_mvp_composer_ui_phase33 -v
+          python -m unittest tests.test_mvp_publication_ui_phase33 -v
+          python -m unittest tests.test_mvp_funnel_ui_phase33 -v
+          python -m unittest tests.test_mvp_accessibility_phase33 -v
+          python -m unittest tests.test_mvp_responsive_phase33 -v
+          python -m unittest tests.test_mvp_screenshots_phase33 -v
+          python -m unittest tests.test_mvp_browser_e2e_phase33 -v
+          python -m unittest tests.test_mvp_ui_security_phase33 -v
+          python -m py_compile dashboard.py mvp_dashboard.py tests/phase33_support.py
+          python - <<'PY'
+          from pathlib import Path
+          forbidden = ("Bearer", "private key", "raw token", "content/drafts", "drafts/")
+          for path in [Path("mvp_dashboard.py"), *Path("tests").glob("*phase33.py")]:
+              text = path.read_text(encoding="utf-8")
+              for item in forbidden:
+                  if item in text and path.name != "phase33_support.py":
+                      raise SystemExit(f"unsafe fixture text {item} in {path}")
+          PY
+          echo '{"status":"passed","fixtures":"synthetic","external_publication":false}' > mvp-dashboard-and-dogfood-flow.json
+      - name: Upload safe MVP dashboard report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mvp-dashboard-and-dogfood-flow-report
+          path: mvp-dashboard-and-dogfood-flow.json
+          if-no-files-found: error
+
   staging-analytics-provider-smoke:
     name: Staging Analytics Provider Smoke
     runs-on: ubuntu-24.04

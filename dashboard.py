@@ -86,6 +86,12 @@ from content_store import (
     save_content_item,
     slugify,
 )
+from mvp_dashboard import (
+    handle_mvp_post,
+    is_mvp_api_route,
+    is_mvp_get_route,
+    render_mvp_page,
+)
 from pipeline import (
     CONFIG_PATH,
     AppConfig,
@@ -160,6 +166,10 @@ ROUTE_CONTENT = "/content"
 ROUTE_PUBLICATIONS = "/publications"
 ROUTE_FUNNELS = "/funnels"
 ROUTE_OPERATIONS = "/publications/reconciliation"
+ROUTE_HOME = "/home"
+ROUTE_SETUP = "/setup"
+ROUTE_MVP_OPERATIONS = "/operations"
+ROUTE_CALENDAR = "/calendar"
 VALID_ROUTES = {
     ROUTE_EDITOR,
     ROUTE_DRAFTS,
@@ -177,6 +187,10 @@ VALID_ROUTES = {
     ROUTE_PUBLICATIONS,
     ROUTE_FUNNELS,
     ROUTE_OPERATIONS,
+    ROUTE_HOME,
+    ROUTE_SETUP,
+    ROUTE_MVP_OPERATIONS,
+    ROUTE_CALENDAR,
 }
 
 SIDEBAR_ITEMS = [
@@ -4705,6 +4719,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
+        if is_mvp_get_route(parsed.path) or is_mvp_api_route(parsed.path):
+            payload, status = render_mvp_page(parsed.path, parsed.query)
+            body = payload.encode("utf-8")
+            self.send_response(status)
+            self.send_header(
+                "Content-Type",
+                "application/json; charset=utf-8" if is_mvp_api_route(parsed.path) else "text/html; charset=utf-8",
+            )
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if parsed.path.startswith("/assets/"):
             relative = parsed.path.removeprefix("/assets/")
             asset_path = (ASSETS_DIR / relative).resolve()
@@ -6167,6 +6193,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_HEAD(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
+        if is_mvp_get_route(parsed.path) or is_mvp_api_route(parsed.path):
+            self.send_response(HTTPStatus.OK)
+            self.send_header(
+                "Content-Type",
+                "application/json; charset=utf-8" if is_mvp_api_route(parsed.path) else "text/html; charset=utf-8",
+            )
+            self.end_headers()
+            return
         if parsed.path.startswith("/assets/"):
             relative = parsed.path.removeprefix("/assets/")
             asset_path = (ASSETS_DIR / relative).resolve()
@@ -6271,6 +6305,28 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     status=HTTPStatus.BAD_REQUEST,
                 )
                 return
+        if is_mvp_api_route(path) or path.startswith("/setup/") or path in {"/setup/start-demo", "/setup/start"}:
+            form_body = parse_qs(body, keep_blank_values=True) if body else {}
+            payload, status = handle_mvp_post(path, form_body, json_body if json_body else None)
+            try:
+                parsed_payload = json.loads(payload)
+            except json.JSONDecodeError:
+                parsed_payload = {}
+            if status == HTTPStatus.SEE_OTHER and parsed_payload.get("redirect"):
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", str(parsed_payload["redirect"]))
+                self.end_headers()
+                return
+            body_bytes = payload.encode("utf-8")
+            self.send_response(status)
+            self.send_header(
+                "Content-Type",
+                "application/json; charset=utf-8" if is_mvp_api_route(path) else "text/html; charset=utf-8",
+            )
+            self.send_header("Content-Length", str(len(body_bytes)))
+            self.end_headers()
+            self.wfile.write(body_bytes)
+            return
         if path == "/api/content":
             json_response(self, {"content": owned_publication_service().create_content(json_body)})
             return
