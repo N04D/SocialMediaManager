@@ -29,6 +29,7 @@ class ContentDraft:
     status: str = "draft"
     version: int = 1
     updated_at: str = ""
+    slug: str = ""
 
     @property
     def checksum(self) -> str:
@@ -51,6 +52,7 @@ class ContentRevision:
     source_draft_version: int
     checksum: str
     created_at: str
+    slug: str = ""
 
 
 @dataclass(frozen=True)

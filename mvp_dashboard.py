@@ -23,6 +23,7 @@ from channels.markdown_website.models import (
     WebsiteVariant,
 )
 from channels.markdown_website.renderer import MarkdownRenderer
+from channels.markdown_website.slug import slugify
 from channels.markdown_website.verification import HttpResponse, WebsitePublicationVerifier
 from src.core.alpha_onboarding.api import AlphaOnboardingAPI
 from src.core.alpha_onboarding.errors import AlphaOnboardingError
@@ -53,6 +54,38 @@ def alpha_ui_service() -> AlphaOnboardingService:
 
 def owned_service() -> OwnedPublicationWorkspaceService:
     return OwnedPublicationWorkspaceService(database_path=MVP_DATABASE)
+
+
+class CanonicalDraftResolver:
+    def __init__(self, service: AlphaOnboardingService) -> None:
+        self.service = service
+        self.workspace_service = owned_service()
+
+    def resolve_draft(
+        self,
+        workspace_id: str,
+        draft_id: str,
+        expected_mode: str,
+        *,
+        session_id: str = "",
+        require_binding: bool = False,
+    ) -> ContentDraft:
+        if expected_mode == "real_setup" and draft_id in {"content-owned-1", "phase33-fixture"}:
+            raise OwnedPublicationError(
+                "canonical_draft_identity_mismatch", "Real setup cannot resolve fixture draft resources."
+            )
+        draft = self.workspace_service.repository.get_draft(draft_id)
+        if draft.id != draft_id:
+            raise OwnedPublicationError("canonical_draft_identity_mismatch", "Resolved draft ID did not match route.")
+        if workspace_id and draft.workspace_id != workspace_id:
+            raise OwnedPublicationError("workspace.forbidden", "Draft belongs to a different workspace.")
+        if require_binding and session_id:
+            bound = _bindings(self.service, session_id).get("draft_id", "")
+            if bound != draft_id:
+                raise OwnedPublicationError(
+                    "canonical_draft_identity_mismatch", "Composer route and onboarding binding differ."
+                )
+        return draft
 
 
 def alpha_ui_api() -> AlphaOnboardingAPI:
@@ -142,36 +175,42 @@ def handle_mvp_post(
 
 
 def render_mvp_page(path: str, query: str = "") -> tuple[str, HTTPStatus]:
-    if path == "/health":
-        return json.dumps(build_identity(), ensure_ascii=True), HTTPStatus.OK
-    if is_mvp_api_route(path):
-        payload, status = mvp_api_dispatch("GET", path)
-        return json.dumps(payload, ensure_ascii=False), status
-    service = alpha_ui_service()
-    params = parse_qs(query)
-    if path in {"/", "/home"}:
-        return _layout("Home", "Start dashboard", _render_home(service)), HTTPStatus.OK
-    if path == "/setup":
-        return _layout("Setup", "Guided setup", _render_setup_index(service)), HTTPStatus.OK
-    if path.startswith("/setup/"):
-        return _render_setup_route(service, path)
-    if path == "/content":
-        return _layout("Content", "Owned publication content", _render_content(service)), HTTPStatus.OK
-    if path.startswith("/content/") and path.endswith("/compose"):
-        return _layout("Compose", "Article composer", _render_real_composer(service, path, params)), HTTPStatus.OK
-    if path == "/calendar":
-        return _layout(
-            "Calendar",
-            "Publication planning",
-            _simple_panel("Publication plan calendar", "No scheduled dogfood publication yet."),
-        ), HTTPStatus.OK
-    if path == "/analytics":
-        return _layout("Analytics", "First funnel status", _render_analytics(service)), HTTPStatus.OK
-    if path == "/operations":
-        return _layout("Operations", "Operational readiness", _render_operations(service)), HTTPStatus.OK
-    return render_error_page(
-        "phase331.route_not_found", "The requested dashboard route was not found."
-    ), HTTPStatus.NOT_FOUND
+    try:
+        if path == "/health":
+            return json.dumps(build_identity(), ensure_ascii=True), HTTPStatus.OK
+        if is_mvp_api_route(path):
+            payload, status = mvp_api_dispatch("GET", path)
+            return json.dumps(payload, ensure_ascii=False), status
+        service = alpha_ui_service()
+        params = parse_qs(query)
+        if path in {"/", "/home"}:
+            return _layout("Home", "Start dashboard", _render_home(service)), HTTPStatus.OK
+        if path == "/setup":
+            return _layout("Setup", "Guided setup", _render_setup_index(service)), HTTPStatus.OK
+        if path.startswith("/setup/"):
+            return _render_setup_route(service, path)
+        if path == "/content":
+            return _layout("Content", "Owned publication content", _render_content(service)), HTTPStatus.OK
+        if path.startswith("/content/") and path.endswith("/compose"):
+            return _layout("Compose", "Article composer", _render_real_composer(service, path, params)), HTTPStatus.OK
+        if path == "/calendar":
+            return _layout(
+                "Calendar",
+                "Publication planning",
+                _simple_panel("Publication plan calendar", "No scheduled dogfood publication yet."),
+            ), HTTPStatus.OK
+        if path == "/analytics":
+            return _layout("Analytics", "First funnel status", _render_analytics(service)), HTTPStatus.OK
+        if path == "/operations":
+            return _layout("Operations", "Operational readiness", _render_operations(service)), HTTPStatus.OK
+        return render_error_page(
+            "phase331.route_not_found", "The requested dashboard route was not found."
+        ), HTTPStatus.NOT_FOUND
+    except (AlphaOnboardingError, OwnedPublicationError, ValueError) as exc:
+        code = getattr(exc, "code", "phase332.validation")
+        message = getattr(exc, "message", str(exc))
+        status = getattr(exc, "status_code", 400)
+        return render_error_page(code, message), HTTPStatus(status)
 
 
 def render_error_page(code: str, message: str) -> str:
@@ -467,7 +506,7 @@ def _form_for_step(session: dict[str, Any], step: dict[str, Any], payload: dict[
         "verification": "<p>Verification is completed by the existing safe verification service after commit.</p>",
         "completion": "<p>Result and funnel remain durable after restart.</p>",
     }
-    if step_id in {"first_content", "publication_plan", "website_account"}:
+    if step_id in {"publication_destination", "first_content", "publication_plan", "website_account"}:
         return forms[step_id]
     return f"""
     <form method="post" action="/setup/{html.escape(session_id)}/complete">
@@ -480,20 +519,36 @@ def _form_for_step(session: dict[str, Any], step: dict[str, Any], payload: dict[
 
 
 def _destination_form(session_id: str) -> str:
+    service = alpha_ui_service()
+    try:
+        destination = _destination(service, session_id)
+    except Exception:
+        destination = {}
+    display_name = destination.get("display_name", "")
+    managed_root = ""
+    repository = ""
+    if destination.get("repository_path"):
+        repo_path = Path(str(destination["repository_path"]))
+        managed_root = str(repo_path.parent)
+        repository = repo_path.name
+    branch = destination.get("branch", "main")
+    publication_root = destination.get("publication_root", "articles")
+    public_url_template = destination.get("public_url_template", "")
+    instrumentation_profile = destination.get("instrumentation_profile", "")
     return f"""
     <form method="post" action="/setup/{html.escape(session_id)}/complete">
       <input type="hidden" name="step_id" value="publication_destination">
       <input type="hidden" name="idempotency_key" value="{html.escape(session_id)}:destination">
-      <label>Display name<input name="display_name" value="MVP Dogfood Website" required></label>
-      <label>Managed repository root<input name="managed_root" value="{html.escape(str(Path(tempfile.gettempdir())))}" required></label>
-      <label>Repository<input name="repository" value="smm-dogfood-001-site" required></label>
-      <label>Branch<input name="branch" value="main" required></label>
+      <label>Display name<input name="display_name" value="{html.escape(display_name)}" placeholder="Dogfood Website" required></label>
+      <label>Managed repository root<input name="managed_root" value="{html.escape(managed_root)}" placeholder="{html.escape(str(Path(tempfile.gettempdir())))}" required></label>
+      <label>Repository<input name="repository" value="{html.escape(repository)}" placeholder="smm-dogfood-site" required></label>
+      <label>Branch<input name="branch" value="{html.escape(branch)}" placeholder="main" required></label>
       <label>Rendering profile<select name="rendering_profile"><option>generic_yaml</option></select></label>
-      <label>Publication root<input name="publication_root" value="articles" required></label>
-      <label>Public URL template<input name="public_url_template" value="http://127.0.0.1:8000/articles/{{slug}}.md" required></label>
+      <label>Publication root<input name="publication_root" value="{html.escape(publication_root)}" placeholder="articles" required></label>
+      <label>Public URL template<input name="public_url_template" value="{html.escape(public_url_template)}" placeholder="http://127.0.0.1:8092/articles/{{slug}}.md" required></label>
       <label>Git mode<select name="git_mode"><option value="commit_only">Commit only</option></select></label>
       <label>Verification mode<select name="verification_mode"><option value="local_http">Local HTTP origin</option></select></label>
-      <label>Instrumentation profile<input name="instrumentation_profile" value=""></label>
+      <label>Instrumentation profile<input name="instrumentation_profile" value="{html.escape(instrumentation_profile)}" placeholder="not_configured"></label>
       <div class="actions"><button type="submit">Register destination</button><a class="button secondary" href="/setup/{html.escape(session_id)}">Back</a></div>
     </form>
     """
@@ -527,6 +582,7 @@ def _first_content_block(service: AlphaOnboardingService, session_id: str) -> st
     return f"""
     <form method="post" action="/setup/{html.escape(session_id)}/create-draft">
       <label>Title<input name="title" value="MVP Dogfood Publication 001" required></label>
+      <label>Slug<input name="slug" value="" placeholder="mvp-dogfood-publication" pattern="[a-z0-9][a-z0-9-]*"></label>
       <label>Markdown body<textarea name="markdown_body" required># MVP Dogfood Publication 001
 
 Purpose: Verify the complete owned-publication workflow.
@@ -555,7 +611,15 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
     if draft_id == "phase33-fixture":
         return _render_demo_fixture_composer()
     setup_session = (params.get("setup_session") or [""])[0]
-    draft = owned_service().repository.get_draft(draft_id)
+    workspace_id = ""
+    expected_mode = "real_setup"
+    if setup_session:
+        session = service.repository.get_session(setup_session)
+        workspace_id = session.workspace_id
+        expected_mode = session.mode
+    draft = CanonicalDraftResolver(service).resolve_draft(
+        workspace_id, draft_id, expected_mode, session_id=setup_session, require_binding=bool(setup_session)
+    )
     back = (
         f'<a class="button secondary" href="/setup/{html.escape(setup_session)}/first_content">Back to setup</a>'
         if setup_session
@@ -570,8 +634,15 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
     <section class="grid">
       <article class="panel span-6">
         <h2>Article composer</h2>
-        <form id="owned-composer-form" data-content-id="{html.escape(draft.id)}" data-version="{draft.version}">
+        <dl class="facts" aria-label="Canonical draft diagnostics">
+          <dt>Route draft ID</dt><dd>{html.escape(draft_id)}</dd>
+          <dt>Loaded draft ID</dt><dd>{html.escape(draft.id)}</dd>
+          <dt>Workspace ID</dt><dd>{html.escape(draft.workspace_id)}</dd>
+          <dt>Draft version</dt><dd>{draft.version}</dd>
+        </dl>
+        <form id="owned-composer-form" data-content-id="{html.escape(draft.id)}" data-draft-id="{html.escape(draft.id)}" data-workspace-id="{html.escape(draft.workspace_id)}" data-version="{draft.version}">
           <label>Title<input id="owned-title" name="title" value="{html.escape(draft.title)}" required></label>
+          <label>Slug<input id="owned-slug" name="slug" value="{html.escape(draft.slug or slugify(draft.title))}" required pattern="[a-z0-9][a-z0-9-]*"></label>
           <label>Summary<textarea id="owned-summary" name="summary" rows="3">{html.escape(draft.summary)}</textarea></label>
           <label>Language<select id="owned-language" name="language"><option>{html.escape(draft.language)}</option><option>en</option><option>nl</option></select></label>
           <label>Author<input id="owned-author" name="author" value="{html.escape(draft.author)}"></label>
@@ -602,8 +673,10 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
       let requestCount = 0;
       window.__ownedPublicationAutosaveRequests = 0;
       function body() {{ return {{
+        draft_id: form.dataset.draftId,
         expected_version: version,
         title: document.querySelector("#owned-title").value,
+        slug: document.querySelector("#owned-slug").value,
         summary: document.querySelector("#owned-summary").value || document.querySelector("#owned-seo").value,
         markdown_body: document.querySelector("#owned-body").value,
         language: document.querySelector("#owned-language").value,
@@ -810,6 +883,7 @@ def _ensure_real_draft(service: AlphaOnboardingService, session_id: str, payload
         return existing
     title = str(payload.get("title") or "MVP Dogfood Publication 001")
     body = str(payload.get("markdown_body") or "# MVP Dogfood Publication 001\n\nCTA: Open the project overview.")
+    slug = str(payload.get("slug") or slugify(title))
     _guard_no_fixture({"title": title, "markdown_body": body})
     draft_id = "content-" + stable_checksum(session.id + title)[:12]
     draft = ContentDraft(
@@ -824,6 +898,7 @@ def _ensure_real_draft(service: AlphaOnboardingService, session_id: str, payload
         "draft",
         1,
         utc_now_iso(),
+        slug,
     )
     owned_service().repository.save_draft(
         draft, expected_version=None, idempotency_key="phase331-draft-" + session.id, actor=session.created_by
@@ -843,7 +918,9 @@ def _ensure_real_plan(service: AlphaOnboardingService, session_id: str) -> dict[
     draft_id = bindings.get("draft_id") or _ensure_real_draft(service, session_id, {})
     destination = _destination(service, session_id)
     repo = owned_service().repository
-    draft = repo.get_draft(draft_id)
+    draft = CanonicalDraftResolver(service).resolve_draft(
+        session.workspace_id, draft_id, session.mode, session_id=session_id, require_binding=True
+    )
     revision = repo.create_revision(
         draft.id,
         expected_version=draft.version,
@@ -887,10 +964,14 @@ def _ensure_real_plan(service: AlphaOnboardingService, session_id: str) -> dict[
         verification_status="plan_ready",
         analytics_sync_status="not_configured",
         funnel_status="provider_pending",
-        public_url=_public_url_for_revision(destination, revision.title),
+        public_url=_public_url_for_revision(destination, revision.slug or slugify(revision.title)),
         evidence_ids=(),
         mutation_summary=("commit_only", "no_push", destination["repository_display"]),
-        checksum_bindings={"revision": revision.checksum, "plan": stable_checksum(plan.id)},
+        checksum_bindings={
+            "revision": revision.checksum,
+            "source_draft_id": revision.content_item_id,
+            "plan": stable_checksum(plan.id),
+        },
         timeline=({"phase": "Publication plan created", "status": "completed", "safe_evidence_summary": plan.id},),
     )
     service.repository.save_first_publication(readmodel)
@@ -953,6 +1034,7 @@ def _confirm_real_publication(
         account_config=account,
         variant=WebsiteVariant(
             title=revision.title,
+            slug=revision.slug or slugify(revision.title),
             markdown_body=variant.text,
             summary=revision.summary,
             language=revision.language,
@@ -1146,12 +1228,8 @@ def _safe_fetch(url: str) -> HttpResponse:
         return HttpResponse(int(response.status), response.geturl(), headers, text)
 
 
-def _public_url_for_revision(destination: dict[str, str], title: str) -> str:
-    from channels.markdown_website.slug import slugify
-
-    return destination["public_url_template"].format(
-        slug=slugify(title), year="2026", month="07", day="31", language="en"
-    )
+def _public_url_for_revision(destination: dict[str, str], slug: str) -> str:
+    return destination["public_url_template"].format(slug=slug, year="2026", month="07", day="31", language="en")
 
 
 def _block_protected_destination(path: Path) -> None:

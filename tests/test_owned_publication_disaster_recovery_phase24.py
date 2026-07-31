@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from src.core.owned_publication.errors import OwnedPublicationError
 from src.core.owned_publication.operations import CertificationGate, ProductionReadinessService, StorageBackupService
 from src.core.owned_publication.service import OwnedPublicationWorkspaceService
 
@@ -46,7 +47,9 @@ class OwnedPublicationDisasterRecoveryPhase24Tests(unittest.TestCase):
             source.backup(target)
         restored = OwnedPublicationWorkspaceService(database_path=restored_path)
         self.assertEqual(restored.get_content("dr-content")["title"], "DR article")
-        self.assertEqual(restored.get_content("post-backup-content")["title"], "Owned Funnel Launch")
+        with self.assertRaises(OwnedPublicationError) as ctx:
+            restored.get_content("post-backup-content")
+        self.assertEqual(ctx.exception.code, "workspace.not_found")
         recovery = restored.recovery()
         self.assertFalse(recovery["blind_retry"])
         gate = CertificationGate(commit_sha="test")

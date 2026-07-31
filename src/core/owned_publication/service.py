@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .errors import OwnedPublicationError
-from .fixtures import build_complete_workspace_fixture, fixture_draft
+from .fixtures import build_complete_workspace_fixture
 from .models import (
     ChannelVariantDraft,
     ContentDraft,
@@ -174,6 +174,7 @@ class OwnedPublicationWorkspaceService:
             "draft",
             1,
             utc_now_iso(),
+            str(payload.get("slug") or ""),
         )
         saved = self.repository.save_draft(
             draft,
@@ -184,12 +185,16 @@ class OwnedPublicationWorkspaceService:
         return asdict(saved)
 
     def get_content(self, content_item_id: str) -> dict[str, Any]:
-        try:
-            return _draft_payload(self.repository.get_draft(content_item_id))
-        except OwnedPublicationError:
-            return _draft_payload(self._workspace.draft)
+        draft = self.repository.get_draft(content_item_id)
+        payload = _draft_payload(draft)
+        if payload["draft_id"] != content_item_id:
+            raise OwnedPublicationError("canonical_draft_identity_mismatch", "Route draft ID did not match payload.")
+        return payload
 
     def autosave(self, content_item_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        payload_id = str(payload.get("draft_id") or payload.get("content_id") or payload.get("id") or "")
+        if payload_id and payload_id != content_item_id:
+            raise OwnedPublicationError("canonical_draft_identity_mismatch", "Payload draft ID did not match route.")
         current = self.repository.get_draft(content_item_id)
         expected = int(payload.get("expected_version", current.version))
         if expected != current.version:
@@ -206,6 +211,7 @@ class OwnedPublicationWorkspaceService:
             current.status,
             current.version + 1,
             utc_now_iso(),
+            str(payload.get("slug", current.slug)),
         )
         saved = self.repository.save_draft(
             updated,
@@ -235,10 +241,7 @@ class OwnedPublicationWorkspaceService:
         }
 
     def create_revision(self, content_item_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-        try:
-            draft = self.repository.get_draft(content_item_id)
-        except OwnedPublicationError:
-            draft = fixture_draft()
+        draft = self.repository.get_draft(content_item_id)
         expected = int((payload or {}).get("expected_version", draft.version))
         revision = self.repository.create_revision(
             draft.id,
@@ -538,5 +541,15 @@ def _workspace_to_payload(workspace: OwnedPublicationWorkspace) -> dict[str, Any
 
 def _draft_payload(draft: ContentDraft) -> dict[str, Any]:
     payload = asdict(draft)
+    payload["draft_id"] = draft.id
+    payload["body"] = draft.markdown_body
+    payload["metadata"] = {
+        "slug": draft.slug,
+        "tags": list(draft.tags),
+        "summary": draft.summary,
+        "author": draft.author,
+        "language": draft.language,
+    }
+    payload["classification"] = "real" if draft.id != "content-owned-1" else "fixture"
     payload["checksum"] = draft.checksum
     return payload

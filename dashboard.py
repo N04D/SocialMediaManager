@@ -92,6 +92,9 @@ from mvp_dashboard import (
     is_mvp_get_route,
     render_mvp_page,
 )
+from mvp_dashboard import (
+    owned_service as mvp_owned_publication_service,
+)
 from pipeline import (
     CONFIG_PATH,
     AppConfig,
@@ -2904,7 +2907,7 @@ def funnel_payload(content_item_id: str | None = None) -> dict[str, Any]:
 
 
 def owned_publication_service() -> OwnedPublicationWorkspaceService:
-    return OwnedPublicationWorkspaceService()
+    return mvp_owned_publication_service()
 
 
 def website_analytics_service():
@@ -5392,18 +5395,23 @@ class DashboardHandler(BaseHTTPRequestHandler):
             parts = suffix.split("/")
             content_id = parts[0]
             service = owned_publication_service()
-            if len(parts) == 1:
-                json_response(self, {"content": service.get_content(content_id)})
-                return
-            action = parts[1]
-            if action == "revisions":
-                json_response(self, service.list_revisions(content_id))
-                return
-            if action == "workspace":
-                json_response(self, service.workspace_payload(content_id))
-                return
-            if action == "variants":
-                json_response(self, service.variants(content_id))
+            try:
+                if len(parts) == 1:
+                    json_response(self, {"content": service.get_content(content_id)})
+                    return
+                action = parts[1]
+                if action == "revisions":
+                    json_response(self, service.list_revisions(content_id))
+                    return
+                if action == "workspace":
+                    json_response(self, service.workspace_payload(content_id))
+                    return
+                if action == "variants":
+                    json_response(self, service.variants(content_id))
+                    return
+            except OwnedPublicationError as exc:
+                status = HTTPStatus.NOT_FOUND if exc.code == "workspace.not_found" else HTTPStatus.CONFLICT
+                json_response(self, {"error": {"code": exc.code, "message": str(exc)}}, status=status)
                 return
         if parsed.path.startswith("/api/publication-plans/"):
             suffix = parsed.path.removeprefix("/api/publication-plans/")

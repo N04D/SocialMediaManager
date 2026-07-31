@@ -572,6 +572,7 @@ class DatabaseOwnedPublicationRepository:
             "title": draft.title,
             "summary": draft.summary,
             "markdown_body": draft.markdown_body,
+            "slug": draft.slug,
             "language": draft.language,
             "author": draft.author,
             "tags": list(draft.tags),
@@ -596,11 +597,16 @@ class DatabaseOwnedPublicationRepository:
             if expected_version is None or int(row["version"]) != expected_version:
                 raise OwnedPublicationError("workspace.conflict", "Draft version conflict.")
             version = expected_version + 1
+            existing = connection.execute(
+                "SELECT website_fields_json FROM owned_publication_drafts WHERE id=?", (draft.id,)
+            ).fetchone()
+            website_fields = dict(_load_json(existing["website_fields_json"]) if existing else {})
+            website_fields["slug"] = draft.slug
             connection.execute(
                 """
                 UPDATE owned_publication_drafts
                    SET version=?, title=?, summary=?, markdown_body=?, language=?, author=?, tags_json=?,
-                       last_saved_at=?, updated_at=?, checksum=?
+                       website_fields_json=?, last_saved_at=?, updated_at=?, checksum=?
                  WHERE id=?
                 """,
                 (
@@ -611,6 +617,7 @@ class DatabaseOwnedPublicationRepository:
                     draft.language,
                     draft.author,
                     _json(list(draft.tags)),
+                    _json(website_fields),
                     now,
                     now,
                     draft.checksum,
@@ -623,8 +630,8 @@ class DatabaseOwnedPublicationRepository:
                 """
                 INSERT INTO owned_publication_drafts (
                     id, workspace_id, content_item_id, version, title, summary, markdown_body, language,
-                    author, tags_json, last_saved_at, created_at, updated_at, checksum
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    author, tags_json, website_fields_json, last_saved_at, created_at, updated_at, checksum
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     draft.id,
@@ -637,6 +644,7 @@ class DatabaseOwnedPublicationRepository:
                     draft.language,
                     draft.author,
                     _json(list(draft.tags)),
+                    _json({"slug": draft.slug}),
                     draft.updated_at or now,
                     now,
                     now,
@@ -701,6 +709,7 @@ class DatabaseOwnedPublicationRepository:
             "title": draft.title,
             "summary": draft.summary,
             "markdown_body": draft.markdown_body,
+            "slug": draft.slug,
             "tags": list(draft.tags),
             "language": draft.language,
             "author": draft.author,
@@ -752,6 +761,7 @@ class DatabaseOwnedPublicationRepository:
             int(row["source_draft_version"]),
             row["content_checksum"],
             row["created_at"],
+            str(payload.get("slug") or ""),
         )
 
     def list_revisions(self, content_item_id: str) -> list[ContentRevision]:
@@ -1773,6 +1783,7 @@ class DatabaseOwnedPublicationRepository:
         )
 
     def _draft_from_row(self, row: sqlite3.Row) -> ContentDraft:
+        website_fields = _load_json(row["website_fields_json"])
         draft = ContentDraft(
             row["id"],
             row["workspace_id"],
@@ -1785,6 +1796,7 @@ class DatabaseOwnedPublicationRepository:
             "draft",
             int(row["version"]),
             row["updated_at"],
+            str(website_fields.get("slug") or ""),
         )
         if draft.checksum != row["checksum"]:
             raise OwnedPublicationError("storage.checksum_mismatch", "Draft checksum mismatch.")
