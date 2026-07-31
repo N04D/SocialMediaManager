@@ -198,7 +198,20 @@ class OwnedPublicationWorkspaceService:
         current = self.repository.get_draft(content_item_id)
         expected = int(payload.get("expected_version", current.version))
         if expected != current.version:
-            raise OwnedPublicationError("workspace.conflict", "Draft version conflict.")
+            raise OwnedPublicationError(
+                "workspace.conflict",
+                "Draft version conflict.",
+                {
+                    "draft_id": content_item_id,
+                    "submitted_version": expected,
+                    "current_server_version": current.version,
+                    "safe_conflict_explanation": (
+                        f"Your editor was based on version {expected}. "
+                        f"The server now contains version {current.version}. "
+                        "Reload the latest version before saving again."
+                    ),
+                },
+            )
         updated = ContentDraft(
             current.id,
             current.workspace_id,

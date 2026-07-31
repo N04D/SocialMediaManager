@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from channels.markdown_website.errors import MarkdownWebsiteGitError, MarkdownWebsiteVerificationError
 from channels.markdown_website.git_publisher import GitIdentity, GitPublisher
 from channels.markdown_website.models import (
     MarkdownWebsiteAccountConfig,
@@ -689,7 +690,13 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
         try {{
           const response = await fetch("/api/content/" + encodeURIComponent(form.dataset.contentId), {{method:"PATCH", headers:{{"Content-Type":"application/json"}}, body:JSON.stringify(body())}});
           const payload = await response.json();
-          if (response.status === 409) {{ conflict.textContent = "Conflict detected: newer draft version is available."; conflict.focus(); status.textContent = "Autosave: conflict"; return; }}
+          if (response.status === 409) {{
+            const error = payload.error || {{}};
+            const submitted = error.submitted_version || body().expected_version;
+            const current = error.current_server_version || "newer";
+            conflict.textContent = error.safe_conflict_explanation || ("Your editor was based on version " + submitted + ". The server now contains version " + current + ". Reload the latest version before saving again.");
+            conflict.focus(); status.textContent = "Autosave: conflict · server version " + current; return;
+          }}
           if (!response.ok) throw new Error("save failed");
           version = payload.draft.version; form.dataset.version = String(version); status.textContent = "Autosave: saved · version " + version; conflict.textContent = "";
         }} catch (error) {{ status.textContent = "Autosave: save failed"; }}
@@ -774,17 +781,33 @@ def _render_timeline(payload: dict[str, Any], status: dict[str, Any]) -> str:
     events = status["publication"].get("timeline") or ()
     if not events:
         events = (
-            {"phase": "Plan confirmed", "status": "completed", "safe_evidence_summary": ""},
-            {"phase": "Website execution claimed", "status": "completed", "safe_evidence_summary": ""},
-            {"phase": "Git commit created", "status": "completed", "safe_evidence_summary": ""},
+            {"phase": "Plan confirmed", "status": "not_started", "safe_evidence_summary": "waiting for durable event"},
+            {
+                "phase": "Website execution claimed",
+                "status": "not_started",
+                "safe_evidence_summary": "waiting for durable event",
+            },
+            {"phase": "Git commit", "status": "not_started", "safe_evidence_summary": "commit SHA not available"},
             {"phase": "Analytics pending", "status": "warning", "safe_evidence_summary": "Provider pending"},
         )
     else:
         phases = {str(item.get("phase", "")) for item in events}
         additions = []
-        for phase in ("Plan confirmed", "Website execution claimed", "Git commit created"):
-            if phase not in phases:
-                additions.append({"phase": phase, "status": "completed", "safe_evidence_summary": ""})
+        if payload.get("session", {}).get("mode") == "deterministic_demo":
+            aliases = {
+                "Plan confirmed": "plan_created",
+                "Website execution claimed": "execution_requested",
+                "Git commit created": "website_verification",
+            }
+            for label, source in aliases.items():
+                if label not in phases and source in phases:
+                    additions.append(
+                        {
+                            "phase": label,
+                            "status": "completed",
+                            "safe_evidence_summary": "deterministic demo fixture",
+                        }
+                    )
         if "Analytics pending" not in phases:
             additions.append(
                 {"phase": "Analytics pending", "status": "warning", "safe_evidence_summary": "Provider pending"}
@@ -970,6 +993,7 @@ def _ensure_real_plan(service: AlphaOnboardingService, session_id: str) -> dict[
         checksum_bindings={
             "revision": revision.checksum,
             "source_draft_id": revision.content_item_id,
+            "source_draft_version": str(revision.source_draft_version),
             "plan": stable_checksum(plan.id),
         },
         timeline=({"phase": "Publication plan created", "status": "completed", "safe_evidence_summary": plan.id},),
@@ -1046,6 +1070,47 @@ def _confirm_real_publication(
         ),
     )
     rendered = MarkdownRenderer().render(snapshot)
+    execution_id = snapshot.publication_attempt_id
+    execution_evidence_id = _evidence_reference(execution_id, plan.id, revision.id)
+    running_readmodel = FirstPublicationReadmodel(
+        session_id=session.id,
+        workspace_id=session.workspace_id,
+        content_item_id=revision.content_item_id,
+        content_revision_id=revision.id,
+        website_account_id=planned["website_account_id"],
+        publication_plan_id=plan.id,
+        execution_request_id=execution_id,
+        verification_status="running",
+        analytics_sync_status="not_configured",
+        funnel_status="provider_pending",
+        public_url=rendered.public_url,
+        evidence_ids=(execution_evidence_id,),
+        mutation_summary=(
+            "execution_status:running",
+            "stage:output_generated",
+            f"path:{rendered.relative_path}",
+            "push:none",
+        ),
+        checksum_bindings={
+            "revision": revision.checksum,
+            "source_draft_id": revision.content_item_id,
+            "source_draft_version": str(revision.source_draft_version),
+            "rendered": rendered.checksum,
+            "snapshot": snapshot.publication_snapshot_checksum,
+        },
+        timeline=(
+            _timeline_event("Plan confirmed", "completed", plan.id),
+            _timeline_event("Execution claimed", "completed", execution_id),
+            _timeline_event("Output generation", "completed", rendered.relative_path),
+            _timeline_event("Git staging", "running", "waiting for exact staging"),
+            _timeline_event("Git commit", "queued", "commit SHA not available yet"),
+            _timeline_event("Website verification", "not_started", "waiting for verified commit"),
+        ),
+    )
+    service.repository.save_first_publication(running_readmodel)
+    service.repository.bind_resource(
+        session_id, "publish", session.workspace_id, "execution_id", execution_id, {"classification": "real"}
+    )
     reference = WebsiteRepositoryReference(
         id=destination["id"],
         workspace_id=session.workspace_id,
@@ -1055,23 +1120,75 @@ def _confirm_real_publication(
         allowed_content_roots=(destination["publication_root"],),
         allowed_media_roots=("static/media",),
     )
-    evidence = GitPublisher().publish(
-        snapshot,
-        reference,
-        rendered,
-        identity=GitIdentity("SocialMediaManager Dogfood", "dogfood@example.invalid"),
-        push=False,
+    try:
+        evidence = GitPublisher().publish(
+            snapshot,
+            reference,
+            rendered,
+            identity=GitIdentity("SocialMediaManager Dogfood", "dogfood@example.invalid"),
+            push=False,
+        )
+        publish_result = evidence.publish_result
+        if not publish_result or not publish_result.commit_created or not publish_result.commit_sha:
+            raise MarkdownWebsiteGitError("markdown_website.git.commit_unverified", "Commit was not verified.")
+        if not (Path(destination["repository_path"]) / rendered.relative_path).exists():
+            raise MarkdownWebsiteGitError("markdown_website.git.output_missing", "Expected output file is missing.")
+        verification = WebsitePublicationVerifier(_safe_fetch).verify(evidence)
+    except (MarkdownWebsiteGitError, MarkdownWebsiteVerificationError, OSError, ValueError) as exc:
+        code = getattr(exc, "code", "markdown_website.execution.failed")
+        failure_evidence_id = _evidence_reference(execution_id, code, rendered.relative_path)
+        failure = FirstPublicationReadmodel(
+            session_id=session.id,
+            workspace_id=session.workspace_id,
+            content_item_id=revision.content_item_id,
+            content_revision_id=revision.id,
+            website_account_id=planned["website_account_id"],
+            publication_plan_id=plan.id,
+            execution_request_id=execution_id,
+            verification_status="failed",
+            analytics_sync_status="not_configured",
+            funnel_status="provider_pending",
+            public_url=rendered.public_url,
+            evidence_ids=(execution_evidence_id, failure_evidence_id),
+            mutation_summary=(
+                "execution_status:failed",
+                "commit_created:false",
+                "commit_sha:",
+                "verification_status:not_started",
+                f"safe_error_code:{code}",
+                f"path:{rendered.relative_path}",
+                "push:none",
+            ),
+            checksum_bindings={
+                "revision": revision.checksum,
+                "source_draft_id": revision.content_item_id,
+                "source_draft_version": str(revision.source_draft_version),
+                "rendered": rendered.checksum,
+                "snapshot": snapshot.publication_snapshot_checksum,
+            },
+            timeline=(
+                _timeline_event("Plan confirmed", "completed", plan.id),
+                _timeline_event("Execution claimed", "completed", execution_id),
+                _timeline_event("Output generation", "completed", rendered.relative_path),
+                _timeline_event("Git staging / commit", "failed", failure_evidence_id, error_code=code),
+                _timeline_event("Website verification", "not_started", "commit was not verified"),
+            ),
+        )
+        service.repository.save_first_publication(failure)
+        return asdict(failure)
+    git_evidence_id = (
+        evidence.publish_result.evidence_ids[0]
+        if evidence.publish_result and evidence.publish_result.evidence_ids
+        else _evidence_reference(execution_id, evidence.publication_commit)
     )
-    verification = WebsitePublicationVerifier(_safe_fetch).verify(evidence)
+    verification_evidence_id = _evidence_reference(execution_id, "verification", verification.status)
     event_rows = (
-        {"phase": "Plan confirmed", "status": "completed", "safe_evidence_summary": plan.id},
-        {
-            "phase": "Website execution claimed",
-            "status": "completed",
-            "safe_evidence_summary": snapshot.publication_attempt_id,
-        },
-        {"phase": "Git commit created", "status": "completed", "safe_evidence_summary": evidence.publication_commit},
-        {"phase": "Public URL verified", "status": verification.status, "safe_evidence_summary": rendered.public_url},
+        _timeline_event("Plan confirmed", "completed", plan.id),
+        _timeline_event("Execution claimed", "completed", execution_id),
+        _timeline_event("Output generation", "completed", rendered.relative_path),
+        _timeline_event("Git staging", "completed", ", ".join(evidence.publish_result.staged_files)),
+        _timeline_event("Git commit created", "completed", evidence.publication_commit),
+        _timeline_event("Public URL verified", verification.status, rendered.public_url),
     )
     readmodel = FirstPublicationReadmodel(
         session_id=session.id,
@@ -1085,14 +1202,19 @@ def _confirm_real_publication(
         analytics_sync_status="not_configured",
         funnel_status="provider_pending",
         public_url=rendered.public_url,
-        evidence_ids=("evidence-" + stable_checksum(evidence.publication_commit)[:12],),
+        evidence_ids=(execution_evidence_id, git_evidence_id, verification_evidence_id),
         mutation_summary=(
             f"commit:{evidence.publication_commit}",
+            "execution_status:completed",
             f"path:{evidence.markdown_relative_path}",
+            f"repository_state_before:{evidence.publish_result.repository_state_before}",
+            f"parent_commit:{evidence.publish_result.parent_commit_sha or 'none'}",
             "push:none",
         ),
         checksum_bindings={
             "revision": revision.checksum,
+            "source_draft_id": revision.content_item_id,
+            "source_draft_version": str(revision.source_draft_version),
             "rendered": rendered.checksum,
             "snapshot": snapshot.publication_snapshot_checksum,
         },
@@ -1162,6 +1284,9 @@ def _doctor(service: AlphaOnboardingService, session_id: str) -> list[dict[str, 
     try:
         destination = _destination(service, session_id)
         repo = Path(destination["repository_path"])
+        head_commit = _git(repo, "rev-parse", "--verify", "HEAD")
+        history_status = "PASS" if head_commit else "WARN"
+        history_details = head_commit[:12] if head_commit else "No commits yet; first commit will be created"
         checks = [
             ("Repository registered", "PASS", destination["repository_display"]),
             ("Git repository", "PASS" if (repo / ".git").exists() else "FAIL", "Worktree detected"),
@@ -1170,6 +1295,7 @@ def _doctor(service: AlphaOnboardingService, session_id: str) -> list[dict[str, 
                 "PASS" if _git(repo, "branch", "--show-current") == destination["branch"] else "FAIL",
                 destination["branch"],
             ),
+            ("Repository history", history_status, history_details),
             ("Write permissions", "PASS" if os.access(repo, os.W_OK) else "FAIL", "Commit-only write access"),
             ("Publication root", "PASS", destination["publication_root"]),
             ("Renderer", "PASS", destination["rendering_profile"]),
@@ -1251,6 +1377,27 @@ def _guard_no_fixture(payload: dict[str, Any]) -> None:
         raise ValueError("Real setup cannot bind fixture or synthetic resources.")
 
 
+def _timeline_event(
+    phase: str,
+    status: str,
+    summary: str = "",
+    *,
+    error_code: str = "",
+    next_action: str = "",
+) -> dict[str, str]:
+    return {
+        "phase": phase,
+        "status": status,
+        "safe_evidence_summary": summary,
+        "error_code": error_code,
+        "next_action": next_action,
+    }
+
+
+def _evidence_reference(*parts: str) -> str:
+    return "evidence-" + stable_checksum(":".join(parts))[:12]
+
+
 def _ensure_phase331_tables(database_path: Path) -> None:
     database_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(database_path) as conn:
@@ -1265,10 +1412,19 @@ def _git(cwd: Path, *args: str) -> str:
 
 
 def _plan_summary(publication: dict[str, Any]) -> str:
+    checksums = publication.get("checksum_bindings") or {}
     fields = (
         ("Workspace", publication.get("workspace_id", "")),
         ("Draft ID", publication.get("content_item_id", "")),
         ("Revision ID", publication.get("content_revision_id", "")),
+        (
+            "Source draft ID",
+            ("source draft " + str(checksums.get("source_draft_id")))
+            if checksums.get("source_draft_id")
+            else publication.get("content_item_id", ""),
+        ),
+        ("Source draft version", checksums.get("source_draft_version", "")),
+        ("Revision checksum", checksums.get("revision", "")),
         ("Publication plan ID", publication.get("publication_plan_id", "")),
         ("Execution ID", publication.get("execution_request_id", "")),
         ("Website account", publication.get("website_account_id", "")),
@@ -1276,6 +1432,8 @@ def _plan_summary(publication: dict[str, Any]) -> str:
         ("Verification", publication.get("verification_status", "")),
         ("Evidence", ", ".join(publication.get("evidence_ids") or ())),
         ("Mutation summary", ", ".join(publication.get("mutation_summary") or ())),
+        ("Rendered checksum", checksums.get("rendered", "")),
+        ("Snapshot checksum", checksums.get("snapshot", "")),
     )
     return (
         "<dl class='facts'>"

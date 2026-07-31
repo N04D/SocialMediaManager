@@ -144,6 +144,22 @@ class WebsiteMutationManifest:
 
 
 @dataclass(frozen=True)
+class MarkdownWebsiteGitPublishResult:
+    repository_state_before: str
+    branch: str
+    generated_files: tuple[str, ...]
+    staged_files: tuple[str, ...]
+    commit_created: bool
+    commit_sha: str
+    parent_commit_sha: str
+    push_requested: bool
+    push_performed: bool
+    verification_ready: bool
+    evidence_ids: tuple[str, ...] = ()
+    safe_warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class WebsitePublicationEvidence:
     repository_reference_id: str
     branch: str
@@ -161,6 +177,7 @@ class WebsitePublicationEvidence:
     verification_status: str
     verification_timestamp: str
     mutation_manifest: WebsiteMutationManifest
+    publish_result: MarkdownWebsiteGitPublishResult | None = None
 
 
 @dataclass(frozen=True)

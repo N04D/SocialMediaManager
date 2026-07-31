@@ -5388,7 +5388,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     )
                     return
             except OwnedPublicationError as exc:
-                json_response(self, {"error": {"code": exc.code, "message": str(exc)}}, status=HTTPStatus.NOT_FOUND)
+                json_response(
+                    self,
+                    {"error": {"code": exc.code, "message": str(exc), **getattr(exc, "details", {})}},
+                    status=HTTPStatus.NOT_FOUND,
+                )
                 return
         if parsed.path.startswith("/api/content/"):
             suffix = parsed.path.removeprefix("/api/content/")
@@ -5411,7 +5415,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     return
             except OwnedPublicationError as exc:
                 status = HTTPStatus.NOT_FOUND if exc.code == "workspace.not_found" else HTTPStatus.CONFLICT
-                json_response(self, {"error": {"code": exc.code, "message": str(exc)}}, status=status)
+                json_response(
+                    self,
+                    {"error": {"code": exc.code, "message": str(exc), **getattr(exc, "details", {})}},
+                    status=status,
+                )
                 return
         if parsed.path.startswith("/api/publication-plans/"):
             suffix = parsed.path.removeprefix("/api/publication-plans/")
@@ -6942,7 +6950,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     json_response(self, service.resume_campaign(campaign_id, json_body))
                     return
             except OwnedPublicationError as exc:
-                json_response(self, {"error": {"code": exc.code, "message": str(exc)}}, status=HTTPStatus.CONFLICT)
+                json_response(
+                    self,
+                    {"error": {"code": exc.code, "message": str(exc), **getattr(exc, "details", {})}},
+                    status=HTTPStatus.CONFLICT,
+                )
                 return
         if path.startswith("/api/content/"):
             suffix = path.removeprefix("/api/content/")
@@ -6967,7 +6979,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     json_response(self, service.preview(content_id, parts[2]))
                     return
             except OwnedPublicationError as exc:
-                json_response(self, {"error": {"code": exc.code, "message": str(exc)}}, status=HTTPStatus.CONFLICT)
+                json_response(
+                    self,
+                    {"error": {"code": exc.code, "message": str(exc), **getattr(exc, "details", {})}},
+                    status=HTTPStatus.CONFLICT,
+                )
                 return
         if path == "/api/publication-plans":
             json_response(self, owned_publication_service().plan_payload())

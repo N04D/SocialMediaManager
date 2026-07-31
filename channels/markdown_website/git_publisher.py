@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .errors import MarkdownWebsiteGitError
 from .models import (
+    MarkdownWebsiteGitPublishResult,
     RenderedMarkdown,
     WebsiteMutationManifest,
     WebsitePublicationEvidence,
@@ -24,6 +25,13 @@ from .paths import assert_allowed_roots, ensure_under, validate_repository_refer
 class GitIdentity:
     name: str
     email: str
+
+
+@dataclass(frozen=True)
+class GitHeadState:
+    state: str
+    branch: str
+    commit_sha: str = ""
 
 
 class GitPublisher:
@@ -44,7 +52,10 @@ class GitPublisher:
     ) -> WebsitePublicationEvidence:
         self.validate_preflight(snapshot, repository, remote_name=remote_name, push=push)
         repo_root = repository.managed_checkout_root.resolve()
-        base_commit = self.git(repo_root, "rev-parse", "HEAD")
+        head_state = self.head_state(repo_root)
+        if head_state.state == "invalid":
+            raise MarkdownWebsiteGitError("markdown_website.git.invalid_head", "Repository HEAD is not usable.")
+        base_commit = head_state.commit_sha
         target_path = ensure_under(repo_root, rendered.relative_path)
         relative_paths = (rendered.relative_path, *media_paths)
         conflict = self.changed_paths(repo_root, relative_paths)
@@ -68,6 +79,14 @@ class GitPublisher:
             snapshot_checksum=snapshot.publication_snapshot_checksum,
         )
         self.git(repo_root, "add", "--", *relative_paths)
+        staged_files = tuple(self.git(repo_root, "diff", "--cached", "--name-only").splitlines())
+        expected_files = tuple(relative_paths)
+        if tuple(sorted(staged_files)) != tuple(sorted(expected_files)):
+            raise MarkdownWebsiteGitError(
+                "markdown_website.git.staged_set_mismatch", "Staged files do not match expected publication files."
+            )
+        if not staged_files:
+            raise MarkdownWebsiteGitError("markdown_website.git.empty_staged_set", "No staged publication changes.")
         message = commit_message(snapshot.variant.title, snapshot)
         self.git(
             repo_root,
@@ -82,13 +101,30 @@ class GitPublisher:
             *relative_paths,
         )
         publication_commit = self.git(repo_root, "rev-parse", "HEAD")
+        self.verify_commit(repo_root, publication_commit, expected_files)
         remote_commit = ""
         verification_status = "mutation_verified"
+        push_performed = False
         if push:
             self.verify_fast_forward(repo_root, remote_name, snapshot.account_config.branch, base_commit)
             self.git(repo_root, "push", remote_name, f"HEAD:{snapshot.account_config.branch}")
             remote_commit = self.git(repo_root, "rev-parse", "HEAD")
             verification_status = "remote_acknowledged"
+            push_performed = True
+        evidence_id = "git-evidence-" + hashlib.sha256(publication_commit.encode()).hexdigest()[:12]
+        publish_result = MarkdownWebsiteGitPublishResult(
+            repository_state_before=head_state.state,
+            branch=head_state.branch or snapshot.account_config.branch,
+            generated_files=(rendered.relative_path,),
+            staged_files=staged_files,
+            commit_created=True,
+            commit_sha=publication_commit,
+            parent_commit_sha=base_commit,
+            push_requested=push,
+            push_performed=push_performed,
+            verification_ready=True,
+            evidence_ids=(evidence_id,),
+        )
         return WebsitePublicationEvidence(
             repository_reference_id=repository.id,
             branch=snapshot.account_config.branch,
@@ -106,6 +142,7 @@ class GitPublisher:
             verification_status=verification_status,
             verification_timestamp="",
             mutation_manifest=manifest,
+            publish_result=publish_result,
         )
 
     def validate_preflight(
@@ -130,6 +167,29 @@ class GitPublisher:
             raise MarkdownWebsiteGitError(
                 "markdown_website.git.conflict_state", "Repository has an active conflict state."
             )
+
+    def head_state(self, repo_root: Path) -> GitHeadState:
+        branch = self.git(repo_root, "branch", "--show-current", check=False) or ""
+        commit = self.git(repo_root, "rev-parse", "--verify", "HEAD", check=False)
+        if commit:
+            self.git(repo_root, "cat-file", "-e", f"{commit}^{{commit}}")
+            return GitHeadState("existing", branch, commit)
+        inside = self.git(repo_root, "rev-parse", "--is-inside-work-tree", check=False)
+        if inside == "true" and branch:
+            return GitHeadState("unborn", branch, "")
+        return GitHeadState("invalid", branch, "")
+
+    def verify_commit(self, repo_root: Path, commit_sha: str, expected_files: tuple[str, ...]) -> None:
+        if not commit_sha:
+            raise MarkdownWebsiteGitError("markdown_website.git.commit_missing", "Commit SHA was not resolved.")
+        self.git(repo_root, "cat-file", "-e", f"{commit_sha}^{{commit}}")
+        current_head = self.git(repo_root, "rev-parse", "HEAD")
+        if current_head != commit_sha:
+            raise MarkdownWebsiteGitError("markdown_website.git.head_mismatch", "Current HEAD does not match commit.")
+        committed_files = set(self.git(repo_root, "show", "--name-only", "--format=", commit_sha).splitlines())
+        missing = sorted(set(expected_files) - committed_files)
+        if missing:
+            raise MarkdownWebsiteGitError("markdown_website.git.commit_files_missing", "Expected files missing.")
 
     def changed_paths(self, repo_root: Path, paths: tuple[str, ...]) -> tuple[str, ...]:
         if not paths:
