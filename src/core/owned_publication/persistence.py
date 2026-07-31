@@ -571,6 +571,7 @@ class DatabaseOwnedPublicationRepository:
             "workspace_id": draft.workspace_id,
             "title": draft.title,
             "summary": draft.summary,
+            "seo_description": draft.seo_description,
             "markdown_body": draft.markdown_body,
             "slug": draft.slug,
             "language": draft.language,
@@ -598,15 +599,17 @@ class DatabaseOwnedPublicationRepository:
                 raise OwnedPublicationError("workspace.conflict", "Draft version conflict.")
             version = expected_version + 1
             existing = connection.execute(
-                "SELECT website_fields_json FROM owned_publication_drafts WHERE id=?", (draft.id,)
+                "SELECT website_fields_json, seo_json FROM owned_publication_drafts WHERE id=?", (draft.id,)
             ).fetchone()
             website_fields = dict(_load_json(existing["website_fields_json"]) if existing else {})
             website_fields["slug"] = draft.slug
+            seo_fields = dict(_load_json(existing["seo_json"]) if existing else {})
+            seo_fields["description"] = draft.seo_description
             connection.execute(
                 """
                 UPDATE owned_publication_drafts
                    SET version=?, title=?, summary=?, markdown_body=?, language=?, author=?, tags_json=?,
-                       website_fields_json=?, last_saved_at=?, updated_at=?, checksum=?
+                       website_fields_json=?, seo_json=?, last_saved_at=?, updated_at=?, checksum=?
                  WHERE id=?
                 """,
                 (
@@ -618,6 +621,7 @@ class DatabaseOwnedPublicationRepository:
                     draft.author,
                     _json(list(draft.tags)),
                     _json(website_fields),
+                    _json(seo_fields),
                     now,
                     now,
                     draft.checksum,
@@ -630,8 +634,8 @@ class DatabaseOwnedPublicationRepository:
                 """
                 INSERT INTO owned_publication_drafts (
                     id, workspace_id, content_item_id, version, title, summary, markdown_body, language,
-                    author, tags_json, website_fields_json, last_saved_at, created_at, updated_at, checksum
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    author, tags_json, website_fields_json, seo_json, last_saved_at, created_at, updated_at, checksum
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     draft.id,
@@ -645,6 +649,7 @@ class DatabaseOwnedPublicationRepository:
                     draft.author,
                     _json(list(draft.tags)),
                     _json({"slug": draft.slug}),
+                    _json({"description": draft.seo_description}),
                     draft.updated_at or now,
                     now,
                     now,
@@ -708,6 +713,7 @@ class DatabaseOwnedPublicationRepository:
         payload = {
             "title": draft.title,
             "summary": draft.summary,
+            "seo_description": draft.seo_description,
             "markdown_body": draft.markdown_body,
             "slug": draft.slug,
             "tags": list(draft.tags),
@@ -762,6 +768,7 @@ class DatabaseOwnedPublicationRepository:
             row["content_checksum"],
             row["created_at"],
             str(payload.get("slug") or ""),
+            str(payload.get("seo_description") or ""),
         )
 
     def list_revisions(self, content_item_id: str) -> list[ContentRevision]:
@@ -1784,6 +1791,7 @@ class DatabaseOwnedPublicationRepository:
 
     def _draft_from_row(self, row: sqlite3.Row) -> ContentDraft:
         website_fields = _load_json(row["website_fields_json"])
+        seo_fields = _load_json(row["seo_json"])
         draft = ContentDraft(
             row["id"],
             row["workspace_id"],
@@ -1797,8 +1805,14 @@ class DatabaseOwnedPublicationRepository:
             int(row["version"]),
             row["updated_at"],
             str(website_fields.get("slug") or ""),
+            str(seo_fields.get("description") or ""),
         )
-        if draft.checksum != row["checksum"]:
+        legacy_checksum = stable_checksum(
+            "\n".join(
+                [draft.id, draft.workspace_id, draft.title, draft.summary, draft.markdown_body, ",".join(draft.tags)]
+            )
+        )
+        if draft.checksum != row["checksum"] and legacy_checksum != row["checksum"]:
             raise OwnedPublicationError("storage.checksum_mismatch", "Draft checksum mismatch.")
         return draft
 

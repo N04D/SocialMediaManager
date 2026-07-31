@@ -13,8 +13,8 @@ class MVPStartupIdentityPhase331Tests(Phase331TestCase):
     def test_build_identity_health_payload_is_safe(self) -> None:
         payload = json.loads(self.page("/health"))
         self.assertIn("commit_sha", payload)
-        self.assertEqual(payload["application_version"], "phase33.1")
-        self.assertEqual(payload["dashboard_contract_version"], "mvp-dashboard-dogfood-0.1")
+        self.assertEqual(payload["application_version"], "phase33.4")
+        self.assertEqual(payload["dashboard_contract_version"], "mvp-dashboard-closed-alpha-0.1")
         self.assertNotIn("content/drafts", json.dumps(payload).lower())
 
     def test_port_conflict_reports_active_build_hint(self) -> None:

@@ -30,11 +30,22 @@ class ContentDraft:
     version: int = 1
     updated_at: str = ""
     slug: str = ""
+    seo_description: str = ""
 
     @property
     def checksum(self) -> str:
         return stable_checksum(
-            "\n".join([self.id, self.workspace_id, self.title, self.summary, self.markdown_body, ",".join(self.tags)])
+            "\n".join(
+                [
+                    self.id,
+                    self.workspace_id,
+                    self.title,
+                    self.summary,
+                    self.seo_description,
+                    self.markdown_body,
+                    ",".join(self.tags),
+                ]
+            )
         )
 
 
@@ -53,6 +64,7 @@ class ContentRevision:
     checksum: str
     created_at: str
     slug: str = ""
+    seo_description: str = ""
 
 
 @dataclass(frozen=True)

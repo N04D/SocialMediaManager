@@ -175,6 +175,7 @@ class OwnedPublicationWorkspaceService:
             1,
             utc_now_iso(),
             str(payload.get("slug") or ""),
+            str(payload.get("seo_description") or ""),
         )
         saved = self.repository.save_draft(
             draft,
@@ -225,6 +226,7 @@ class OwnedPublicationWorkspaceService:
             current.version + 1,
             utc_now_iso(),
             str(payload.get("slug", current.slug)),
+            str(payload.get("seo_description", current.seo_description)),
         )
         saved = self.repository.save_draft(
             updated,
@@ -560,6 +562,7 @@ def _draft_payload(draft: ContentDraft) -> dict[str, Any]:
         "slug": draft.slug,
         "tags": list(draft.tags),
         "summary": draft.summary,
+        "seo_description": draft.seo_description,
         "author": draft.author,
         "language": draft.language,
     }

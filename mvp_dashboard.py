@@ -37,8 +37,8 @@ from src.core.owned_publication.models import stable_checksum, utc_now_iso
 from src.core.owned_publication.service import OwnedPublicationWorkspaceService
 
 CONFIRMATION_TEXT = "Publish this immutable revision using this plan"
-APPLICATION_VERSION = "phase33.1"
-DASHBOARD_CONTRACT_VERSION = "mvp-dashboard-dogfood-0.1"
+APPLICATION_VERSION = "phase33.4"
+DASHBOARD_CONTRACT_VERSION = "mvp-dashboard-closed-alpha-0.1"
 MVP_UI_ROUTES = {"/", "/home", "/setup", "/content", "/calendar", "/analytics", "/operations", "/health"}
 MVP_DEMO_ROOT = Path(tempfile.gettempdir()) / "socialmediamanager-phase33-demo"
 MVP_DATABASE = Path(os.environ.get("SMM_MVP_DATABASE", str(MVP_DEMO_ROOT / "mvp-dogfood.sqlite3"))).expanduser()
@@ -584,6 +584,7 @@ def _first_content_block(service: AlphaOnboardingService, session_id: str) -> st
     <form method="post" action="/setup/{html.escape(session_id)}/create-draft">
       <label>Title<input name="title" value="MVP Dogfood Publication 001" required></label>
       <label>Slug<input name="slug" value="" placeholder="mvp-dogfood-publication" pattern="[a-z0-9][a-z0-9-]*"></label>
+      <label>SEO description<input name="seo_description" value="" placeholder="Custom search description"></label>
       <label>Markdown body<textarea name="markdown_body" required># MVP Dogfood Publication 001
 
 Purpose: Verify the complete owned-publication workflow.
@@ -648,7 +649,7 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
           <label>Language<select id="owned-language" name="language"><option>{html.escape(draft.language)}</option><option>en</option><option>nl</option></select></label>
           <label>Author<input id="owned-author" name="author" value="{html.escape(draft.author)}"></label>
           <label>Tags<input id="owned-tags" name="tags" value="{html.escape(", ".join(draft.tags))}"></label>
-          <label>SEO description<input id="owned-seo" name="seo_description" value="{html.escape(draft.summary)}"></label>
+          <label>SEO description<input id="owned-seo" name="seo_description" value="{html.escape(draft.seo_description)}"></label>
           <label>CTA label<input id="owned-cta" name="cta_label" value="Open the project overview"></label>
           <label>Markdown body<textarea id="owned-body" name="markdown_body" rows="12">{html.escape(draft.markdown_body)}</textarea></label>
           <p id="autosave-status" class="status info" role="status" aria-live="polite">Autosave: saved · version {draft.version}</p>
@@ -678,7 +679,8 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
         expected_version: version,
         title: document.querySelector("#owned-title").value,
         slug: document.querySelector("#owned-slug").value,
-        summary: document.querySelector("#owned-summary").value || document.querySelector("#owned-seo").value,
+        summary: document.querySelector("#owned-summary").value,
+        seo_description: document.querySelector("#owned-seo").value,
         markdown_body: document.querySelector("#owned-body").value,
         language: document.querySelector("#owned-language").value,
         author: document.querySelector("#owned-author").value,
@@ -818,9 +820,10 @@ def _render_timeline(payload: dict[str, Any], status: dict[str, Any]) -> str:
 
 def _render_result(payload: dict[str, Any], status: dict[str, Any], recovery: dict[str, Any]) -> str:
     publication = status["publication"]
+    execution = _execution_status(publication)
     return f"""
     <section class="grid">
-      <article class="panel span-8"><h2>Publication result</h2>{_plan_summary(publication)}<div class="actions"><a class="button" href="{html.escape(publication.get("public_url", "#"))}">View website</a><a class="button secondary" href="/content/{html.escape(publication.get("content_item_id", ""))}/compose">View content</a><a class="button secondary" href="/setup/{html.escape(payload["session"]["id"])}/funnel">View analytics</a></div></article>
+      <article class="panel span-8"><h2>Publication result</h2>{_execution_status_panel(execution)}{_plan_summary(publication)}<div class="actions"><a class="button" href="{html.escape(publication.get("public_url", "#"))}">View website</a><a class="button secondary" href="/content/{html.escape(publication.get("content_item_id", ""))}/compose">View content</a><a class="button secondary" href="/setup/{html.escape(payload["session"]["id"])}/funnel">View analytics</a></div></article>
       <article class="panel span-4"><h2>Guided recovery</h2><p>Problem: Public URL verification is shown with evidence.</p><p>Safe actions: check again, view evidence.</p><p>Blocked action: Social publication will not be retried automatically.</p></article>
     </section>
     """
@@ -922,6 +925,7 @@ def _ensure_real_draft(service: AlphaOnboardingService, session_id: str, payload
         1,
         utc_now_iso(),
         slug,
+        str(payload.get("seo_description") or ""),
     )
     owned_service().repository.save_draft(
         draft, expected_version=None, idempotency_key="phase331-draft-" + session.id, actor=session.created_by
@@ -995,6 +999,9 @@ def _ensure_real_plan(service: AlphaOnboardingService, session_id: str) -> dict[
             "source_draft_id": revision.content_item_id,
             "source_draft_version": str(revision.source_draft_version),
             "plan": stable_checksum(plan.id),
+            "seo_description": revision.seo_description,
+            "seo_description_source": _seo_description_source(revision.seo_description, revision.summary),
+            "seo_description_checksum": stable_checksum(revision.seo_description),
         },
         timeline=({"phase": "Publication plan created", "status": "completed", "safe_evidence_summary": plan.id},),
     )
@@ -1061,6 +1068,9 @@ def _confirm_real_publication(
             slug=revision.slug or slugify(revision.title),
             markdown_body=variant.text,
             summary=revision.summary,
+            description=_seo_description_for_publication(
+                revision.seo_description, revision.summary, revision.markdown_body
+            ),
             language=revision.language,
             author=revision.author,
             published_at=now,
@@ -1097,6 +1107,9 @@ def _confirm_real_publication(
             "source_draft_version": str(revision.source_draft_version),
             "rendered": rendered.checksum,
             "snapshot": snapshot.publication_snapshot_checksum,
+            "seo_description": revision.seo_description,
+            "seo_description_source": _seo_description_source(revision.seo_description, revision.summary),
+            "seo_description_checksum": stable_checksum(revision.seo_description),
         },
         timeline=(
             _timeline_event("Plan confirmed", "completed", plan.id),
@@ -1165,6 +1178,9 @@ def _confirm_real_publication(
                 "source_draft_version": str(revision.source_draft_version),
                 "rendered": rendered.checksum,
                 "snapshot": snapshot.publication_snapshot_checksum,
+                "seo_description": revision.seo_description,
+                "seo_description_source": _seo_description_source(revision.seo_description, revision.summary),
+                "seo_description_checksum": stable_checksum(revision.seo_description),
             },
             timeline=(
                 _timeline_event("Plan confirmed", "completed", plan.id),
@@ -1217,6 +1233,9 @@ def _confirm_real_publication(
             "source_draft_version": str(revision.source_draft_version),
             "rendered": rendered.checksum,
             "snapshot": snapshot.publication_snapshot_checksum,
+            "seo_description": revision.seo_description,
+            "seo_description_source": _seo_description_source(revision.seo_description, revision.summary),
+            "seo_description_checksum": stable_checksum(revision.seo_description),
         },
         timeline=event_rows,
     )
@@ -1398,6 +1417,114 @@ def _evidence_reference(*parts: str) -> str:
     return "evidence-" + stable_checksum(":".join(parts))[:12]
 
 
+def _seo_description_for_publication(seo_description: str, summary: str, markdown_body: str) -> str:
+    if seo_description.strip():
+        return seo_description.strip()
+    if summary.strip():
+        return summary.strip()
+    return " ".join(markdown_body.split())[:160]
+
+
+def _seo_description_source(seo_description: str, summary: str) -> str:
+    if seo_description.strip():
+        return "custom"
+    if summary.strip():
+        return "summary"
+    return "generated"
+
+
+def _mutation_value(publication: dict[str, Any], prefix: str) -> str:
+    marker = prefix + ":"
+    for item in publication.get("mutation_summary") or ():
+        text = str(item)
+        if text.startswith(marker):
+            return text.removeprefix(marker)
+    return ""
+
+
+def _commit_sha(publication: dict[str, Any]) -> str:
+    return _mutation_value(publication, "commit")
+
+
+def _execution_status(publication: dict[str, Any]) -> dict[str, str]:
+    raw = _mutation_value(publication, "execution_status")
+    verification = str(publication.get("verification_status") or "")
+    commit_sha = _commit_sha(publication)
+    timeline = tuple(publication.get("timeline") or ())
+    failed_event = next((item for item in timeline if str(item.get("status")) == "failed"), {})
+    uncertain_event = next((item for item in timeline if str(item.get("status")) == "uncertain"), {})
+    verified_event = next(
+        (
+            item
+            for item in timeline
+            if item.get("phase") in {"Public URL verified", "Verified"} and str(item.get("safe_evidence_summary") or "")
+        ),
+        {},
+    )
+    if raw == "completed" and verification == "publication_verified" and commit_sha and verified_event:
+        return {
+            "status": "Completed",
+            "stage": "Verified",
+            "code": "",
+            "action": "",
+            "aria": "Execution status Completed, stage Verified.",
+        }
+    if raw == "failed" or verification == "failed" or failed_event:
+        stage = str(failed_event.get("phase") or _mutation_value(publication, "stage") or "Failed")
+        code = str(failed_event.get("error_code") or _mutation_value(publication, "safe_error_code") or "safe_error")
+        return {
+            "status": "Failed",
+            "stage": stage,
+            "code": code,
+            "action": "Review evidence and use safe recovery.",
+            "aria": f"Execution status Failed, stage {stage}, safe error {code}.",
+        }
+    if raw == "uncertain" or verification == "uncertain" or uncertain_event:
+        stage = str(uncertain_event.get("phase") or _mutation_value(publication, "stage") or "Uncertain")
+        code = str(uncertain_event.get("error_code") or _mutation_value(publication, "safe_error_code") or "")
+        return {
+            "status": "Uncertain",
+            "stage": stage,
+            "code": code,
+            "action": "Run read-only reconciliation before any retry.",
+            "aria": f"Execution status Uncertain, stage {stage}. Read-only reconciliation is required.",
+        }
+    if raw == "running" or verification == "running":
+        return {
+            "status": "Running",
+            "stage": _mutation_value(publication, "stage") or "Running",
+            "code": "",
+            "action": "",
+            "aria": "Execution status Running.",
+        }
+    if raw == "cancelled":
+        return {
+            "status": "Cancelled",
+            "stage": "Cancelled",
+            "code": "",
+            "action": "",
+            "aria": "Execution status Cancelled.",
+        }
+    return {"status": "Queued", "stage": "Plan confirmed", "code": "", "action": "", "aria": "Execution status Queued."}
+
+
+def _execution_status_panel(execution: dict[str, str]) -> str:
+    fields = [
+        ("Execution status", execution["status"]),
+        ("Execution stage", execution["stage"]),
+    ]
+    if execution.get("code"):
+        fields.append(("Safe error code", execution["code"]))
+    if execution.get("action"):
+        fields.append(("Safe action", execution["action"]))
+    return (
+        f'<section class="status-card" role="status" aria-live="polite" aria-label="{html.escape(execution["aria"])}">'
+        "<h3>Execution status</h3><dl class='facts'>"
+        + "".join(f"<dt>{html.escape(label)}</dt><dd>{html.escape(value)}</dd>" for label, value in fields)
+        + "</dl></section>"
+    )
+
+
 def _ensure_phase331_tables(database_path: Path) -> None:
     database_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(database_path) as conn:
@@ -1425,6 +1552,9 @@ def _plan_summary(publication: dict[str, Any]) -> str:
         ),
         ("Source draft version", checksums.get("source_draft_version", "")),
         ("Revision checksum", checksums.get("revision", "")),
+        ("SEO description", checksums.get("seo_description", "")),
+        ("SEO description source", checksums.get("seo_description_source", "")),
+        ("SEO description checksum", checksums.get("seo_description_checksum", "")),
         ("Publication plan ID", publication.get("publication_plan_id", "")),
         ("Execution ID", publication.get("execution_request_id", "")),
         ("Website account", publication.get("website_account_id", "")),
