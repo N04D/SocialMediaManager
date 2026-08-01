@@ -11,7 +11,7 @@ class MVPRevisionMetadataPhase334Tests(Phase334TestCase):
             session_id, draft_id = self.prepare_publication_with_custom_seo(repo, port)
             publication = mvp_dashboard._ensure_real_plan(mvp_dashboard.alpha_ui_service(), session_id)
             revision = mvp_dashboard.owned_service().repository.get_revision(publication["content_revision_id"])
-            page = self.page(f"/setup/{session_id}/review")
+            page = self.page(f"/content/{draft_id}/compose?setup_session={session_id}")
 
         self.assertEqual(revision.content_item_id, draft_id)
         self.assertEqual(revision.seo_description, self.custom_seo)

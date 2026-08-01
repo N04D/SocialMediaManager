@@ -10,27 +10,24 @@ class MVPDashboardPhase33Tests(Phase33UITestCase):
             "/home",
             "Home",
             "Content",
-            "Calendar",
             "Analytics",
             "Settings",
-            "Operations",
             "Workspace",
             "New article",
             "Recent content",
-            "Needs attention",
-            "Performance snapshot",
+            "Performance",
         )
+        self.assertNotIn('href="/calendar"', html)
+        self.assertNotIn('href="/operations"', html)
         self.assert_no_sensitive_fixture_data(html)
 
     def test_deep_links_and_primary_routes_are_owned_by_mvp_ui(self) -> None:
-        for route in ("/", "/home", "/setup", "/content", "/operations"):
+        for route in ("/", "/home", "/setup", "/content", "/analytics", "/settings", "/operations"):
             self.assertTrue(is_mvp_get_route(route), route)
-        html, status = render_mvp_page("/calendar")
-        self.assertEqual(status.value, 200)
-        self.assertIn("Publication plan calendar", html)
         html, status = render_mvp_page("/settings")
         self.assertEqual(status.value, 200)
-        self.assertIn("Website and system settings", html)
+        self.assertIn("Settings", html)
+        self.assertIn("Advanced operations", html)
 
 
 if __name__ == "__main__":

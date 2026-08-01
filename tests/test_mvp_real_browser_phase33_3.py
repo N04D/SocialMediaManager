@@ -4,7 +4,6 @@ import unittest
 
 from playwright.sync_api import expect, sync_playwright
 
-import mvp_dashboard
 from tests.owned_publication_browser_certification import chromium_executable
 from tests.phase331_support import chromium_available
 from tests.phase333_support import Phase333TestCase
@@ -23,7 +22,7 @@ class MVPRealBrowserPhase333Tests(Phase333TestCase):
                         page = browser.new_page(viewport={"width": 390, "height": 844})
                         page.goto(base_url + "/setup")
                         page.get_by_label("Workspace name").fill("MVP Dogfood 333")
-                        page.get_by_role("button", name="Start real setup").click()
+                        page.get_by_role("button", name="Continue").click()
                         session_id = page.url.rsplit("/", maxsplit=1)[-1]
                         for step in ("welcome", "host_preflight", "workspace", "operator_identity"):
                             page.goto(f"{base_url}/setup/{session_id}/{step}")
@@ -63,20 +62,13 @@ class MVPRealBrowserPhase333Tests(Phase333TestCase):
                         )
                         self.assertEqual(stale_status, 409, stale_payload)
                         self.assertIn("current_server_version", stale_payload["error"])
-                        page.get_by_role("link", name="Continue to publication plan").click()
-                        page.goto(f"{base_url}/setup/{session_id}/publication_plan")
-                        if page.get_by_role("button", name="Create real publication plan").count():
-                            page.get_by_role("button", name="Create real publication plan").click()
-                        page.get_by_text("Technical details").click()
+                        page.locator("#open-publish-review").click()
+                        expect(page.get_by_text("Ready to publish")).to_be_visible()
+                        page.locator("#publish-review").get_by_role("button", name="Publish").click()
+                        expect(page.get_by_text("Published").first).to_be_visible(timeout=10000)
+                        page.get_by_text("Technical details").last.click()
                         expect(page.get_by_text("Revision checksum")).to_be_visible()
-                        page.goto(f"{base_url}/setup/{session_id}/review")
-                        page.get_by_label("Exact confirmation").fill(mvp_dashboard.CONFIRMATION_TEXT)
-                        page.get_by_role("button", name="Publish").click()
-                        page.get_by_text("Technical details").click()
-                        expect(page.get_by_text("execution-")).to_be_visible(timeout=10000)
-                        expect(page.get_by_text("Website saved")).to_be_visible(timeout=10000)
-                        page.goto(f"{base_url}/setup/{session_id}/result")
-                        page.get_by_text("Technical details").click()
+                        expect(page.get_by_text("execution-")).to_be_visible()
                         expect(page.get_by_text("Execution ID")).to_be_visible()
                         expect(page.get_by_text("Published").first).to_be_visible()
                         expect(page.get_by_text("git-evidence-")).to_be_visible()

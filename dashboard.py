@@ -6350,7 +6350,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     status=HTTPStatus.BAD_REQUEST,
                 )
                 return
-        if is_mvp_api_route(path) or path.startswith("/setup/") or path in {"/setup/start-demo", "/setup/start"}:
+        if (
+            is_mvp_api_route(path)
+            or path.startswith("/setup/")
+            or path == "/content/new"
+            or (path.startswith("/content/") and path.endswith("/publish"))
+            or path in {"/setup/start-demo", "/setup/start"}
+        ):
             form_body = parse_qs(body, keep_blank_values=True) if body else {}
             payload, status = handle_mvp_post(path, form_body, json_body if json_body else None)
             try:

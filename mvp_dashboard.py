@@ -39,7 +39,16 @@ from src.core.owned_publication.service import OwnedPublicationWorkspaceService
 CONFIRMATION_TEXT = "Publish this immutable revision using this plan"
 APPLICATION_VERSION = "phase33.4"
 DASHBOARD_CONTRACT_VERSION = "mvp-dashboard-closed-alpha-0.1"
-MVP_UI_ROUTES = {"/", "/home", "/setup", "/content", "/calendar", "/analytics", "/settings", "/operations", "/health"}
+MVP_UI_ROUTES = {
+    "/",
+    "/home",
+    "/setup",
+    "/content",
+    "/analytics",
+    "/settings",
+    "/operations",
+    "/health",
+}
 MVP_DEMO_ROOT = Path(tempfile.gettempdir()) / "socialmediamanager-phase33-demo"
 MVP_DATABASE = Path(os.environ.get("SMM_MVP_DATABASE", str(MVP_DEMO_ROOT / "mvp-dogfood.sqlite3"))).expanduser()
 PRODUCT_ROOT = Path(__file__).resolve().parent
@@ -125,6 +134,35 @@ def handle_mvp_post(
         return json.dumps(payload, ensure_ascii=False), status
     service = alpha_ui_service()
     try:
+        if path == "/content/new":
+            session_id = _field(form, "setup_session")
+            session = service.repository.get_session(session_id) if session_id else None
+            if not session:
+                session_payload = _latest_session(service.status())
+                session = service.repository.get_session(session_payload["id"]) if session_payload else None
+            if not session:
+                return _redirect("/setup")
+            draft_id = _create_real_draft(
+                service,
+                session.id,
+                {
+                    "title": "Untitled article",
+                    "markdown_body": "",
+                    "slug": "",
+                    "idempotency_key": _field(form, "idempotency_key") or "content-new-" + utc_now_iso(),
+                },
+                force_new=True,
+            )
+            return _redirect(f"/content/{draft_id}/compose?setup_session={session.id}")
+        if path.startswith("/content/") and path.endswith("/publish"):
+            draft_id = path.removeprefix("/content/").removesuffix("/publish").strip("/")
+            session_id = _field(form, "setup_session")
+            payload = _step_payload(form)
+            if not session_id:
+                return _redirect(f"/content/{draft_id}/compose")
+            _ensure_real_plan(service, session_id)
+            _confirm_real_publication(service, session_id, payload)
+            return _redirect(f"/content/{draft_id}/compose?setup_session={session_id}&published=1")
         if path == "/setup/start-demo":
             payload = service.demo_start(actor="demo-operator")
             return _redirect(f"/setup/{payload['session']['id']}")
@@ -149,8 +187,10 @@ def handle_mvp_post(
                 draft_id = _ensure_real_draft(service, session_id, payload)
                 return _redirect(f"/content/{draft_id}/compose?setup_session={session_id}")
             if action == "create-plan":
-                _ensure_real_plan(service, session_id)
-                return _redirect(f"/setup/{session_id}/publication_plan")
+                publication = _ensure_real_plan(service, session_id)
+                return _redirect(
+                    f"/content/{publication.get('content_item_id', '')}/compose?setup_session={session_id}"
+                )
             if action == "skip":
                 service.skip_step(session_id, _field(form, "step_id"), payload)
                 return _redirect(f"/setup/{session_id}")
@@ -158,13 +198,18 @@ def handle_mvp_post(
                 service.validate_step(session_id, _field(form, "step_id"), payload)
                 return _redirect(f"/setup/{session_id}/{_field(form, 'step_id')}")
             if action == "review":
-                _ensure_real_plan(service, session_id)
-                return _redirect(f"/setup/{session_id}/review")
+                publication = _ensure_real_plan(service, session_id)
+                return _redirect(
+                    f"/content/{publication.get('content_item_id', '')}/compose?setup_session={session_id}"
+                )
             if action == "confirm":
-                _confirm_real_publication(service, session_id, payload)
-                return _redirect(f"/setup/{session_id}/publish")
+                publication = _confirm_real_publication(service, session_id, payload)
+                return _redirect(
+                    f"/content/{publication.get('content_item_id', '')}/compose?setup_session={session_id}&published=1"
+                )
             if action == "recover":
-                return _redirect(f"/setup/{session_id}/result")
+                draft_id = _bindings(service, session_id).get("draft_id", "")
+                return _redirect(f"/content/{draft_id}/compose?setup_session={session_id}")
     except (AlphaOnboardingError, OwnedPublicationError, ValueError) as exc:
         code = getattr(exc, "code", "phase331.validation")
         message = getattr(exc, "message", str(exc))
@@ -258,29 +303,43 @@ def _render_setup_route(service: AlphaOnboardingService, path: str) -> tuple[str
     except AlphaOnboardingError as exc:
         return render_error_page(exc.code, exc.message), HTTPStatus(exc.status_code)
     if len(parts) == 2:
-        return _layout("Setup", "Resume the guided setup", _render_wizard(payload)), HTTPStatus.OK
+        if payload.get("session", {}).get("mode") == "deterministic_demo":
+            return _layout("Setup", "Resume the guided setup", _render_wizard(payload)), HTTPStatus.OK
+        return _layout("Setup", "Connect your website", _render_setup_landing(service, session_id)), HTTPStatus.OK
     page = parts[2]
-    if page == "review":
-        return _layout(
-            "Final Review",
-            "Confirm the immutable plan",
-            _render_review(payload, _real_review_payload(service, session_id)),
-        ), HTTPStatus.OK
-    if page == "publish":
-        return _layout(
-            "Publication Timeline",
-            "Follow durable execution",
-            _render_timeline(payload, _real_publication_status(service, session_id)),
-        ), HTTPStatus.OK
-    if page == "result":
-        status = _real_publication_status(service, session_id)
-        return _layout(
-            "Publication Result", "Verification and next actions", _render_result(payload, status, {})
-        ), HTTPStatus.OK
+    if payload.get("session", {}).get("mode") == "deterministic_demo":
+        if page == "review":
+            return _layout(
+                "Final Review",
+                "Confirm the immutable plan",
+                _render_review(payload, _real_review_payload(service, session_id)),
+            ), HTTPStatus.OK
+        if page == "publish":
+            return _layout(
+                "Publication Timeline",
+                "Follow durable execution",
+                _render_timeline(payload, _real_publication_status(service, session_id)),
+            ), HTTPStatus.OK
+        if page == "result":
+            status = _real_publication_status(service, session_id)
+            return _layout(
+                "Publication Result", "Verification and next actions", _render_result(payload, status, {})
+            ), HTTPStatus.OK
+        if page == "funnel":
+            return _layout(
+                "First Funnel", "First measurable outcomes", _render_funnel(payload, _real_funnel(service, session_id))
+            ), HTTPStatus.OK
+    if page in {"publication_plan", "review", "publish", "result"}:
+        draft_id = _bindings(service, session_id).get("draft_id", "")
+        if draft_id:
+            return _layout(
+                "Compose",
+                "Article composer",
+                _render_real_composer(service, f"/content/{draft_id}/compose", {"setup_session": [session_id]}),
+            ), HTTPStatus.OK
+        return _layout("Content", "Start an article", _render_content_new(service)), HTTPStatus.OK
     if page == "funnel":
-        return _layout(
-            "First Funnel", "First measurable outcomes", _render_funnel(payload, _real_funnel(service, session_id))
-        ), HTTPStatus.OK
+        return _layout("Analytics", "Content performance", _render_analytics(service)), HTTPStatus.OK
     if page in STEP_ORDER:
         step = service.step(session_id, page)
         return _layout(
@@ -289,18 +348,45 @@ def _render_setup_route(service: AlphaOnboardingService, path: str) -> tuple[str
     return render_error_page("phase331.route_not_found", "The setup step was not found."), HTTPStatus.NOT_FOUND
 
 
+def _render_setup_landing(service: AlphaOnboardingService, session_id: str) -> str:
+    try:
+        destination = _destination(service, session_id)
+    except Exception:
+        return _destination_form(session_id)
+    try:
+        doctor_html = _website_doctor_block(service, session_id)
+    except Exception:
+        doctor_html = '<p class="status warn">Website needs attention</p>'
+    draft_id = _bindings(service, session_id).get("draft_id", "")
+    start = (
+        f'<a class="button" href="/content/{html.escape(draft_id)}/compose?setup_session={html.escape(session_id)}">Start writing</a>'
+        if draft_id
+        else f'<form method="post" action="/content/new"><input type="hidden" name="setup_session" value="{html.escape(session_id)}"><input type="hidden" name="idempotency_key" value="content-first-{html.escape(stable_checksum(session_id + utc_now_iso())[:12])}"><button type="submit">Start writing</button></form>'
+    )
+    return f"""
+    <section class="grid">
+      <article class="panel span-8">
+        <h2>Website connected</h2>
+        <p><span class="status ok">Ready</span> {html.escape(destination.get("display_name", "Website"))}</p>
+        <div class="actions">{start}<a class="button secondary" href="/settings">Settings</a></div>
+      </article>
+      <article class="panel span-4">
+        <h2>Connection</h2>
+        {doctor_html}
+      </article>
+    </section>
+    """
+
+
 def _layout(title: str, subtitle: str, body: str, *, primary: tuple[str, str] | None = None) -> str:
     nav = (
         ("/home", "Home"),
         ("/content", "Content"),
-        ("/calendar", "Calendar"),
         ("/analytics", "Analytics"),
         ("/settings", "Settings"),
     )
-    secondary_nav = (("/operations", "Operations"),)
-    mobile_options = "".join(f'<option value="{href}">{label}</option>' for href, label in (*nav, *secondary_nav))
+    mobile_options = "".join(f'<option value="{href}">{label}</option>' for href, label in nav)
     nav_html = "".join(f'<a href="{href}">{label}</a>' for href, label in nav)
-    secondary_nav_html = "".join(f'<a href="{href}" class="secondary-nav">{label}</a>' for href, label in secondary_nav)
     primary_href, primary_label = primary or ("/content", "New article")
     identity = build_identity()
     return f"""<!doctype html>
@@ -396,7 +482,7 @@ def _layout(title: str, subtitle: str, body: str, *, primary: tuple[str, str] | 
   <a class="skip-link" href="#main">Skip to main content</a>
   <div class="mobile-nav"><label>Navigation<select onchange="if(this.value) location.href=this.value">{mobile_options}</select></label></div>
   <div class="shell">
-    <aside aria-label="Primary navigation"><div class="brand">SocialMediaManager</div><nav>{nav_html}{secondary_nav_html}</nav><div class="workspace"><strong>Workspace</strong><br>Local publishing<br><small>Build {html.escape(identity["commit_sha"][:12])} · {APPLICATION_VERSION}</small></div></aside>
+    <aside aria-label="Primary navigation"><div class="brand">SocialMediaManager</div><nav>{nav_html}</nav><div class="workspace"><strong>Workspace</strong><br>Local publishing<br><small>Build {html.escape(identity["commit_sha"][:12])} · {APPLICATION_VERSION}</small></div></aside>
     <main id="main">
       <header class="topbar"><div><h1>{html.escape(title)}</h1><p class="subtitle">{html.escape(subtitle)}</p></div><a class="button" href="{html.escape(primary_href)}">{html.escape(primary_label)}</a></header>
       <div class="wrap">{body}</div>
@@ -410,62 +496,56 @@ def _render_home(service: AlphaOnboardingService) -> str:
     status = service.status()
     session = _latest_session(status)
     if session:
-        readiness = service.get(session["id"])["readiness"]
         first = asdict(service.repository.first_publication(session["id"]))
-        setup_href = f"/setup/{session['id']}"
-        result_href = f"/setup/{session['id']}/result"
         compose_href = (
             f"/content/{html.escape(first.get('content_item_id', ''))}/compose?setup_session={html.escape(session['id'])}"
             if first.get("content_item_id")
-            else setup_href
+            else "/content/new"
         )
     else:
-        readiness = _empty_readiness()
         first = {}
-        setup_href = "/setup"
-        result_href = "/setup"
         compose_href = "/setup"
     published = first.get("verification_status") == "publication_verified"
-    attention = "Nothing needs attention" if not first or published else "Publishing needs attention"
+    needs_attention = bool(first and not published and first.get("execution_request_id"))
+    attention_html = (
+        '<article class="panel span-6"><h2>Needs attention</h2><p>Publishing needs attention.</p>'
+        f'<a class="button secondary" href="{html.escape(compose_href)}">Open article</a></article>'
+        if needs_attention
+        else ""
+    )
     return f"""
     <section class="hero">
-      <p class="status info">Website publishing</p>
-      <h2>Write once. Publish to your website with a clear review step.</h2>
-      <div class="actions"><a class="button" href="{compose_href}">New article</a><a class="button secondary" href="{setup_href}">Connect website</a></div>
+      <h2>Write the next article.</h2>
+      <div class="actions"><a class="button" href="{compose_href}">New article</a></div>
     </section>
     <section class="section-title"><h2>Recent content</h2><a href="/content">View all</a></section>
     <section class="content-list">
-      {_content_home_row(first, setup_href, result_href)}
+      {_content_home_row(first)}
     </section>
     <section class="grid" style="margin-top:16px">
-      <article class="panel span-4"><h2>Upcoming</h2><p>No scheduled publication yet.</p><a class="button secondary" href="/calendar">Open calendar</a></article>
-      <article class="panel span-4"><h2>Needs attention</h2><p>{html.escape(attention)}</p><a class="button secondary" href="{result_href}">View status</a></article>
-      <article class="panel span-4"><h2>Performance snapshot</h2><p>Waiting for data.</p><a class="button secondary" href="/analytics">Open analytics</a></article>
+      {attention_html}
+      <article class="panel span-6"><h2>Performance</h2><p>Waiting for data.</p><a class="button secondary" href="/analytics">Open analytics</a></article>
     </section>
-    <details style="margin-top:16px"><summary>Technical details</summary>
-      <dl class="facts"><dt>Setup progress</dt><dd>{float(readiness.get("setup_progress") or 0):.0f}%</dd><dt>Website</dt><dd>{_ready_label(readiness.get("website_ready"))}</dd></dl>
-      <p><a href="/operations">Open Operations</a> for system readiness and diagnostics.</p>
-    </details>
     """
 
 
 def _render_setup_index(service: AlphaOnboardingService) -> str:
     sessions = service.status()["sessions"]
     rows = "".join(
-        f'<li><a href="/setup/{html.escape(item["id"])}">{html.escape(item["workspace_id"])}</a> <span class="status info">{html.escape(item["status"])}</span></li>'
+        f'<li><a href="/content">{html.escape(item["workspace_id"])}</a> <span class="status info">Connected</span></li>'
         for item in sessions[:6]
     )
     return f"""
     <section class="grid">
       <article class="panel span-8">
-        <h2>Where do you want to publish?</h2>
-        <p>Connect a Markdown website, then start writing your first article.</p>
+        <h2>Connect your website</h2>
+        <p>Choose where articles should be saved.</p>
         <div class="actions">
-          <form method="post" action="/setup/start"><input type="hidden" name="idempotency_key" value="real-setup-alpha"><label>Workspace name<input name="workspace_id" placeholder="My publishing workspace" required></label><button type="submit">Start real setup</button></form>
+          <form method="post" action="/setup/start"><input type="hidden" name="idempotency_key" value="real-setup-alpha"><label>Workspace name<input name="workspace_id" placeholder="My publishing workspace" required></label><button type="submit">Continue</button></form>
         </div>
         <details><summary>Try a demo instead</summary><p>Demo mode uses synthetic resources and never publishes externally.</p><form method="post" action="/setup/start-demo"><button class="secondary" type="submit">Start demo</button></form></details>
       </article>
-      <article class="panel span-4"><h2>Continue where you left off</h2><ul>{rows or "<li>No active setup yet.</li>"}</ul></article>
+      <article class="panel span-4"><h2>Already connected</h2><ul>{rows or "<li>No website connected yet.</li>"}</ul></article>
     </section>
     """
 
@@ -651,11 +731,87 @@ def _plan_step_block(service: AlphaOnboardingService, session_id: str) -> str:
     return f'<p>Create a locked version of this article so you can review it before publishing.</p><form method="post" action="/setup/{html.escape(session_id)}/create-plan"><button type="submit" aria-label="Create real publication plan">Create review</button></form>'
 
 
+def _session_for_draft(service: AlphaOnboardingService, draft_id: str) -> str:
+    for session in service.status().get("sessions", []):
+        try:
+            if _bindings(service, str(session["id"])).get("draft_id") == draft_id:
+                return str(session["id"])
+        except Exception:
+            continue
+    return ""
+
+
+def _composer_publish_panel(service: AlphaOnboardingService, setup_session: str, draft: ContentDraft) -> str:
+    if not setup_session:
+        return """
+        <section class="status-card">
+          <h3>Publish</h3>
+          <p>Connect a website before publishing this article.</p>
+          <a class="button" href="/setup">Connect website</a>
+        </section>
+        """
+    try:
+        publication = asdict(service.repository.first_publication(setup_session))
+    except Exception:
+        publication = {}
+    if publication.get("execution_request_id"):
+        execution = _execution_status(publication)
+        success = execution["status"] == "Completed"
+        return f"""
+        <section class="status-card" aria-live="polite">
+          <p><strong>Publishing status</strong><br><span class="status {"ok" if success else "warn"}">{html.escape(execution["status"])}</span></p>
+          <h3>{"Published" if success else "Publishing needs attention"}</h3>
+          <p>{"Your article is live." if success else "No second publish will be attempted automatically."}</p>
+          <div class="actions">
+            <a class="button" href="{html.escape(publication.get("public_url", "#"))}">View article</a>
+            <form method="post" action="/content/new"><input type="hidden" name="setup_session" value="{html.escape(setup_session)}"><input type="hidden" name="idempotency_key" value="content-next-{html.escape(stable_checksum(setup_session + utc_now_iso())[:12])}"><button class="secondary" type="submit">Create next article</button></form>
+          </div>
+          <p>Performance: waiting for data.</p>
+          {_technical_details("Technical details", _execution_status_panel(execution) + _plan_summary(publication))}
+        </section>
+        """
+    try:
+        destination = _destination(service, setup_session)
+        preview_url = _public_url_for_revision(destination, draft.slug or slugify(draft.title))
+        website_name = destination.get("display_name", "Website")
+    except Exception:
+        preview_url = ""
+        website_name = "Website"
+    disabled = "disabled" if not preview_url else ""
+    detail_publication = publication if publication.get("publication_plan_id") else {}
+    return f"""
+    <section class="status-card">
+      <h3>Publish</h3>
+      <p>Website <span class="status {"ok" if preview_url else "warn"}">{"Ready" if preview_url else "Connect first"}</span></p>
+      <button type="button" id="open-publish-review" aria-controls="publish-review" aria-expanded="false" {disabled}>Publish</button>
+      <section id="publish-review" class="panel" hidden style="margin-top:12px">
+        <h3>Ready to publish</h3>
+        <p>{html.escape(website_name)}</p>
+        <p>{html.escape(preview_url or "Connect a website first.")}</p>
+        <p>SEO description: {html.escape(draft.seo_description or "Generated from the article")}</p>
+        <p>No remote push will be performed.</p>
+        <div class="actions">
+          <button type="button" class="secondary" id="cancel-publish-review">Cancel</button>
+          <form method="post" action="/content/{html.escape(draft.id)}/publish">
+            <input type="hidden" name="setup_session" value="{html.escape(setup_session)}">
+            <input type="hidden" name="confirmation" value="{html.escape(CONFIRMATION_TEXT)}">
+            <input type="hidden" name="idempotency_key" value="confirm:{html.escape(setup_session)}:{html.escape(draft.id)}">
+            <button type="submit">Publish</button>
+          </form>
+        </div>
+        {_technical_details("Technical details", _plan_summary(detail_publication) if detail_publication else "<p>A locked version and review record will be created before publishing.</p>")}
+      </section>
+    </section>
+    """
+
+
 def _render_real_composer(service: AlphaOnboardingService, path: str, params: dict[str, list[str]]) -> str:
     draft_id = path.removeprefix("/content/").removesuffix("/compose").strip("/")
     if draft_id == "phase33-fixture":
         return _render_demo_fixture_composer()
     setup_session = (params.get("setup_session") or [""])[0]
+    if not setup_session:
+        setup_session = _session_for_draft(service, draft_id)
     workspace_id = ""
     expected_mode = "real_setup"
     if setup_session:
@@ -665,20 +821,12 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
     draft = CanonicalDraftResolver(service).resolve_draft(
         workspace_id, draft_id, expected_mode, session_id=setup_session, require_binding=bool(setup_session)
     )
-    back = (
-        f'<a class="button secondary" href="/setup/{html.escape(setup_session)}/first_content">Back to setup</a>'
-        if setup_session
-        else '<a class="button secondary" href="/content">Back to content</a>'
-    )
-    continue_button = (
-        f'<a class="button" href="/setup/{html.escape(setup_session)}/publication_plan">Continue to publication plan</a>'
-        if setup_session
-        else ""
-    )
+    back = '<a class="button secondary" href="/content">Back to content</a>'
+    publish_panel = _composer_publish_panel(service, setup_session, draft)
     return f"""
     <section class="composer-shell">
       <article class="panel editor-pane">
-        <p class="status info">Saved draft</p>
+        <p class="status info">Draft</p>
         <form id="owned-composer-form" data-content-id="{html.escape(draft.id)}" data-draft-id="{html.escape(draft.id)}" data-workspace-id="{html.escape(draft.workspace_id)}" data-version="{draft.version}">
           <label>Title<input class="composer-title" id="owned-title" name="title" value="{html.escape(draft.title)}" required></label>
           <label>Article editor<textarea id="owned-body" name="markdown_body" rows="18">{html.escape(draft.markdown_body)}</textarea></label>
@@ -708,7 +856,7 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
               <dt>Draft version</dt><dd>{draft.version}</dd>
             </dl>
           </details>
-          <div class="actions"><button id="create-revision" type="button">Create version</button>{continue_button}{back}</div>
+          <div class="actions">{back}</div>
         </form>
       </article>
       <article class="panel">
@@ -717,6 +865,7 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
         <section class="preview"><h3>Website</h3><p>{html.escape(draft.title)}</p><pre>{html.escape(draft.markdown_body[:1000])}</pre></section>
         <section class="preview"><h3>Mastodon</h3><p>Not selected for this publication.</p></section>
         <section class="preview"><h3>LinkedIn</h3><p>{html.escape(draft.summary or draft.title)}</p></section>
+        {publish_panel}
       </article>
     </section>
     <script>
@@ -758,11 +907,11 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
         }} catch (error) {{ status.textContent = "Save failed"; }}
       }}
       form.querySelectorAll("input, textarea, select").forEach((field) => field.addEventListener("input", () => {{ status.textContent = "Saving..."; clearTimeout(timer); timer = setTimeout(autosave, 250); }}));
-      document.querySelector("#create-revision").addEventListener("click", async () => {{
-        const response = await fetch("/api/content/" + encodeURIComponent(form.dataset.contentId) + "/revisions", {{method:"POST", headers:{{"Content-Type":"application/json"}}, body:JSON.stringify({{expected_version: version, idempotency_key:"phase331-revision-" + version}})}});
-        const payload = await response.json();
-        status.textContent = response.ok ? "Version ready" : "Version error";
-      }});
+      const openReview = document.querySelector("#open-publish-review");
+      const review = document.querySelector("#publish-review");
+      const cancelReview = document.querySelector("#cancel-publish-review");
+      if (openReview && review) openReview.addEventListener("click", () => {{ review.hidden = false; openReview.setAttribute("aria-expanded", "true"); }});
+      if (cancelReview && review && openReview) cancelReview.addEventListener("click", () => {{ review.hidden = true; openReview.setAttribute("aria-expanded", "false"); openReview.focus(); }});
     }})();
     </script>
     """
@@ -807,9 +956,31 @@ def _render_content(service: AlphaOnboardingService) -> str:
         for draft in drafts[:10]
     )
     return f"""
-    <section class="hero"><h2>Content is where publishing starts.</h2><div class="actions"><a class="button" href="/setup">New article</a></div></section>
+    <section class="hero"><h2>Write, preview, publish.</h2><div class="actions"><form method="post" action="/content/new"><input type="hidden" name="idempotency_key" value="content-new-{html.escape(stable_checksum(utc_now_iso())[:10])}"><button type="submit">New article</button></form></div></section>
     <section class="section-title"><h2>Drafts</h2></section>
-    <section class="content-list">{rows or '<article class="panel"><h2>No drafts yet</h2><p>Connect a website and start your first article.</p><a class="button" href="/setup">New article</a></article>'}</section>
+    <section class="content-list">{rows or '<article class="panel"><h2>No drafts yet</h2><p>Connect your website once, then write here.</p><a class="button" href="/setup">Connect website</a></article>'}</section>
+    """
+
+
+def _render_content_new(service: AlphaOnboardingService) -> str:
+    session = _latest_session(service.status())
+    if not session:
+        return """
+        <section class="panel">
+          <h2>Connect your website first</h2>
+          <p>Choose where articles should be saved, then start writing.</p>
+          <a class="button" href="/setup">Connect website</a>
+        </section>
+        """
+    return f"""
+    <section class="panel">
+      <h2>Start a new article</h2>
+      <p>Your editor opens as a saved draft.</p>
+      <form method="post" action="/content/new">
+        <input type="hidden" name="idempotency_key" value="content-new-{html.escape(stable_checksum(session["id"] + utc_now_iso())[:12])}">
+        <button type="submit">Open editor</button>
+      </form>
+    </section>
     """
 
 
@@ -945,19 +1116,22 @@ def _render_settings(service: AlphaOnboardingService) -> str:
             website = "Not connected"
     return f"""
     <section class="grid">
-      <article class="panel span-8"><h2>Website</h2><p>{html.escape(website)}</p><a class="button" href="{setup_href}">Connect website</a></article>
-      <article class="panel span-4"><h2>System</h2><p>Advanced readiness and CI checks live in Operations.</p><a class="button secondary" href="/operations">Open Operations</a></article>
+      <article class="panel span-8"><h2>Publishing</h2><p>{html.escape(website)}</p><a class="button" href="{setup_href}">Website settings</a></article>
+      <article class="panel span-4"><h2>Channels</h2><p>LinkedIn and Mastodon are not connected.</p></article>
+      <article class="panel span-4"><h2>Analytics</h2><p>Analytics is optional.</p></article>
+      <article class="panel span-4"><h2>Account</h2><p>Local publishing workspace.</p></article>
+      <article class="panel span-4"><h2>System</h2><p>Build identity and readiness live in the advanced surface.</p><a class="button secondary" href="/operations">Advanced operations</a></article>
     </section>
     """
 
 
-def _content_home_row(first: dict[str, Any], setup_href: str, result_href: str) -> str:
+def _content_home_row(first: dict[str, Any]) -> str:
     if not first or not first.get("content_item_id"):
-        return '<article class="content-row"><div><h3>No article yet</h3><p>Connect your website, then write the first draft.</p></div><a class="button" href="/setup">Start setup</a></article>'
+        return '<article class="content-row"><div><h3>No article yet</h3><p>Connect your website, then write the first draft.</p></div><a class="button" href="/setup">Connect website</a></article>'
     title = "First website article"
     status = "Published" if first.get("verification_status") == "publication_verified" else "In progress"
-    action = "View result" if status == "Published" else "Continue"
-    href = result_href if status == "Published" else setup_href
+    action = "View article" if status == "Published" else "Continue"
+    href = first.get("public_url") if status == "Published" else f"/content/{first.get('content_item_id', '')}/compose"
     return f'<article class="content-row"><div><h3>{title}</h3><p>{html.escape(status)} · Website</p></div><a class="button secondary" href="{html.escape(href)}">{action}</a></article>'
 
 
@@ -1072,24 +1246,35 @@ def _complete_real_step(
 
 
 def _ensure_real_draft(service: AlphaOnboardingService, session_id: str, payload: dict[str, Any]) -> str:
-    session = service.repository.get_session(session_id)
     existing = _bindings(service, session_id).get("draft_id", "")
     if existing:
         return existing
+    return _create_real_draft(service, session_id, payload)
+
+
+def _create_real_draft(
+    service: AlphaOnboardingService,
+    session_id: str,
+    payload: dict[str, Any],
+    *,
+    force_new: bool = False,
+) -> str:
+    session = service.repository.get_session(session_id)
     title = str(payload.get("title") or "MVP Dogfood Publication 001")
-    body = str(payload.get("markdown_body") or "# MVP Dogfood Publication 001\n\nCTA: Open the project overview.")
+    body = str(payload.get("markdown_body") or "")
     slug = str(payload.get("slug") or slugify(title))
     _guard_no_fixture({"title": title, "markdown_body": body})
-    draft_id = "content-" + stable_checksum(session.id + title)[:12]
+    draft_seed = str(payload.get("idempotency_key") or "") if force_new else ""
+    draft_id = "content-" + stable_checksum(session.id + title + draft_seed)[:12]
     draft = ContentDraft(
         draft_id,
         session.workspace_id,
         title,
-        str(payload.get("summary") or "Verify the complete owned-publication workflow."),
+        str(payload.get("summary") or ""),
         body,
-        tuple(_split_csv(str(payload.get("tags") or "dogfood,mvp"))),
+        tuple(_split_csv(str(payload.get("tags") or ""))),
         str(payload.get("language") or "en"),
-        str(payload.get("author") or "Dogfood Operator"),
+        str(payload.get("author") or ""),
         "draft",
         1,
         utc_now_iso(),
@@ -1097,7 +1282,10 @@ def _ensure_real_draft(service: AlphaOnboardingService, session_id: str, payload
         str(payload.get("seo_description") or ""),
     )
     owned_service().repository.save_draft(
-        draft, expected_version=None, idempotency_key="phase331-draft-" + session.id, actor=session.created_by
+        draft,
+        expected_version=None,
+        idempotency_key=str(payload.get("idempotency_key") or "phase331-draft-" + session.id),
+        actor=session.created_by,
     )
     service.repository.bind_resource(
         session_id, "first_content", session.workspace_id, "draft_id", draft.id, {"classification": "real"}

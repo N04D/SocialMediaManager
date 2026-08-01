@@ -24,7 +24,7 @@ class MVPScreenshotsPhase33Tests(Phase33UITestCase):
 
     def test_blocked_uncertain_conflict_states_have_named_ui(self) -> None:
         self.assert_html_contains("/content/phase33-fixture/compose", "Conflict detected")
-        self.assert_html_contains("/home", "Needs attention")
+        self.assert_html_contains("/home", "Performance")
         result = self.complete_demo()
         self.assert_html_contains(f"/setup/{result['payload']['session']['id']}/result", "Recovery")
 

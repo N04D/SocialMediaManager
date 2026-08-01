@@ -4,7 +4,6 @@ import unittest
 
 from playwright.sync_api import expect, sync_playwright
 
-import mvp_dashboard
 from tests.owned_publication_browser_certification import chromium_executable
 from tests.phase331_support import chromium_available
 from tests.phase332_support import Phase332TestCase
@@ -23,7 +22,7 @@ class MVPRealBrowserPhase332Tests(Phase332TestCase):
                         page = browser.new_page(viewport={"width": 1280, "height": 800})
                         page.goto(base_url + "/setup")
                         page.get_by_label("Workspace name").fill("MVP Dogfood 332")
-                        page.get_by_role("button", name="Start real setup").click()
+                        page.get_by_role("button", name="Continue").click()
                         session_id = page.url.rsplit("/", maxsplit=1)[-1]
                         for step in ("welcome", "host_preflight", "workspace", "operator_identity"):
                             page.goto(f"{base_url}/setup/{session_id}/{step}")
@@ -87,18 +86,13 @@ class MVPRealBrowserPhase332Tests(Phase332TestCase):
                         )
                         self.assertEqual(stale_status, 409, stale_payload)
 
-                        page.get_by_role("link", name="Continue to publication plan").click()
-                        page.goto(f"{base_url}/setup/{session_id}/review")
-                        page.goto(f"{base_url}/setup/{session_id}/publication_plan")
-                        page.get_by_text("Technical details").click()
+                        page.locator("#open-publish-review").click()
+                        expect(page.get_by_text("Ready to publish")).to_be_visible()
+                        page.locator("#publish-review").get_by_role("button", name="Publish").click()
+                        expect(page.get_by_text("Published").first).to_be_visible(timeout=10000)
+                        page.get_by_text("Technical details").last.click()
                         expect(page.get_by_text("Publication plan ID")).to_be_visible()
-                        page.goto(f"{base_url}/setup/{session_id}/review")
-                        page.get_by_text("Technical details").click()
-                        expect(page.get_by_text(draft_id, exact=True)).to_be_visible()
-                        page.get_by_label("Exact confirmation").fill(mvp_dashboard.CONFIRMATION_TEXT)
-                        page.get_by_role("button", name="Publish").click()
-                        expect(page.get_by_text("Website saved")).to_be_visible(timeout=10000)
-                        page.goto(f"{base_url}/setup/{session_id}/result")
+                        self.assertIn(draft_id, page.content())
                         expect(page.get_by_text("Published").first).to_be_visible()
                         self.assertTrue((repo / "articles" / "mvp-dogfood-publication-332.md").exists())
                     finally:

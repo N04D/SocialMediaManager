@@ -16,8 +16,9 @@ class MVPDogfoodStabilizationPhase331Tests(Phase331TestCase):
         self.assertNotIn("Demo environment", html)
         composer = self.page(f"/content/{publication['content_item_id']}/compose?setup_session={session_id}")
         self.assertIn("Article composer", composer)
-        self.assertIn("Back to setup", composer)
-        self.assertIn("Continue to publication plan", composer)
+        self.assertIn("Back to content", composer)
+        self.assertIn("Publish", composer)
+        self.assertNotIn("Continue to publication plan", composer)
         self.assertNotIn("phase33-fixture", composer)
 
     def test_fixture_bindings_blocked_in_real_mode(self) -> None:
