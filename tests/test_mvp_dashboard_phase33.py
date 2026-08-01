@@ -13,7 +13,7 @@ class MVPDashboardPhase33Tests(Phase33UITestCase):
             "Analytics",
             "Settings",
             "Workspace",
-            "New article",
+            "Connect website",
             "Recent content",
             "Performance",
         )

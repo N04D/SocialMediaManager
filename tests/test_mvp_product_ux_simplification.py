@@ -8,7 +8,7 @@ from tests.phase334_support import Phase334TestCase
 class MVPProductUXSimplificationTests(Phase334TestCase):
     def test_primary_navigation_is_collapsed_to_four_product_areas(self) -> None:
         home = self.page("/home")
-        self.assertIn("New article", home)
+        self.assertIn("Connect website", home)
         self.assertIn("Recent content", home)
         self.assertIn("Performance", home)
         self.assertIn('href="/home"', home)
@@ -32,6 +32,31 @@ class MVPProductUXSimplificationTests(Phase334TestCase):
         self.assertIn("Production ready", operations)
         self.assertIn("External plugin sandbox ready", operations)
         self.assertIn("CI certification ready", operations)
+
+    def test_returning_user_new_article_is_one_direct_action(self) -> None:
+        session_id = self.start_real_session()
+        home = self.page("/home")
+        self.assertEqual(home.count("New article"), 1)
+        self.assertNotIn('href="/content/new"', home)
+
+        payload, status = self.post(
+            "/content/new",
+            {"setup_session": session_id, "idempotency_key": "product-ux-returning-new-article"},
+        )
+        self.assertEqual(status, 303)
+        self.assertIn("/content/", payload)
+        self.assertIn("/compose", payload)
+        self.assertIn(f"setup_session={session_id}", payload)
+        self.assertNotIn("/setup/", payload)
+
+    def test_settings_contains_publishing_configuration_without_setup_session_link(self) -> None:
+        self.start_real_session()
+        settings = self.page("/settings")
+        self.assertIn("Publishing", settings)
+        self.assertIn("Repository", settings)
+        self.assertIn("Check connection", settings)
+        self.assertNotIn("Website settings", settings)
+        self.assertNotIn('href="/setup/', settings)
 
     def test_content_new_opens_composer_without_setup_pages_for_returning_user(self) -> None:
         session_id = self.start_real_session()

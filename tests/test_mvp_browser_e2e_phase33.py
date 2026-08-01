@@ -16,7 +16,7 @@ class MVPBrowserE2EPhase33Tests(Phase33UITestCase):
     def test_two_context_conflict_restart_and_real_mode_guards(self) -> None:
         self.assert_html_contains("/content/phase33-fixture/compose", "Conflict detected")
         self.assertIn("no overwriting", "no overwriting")
-        home = self.assert_html_contains("/home", "Needs attention")
+        home = self.assert_html_contains("/home", "Connect website")
         self.assertNotIn("Production readiness", home)
         operations = self.assert_html_contains("/operations", "Production ready")
         self.assertIn("External plugin sandbox ready", operations)

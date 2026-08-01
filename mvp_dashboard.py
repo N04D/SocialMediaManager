@@ -232,9 +232,7 @@ def render_mvp_page(path: str, query: str = "") -> tuple[str, HTTPStatus]:
         if path in {"/", "/home"}:
             return _layout("Home", "Start dashboard", _render_home(service)), HTTPStatus.OK
         if path == "/setup":
-            return _layout(
-                "Setup", "Connect your website", _render_setup_index(service), primary=("/setup", "Start writing")
-            ), HTTPStatus.OK
+            return _layout("Setup", "Connect your website", _render_setup_index(service)), HTTPStatus.OK
         if path.startswith("/setup/"):
             return _render_setup_route(service, path)
         if path == "/content":
@@ -387,12 +385,15 @@ def _layout(title: str, subtitle: str, body: str, *, primary: tuple[str, str] | 
     )
     mobile_options = "".join(f'<option value="{href}">{label}</option>' for href, label in nav)
     nav_html = "".join(f'<a href="{href}">{label}</a>' for href, label in nav)
-    primary_href, primary_label = primary or ("/content/new", "New article")
-    primary_action = (
-        _new_article_form(label=primary_label)
-        if primary_href == "/content/new"
-        else f'<a class="button" href="{html.escape(primary_href)}">{html.escape(primary_label)}</a>'
-    )
+    if primary:
+        primary_href, primary_label = primary
+        primary_action = (
+            _new_article_form(label=primary_label)
+            if primary_href == "/content/new"
+            else f'<a class="button" href="{html.escape(primary_href)}">{html.escape(primary_label)}</a>'
+        )
+    else:
+        primary_action = ""
     identity = build_identity()
     return f"""<!doctype html>
 <html lang="en">
@@ -500,7 +501,7 @@ def _layout(title: str, subtitle: str, body: str, *, primary: tuple[str, str] | 
 def _new_article_form(session_id: str = "", label: str = "New article", *, secondary: bool = False) -> str:
     if not session_id:
         css_class = "button secondary" if secondary else "button"
-        return f'<a class="{css_class}" href="/content/new">{html.escape(label)}</a>'
+        return f'<a class="{css_class}" href="/setup">Connect website</a>'
     hidden_session = (
         f'<input type="hidden" name="setup_session" value="{html.escape(session_id)}">' if session_id else ""
     )
@@ -536,10 +537,15 @@ def _render_home(service: AlphaOnboardingService) -> str:
         if needs_attention
         else ""
     )
+    primary_action = (
+        _new_article_form(session["id"], "New article")
+        if session
+        else '<a class="button" href="/setup">Connect website</a>'
+    )
     return f"""
     <section class="hero">
       <h2>Write the next article.</h2>
-      <div class="actions">{_new_article_form(session["id"] if session else "", "New article")}</div>
+      <div class="actions">{primary_action}</div>
     </section>
     <section class="section-title"><h2>Recent content</h2><a href="/content">View all</a></section>
     <section class="content-list">
@@ -651,7 +657,13 @@ def _form_for_step(session: dict[str, Any], step: dict[str, Any], payload: dict[
     """
 
 
-def _destination_form(session_id: str) -> str:
+def _destination_form(
+    session_id: str,
+    *,
+    show_back: bool = True,
+    heading: str = "Connect your website",
+    intro: str = "Choose the Git repository where website articles should be saved.",
+) -> str:
     service = alpha_ui_service()
     try:
         destination = _destination(service, session_id)
@@ -672,8 +684,8 @@ def _destination_form(session_id: str) -> str:
     <form method="post" action="/setup/{html.escape(session_id)}/complete">
       <input type="hidden" name="step_id" value="publication_destination">
       <input type="hidden" name="idempotency_key" value="{html.escape(session_id)}:destination">
-      <h2>Connect your website</h2>
-      <p>Choose the Git repository where website articles should be saved.</p>
+      <h2>{html.escape(heading)}</h2>
+      <p>{html.escape(intro)}</p>
       <label>Website name<input aria-label="Display name" name="display_name" value="{html.escape(display_name)}" placeholder="My website" required></label>
       <label>Repository folder<input aria-label="Managed repository root" name="managed_root" value="{html.escape(managed_root)}" placeholder="{html.escape(str(Path(tempfile.gettempdir())))}" required></label>
       <label>Repository<input name="repository" value="{html.escape(repository)}" placeholder="my-website-repo" required></label>
@@ -686,7 +698,7 @@ def _destination_form(session_id: str) -> str:
         <label>Verification mode<select name="verification_mode"><option value="local_http">Local HTTP origin</option></select></label>
         <label>Instrumentation profile<input name="instrumentation_profile" value="{html.escape(instrumentation_profile)}" placeholder="not_configured"></label>
       </details>
-      <div class="actions"><button type="submit" aria-label="Register destination">Check connection</button><a class="button secondary" href="/setup/{html.escape(session_id)}">Back</a></div>
+      <div class="actions"><button type="submit" aria-label="Register destination">Check connection</button>{f'<a class="button secondary" href="/setup/{html.escape(session_id)}">Back</a>' if show_back else ""}</div>
     </form>
     """
 
@@ -851,7 +863,7 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
       <article class="panel editor-pane">
         <p class="status info">Draft</p>
         <form id="owned-composer-form" data-content-id="{html.escape(draft.id)}" data-draft-id="{html.escape(draft.id)}" data-workspace-id="{html.escape(draft.workspace_id)}" data-version="{draft.version}">
-          <label>Title<input class="composer-title" id="owned-title" name="title" value="{html.escape(draft.title)}" required></label>
+          <label>Title<input class="composer-title" id="owned-title" name="title" value="{html.escape(draft.title)}" required autofocus></label>
           <label>Article editor<textarea id="owned-body" name="markdown_body" rows="18">{html.escape(draft.markdown_body)}</textarea></label>
           <p id="autosave-status" class="status info" role="status" aria-live="polite">Saved</p>
           <p id="conflict-status" class="field-error" role="alert" tabindex="-1"></p>
@@ -979,15 +991,20 @@ def _render_content(service: AlphaOnboardingService) -> str:
         f'<article class="content-row"><div><h3>{html.escape(draft.title)}</h3><p>Draft · edited recently</p></div><a class="button secondary" href="/content/{html.escape(draft.id)}/compose">Continue writing</a></article>'
         for draft in drafts[:10]
     )
+    new_action = (
+        _new_article_form(session["id"], "New article")
+        if session
+        else '<a class="button" href="/setup">Connect website</a>'
+    )
     return f"""
-    <section class="hero"><h2>Write, preview, publish.</h2><div class="actions">{_new_article_form(session["id"] if session else "", "New article")}</div></section>
+    <section class="hero"><h2>Write, preview, publish.</h2><div class="actions">{new_action}</div></section>
     <section class="section-title"><h2>Drafts</h2></section>
     <section class="content-list">{rows or '<article class="panel"><h2>No drafts yet</h2><p>Connect your website once, then write here.</p><a class="button" href="/setup">Connect website</a></article>'}</section>
     """
 
 
 def _render_content_new(service: AlphaOnboardingService) -> str:
-    session = _latest_session(service.status())
+    session = _latest_real_session(service.status())
     if not session:
         return """
         <section class="panel">
@@ -1001,6 +1018,7 @@ def _render_content_new(service: AlphaOnboardingService) -> str:
       <h2>Start a new article</h2>
       <p>Your editor opens as a saved draft.</p>
       <form method="post" action="/content/new">
+        <input type="hidden" name="setup_session" value="{html.escape(session["id"])}">
         <input type="hidden" name="idempotency_key" value="content-new-{html.escape(stable_checksum(session["id"] + utc_now_iso())[:12])}">
         <button type="submit">Open editor</button>
       </form>
@@ -1129,18 +1147,30 @@ def _render_operations(service: AlphaOnboardingService) -> str:
 
 def _render_settings(service: AlphaOnboardingService) -> str:
     status = service.status()
-    session = _latest_session(status)
-    website = "Not connected"
-    setup_href = "/setup"
+    session = _latest_real_session(status)
+    publishing = """
+      <h2>Publishing</h2>
+      <p>Connect a website once. New articles will open directly in the composer after that.</p>
+      <form method="post" action="/setup/start">
+        <input type="hidden" name="idempotency_key" value="settings-publishing-start">
+        <label>Workspace name<input name="workspace_id" placeholder="My publishing workspace" required></label>
+        <button type="submit">Connect website</button>
+      </form>
+    """
     if session:
-        setup_href = f"/setup/{session['id']}"
         try:
             website = _destination(service, session["id"]).get("display_name", "Website connected")
         except Exception:
             website = "Not connected"
+        publishing = f"<h2>Publishing</h2><p>{html.escape(website)}</p>" + _destination_form(
+            session["id"],
+            show_back=False,
+            heading="Website",
+            intro="Update where articles are saved.",
+        )
     return f"""
     <section class="grid">
-      <article class="panel span-8"><h2>Publishing</h2><p>{html.escape(website)}</p><a class="button" href="{setup_href}">Website settings</a></article>
+      <article class="panel span-8">{publishing}</article>
       <article class="panel span-4"><h2>Channels</h2><p>LinkedIn and Mastodon are not connected.</p></article>
       <article class="panel span-4"><h2>Analytics</h2><p>Analytics is optional.</p></article>
       <article class="panel span-4"><h2>Account</h2><p>Local publishing workspace.</p></article>

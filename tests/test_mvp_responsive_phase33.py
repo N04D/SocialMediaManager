@@ -12,8 +12,8 @@ class MVPResponsivePhase33Tests(Phase33UITestCase):
     def test_mobile_setup_and_composer_keep_primary_action_reachable(self) -> None:
         setup = self.assert_html_contains("/setup", "Start demo")
         composer = self.assert_html_contains("/content/phase33-fixture/compose", "Open composer", "Saved")
-        self.assertIn("Start writing", setup)
-        self.assertIn("New article", composer)
+        self.assertIn("Connect your website", setup)
+        self.assertIn("Markdown editor", composer)
 
 
 if __name__ == "__main__":
