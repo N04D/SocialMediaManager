@@ -138,9 +138,9 @@ def handle_mvp_post(
             session_id = _field(form, "setup_session")
             session = service.repository.get_session(session_id) if session_id else None
             if not session:
-                session_payload = _latest_session(service.status())
+                session_payload = _latest_real_session(service.status())
                 session = service.repository.get_session(session_payload["id"]) if session_payload else None
-            if not session:
+            if not session or session.mode != "real_setup":
                 return _redirect("/setup")
             draft_id = _create_real_draft(
                 service,
@@ -387,7 +387,12 @@ def _layout(title: str, subtitle: str, body: str, *, primary: tuple[str, str] | 
     )
     mobile_options = "".join(f'<option value="{href}">{label}</option>' for href, label in nav)
     nav_html = "".join(f'<a href="{href}">{label}</a>' for href, label in nav)
-    primary_href, primary_label = primary or ("/content", "New article")
+    primary_href, primary_label = primary or ("/content/new", "New article")
+    primary_action = (
+        _new_article_form(label=primary_label)
+        if primary_href == "/content/new"
+        else f'<a class="button" href="{html.escape(primary_href)}">{html.escape(primary_label)}</a>'
+    )
     identity = build_identity()
     return f"""<!doctype html>
 <html lang="en">
@@ -484,7 +489,7 @@ def _layout(title: str, subtitle: str, body: str, *, primary: tuple[str, str] | 
   <div class="shell">
     <aside aria-label="Primary navigation"><div class="brand">SocialMediaManager</div><nav>{nav_html}</nav><div class="workspace"><strong>Workspace</strong><br>Local publishing<br><small>Build {html.escape(identity["commit_sha"][:12])} · {APPLICATION_VERSION}</small></div></aside>
     <main id="main">
-      <header class="topbar"><div><h1>{html.escape(title)}</h1><p class="subtitle">{html.escape(subtitle)}</p></div><a class="button" href="{html.escape(primary_href)}">{html.escape(primary_label)}</a></header>
+      <header class="topbar"><div><h1>{html.escape(title)}</h1><p class="subtitle">{html.escape(subtitle)}</p></div>{primary_action}</header>
       <div class="wrap">{body}</div>
     </main>
   </div>
@@ -492,9 +497,24 @@ def _layout(title: str, subtitle: str, body: str, *, primary: tuple[str, str] | 
 </html>"""
 
 
+def _new_article_form(session_id: str = "", label: str = "New article", *, secondary: bool = False) -> str:
+    hidden_session = (
+        f'<input type="hidden" name="setup_session" value="{html.escape(session_id)}">' if session_id else ""
+    )
+    key_seed = session_id or "global"
+    button_class = ' class="secondary"' if secondary else ""
+    return (
+        '<form method="post" action="/content/new">'
+        f"{hidden_session}"
+        f'<input type="hidden" name="idempotency_key" value="content-new-{html.escape(stable_checksum(key_seed + utc_now_iso())[:12])}">'
+        f'<button{button_class} type="submit">{html.escape(label)}</button>'
+        "</form>"
+    )
+
+
 def _render_home(service: AlphaOnboardingService) -> str:
     status = service.status()
-    session = _latest_session(status)
+    session = _latest_real_session(status)
     if session:
         first = asdict(service.repository.first_publication(session["id"]))
         compose_href = (
@@ -516,7 +536,7 @@ def _render_home(service: AlphaOnboardingService) -> str:
     return f"""
     <section class="hero">
       <h2>Write the next article.</h2>
-      <div class="actions"><a class="button" href="{compose_href}">New article</a></div>
+      <div class="actions">{_new_article_form(session["id"] if session else "", "New article")}</div>
     </section>
     <section class="section-title"><h2>Recent content</h2><a href="/content">View all</a></section>
     <section class="content-list">
@@ -1962,6 +1982,11 @@ def _simple_panel(title: str, message: str) -> str:
 def _latest_session(status: dict[str, Any]) -> dict[str, Any] | None:
     sessions = status.get("active_sessions") or status.get("sessions") or []
     return sessions[0] if sessions else None
+
+
+def _latest_real_session(status: dict[str, Any]) -> dict[str, Any] | None:
+    sessions = status.get("active_sessions") or status.get("sessions") or []
+    return next((session for session in sessions if session.get("mode") == "real_setup"), None)
 
 
 def _empty_readiness() -> dict[str, Any]:
