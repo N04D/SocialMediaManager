@@ -38,10 +38,14 @@ class MVPRealBrowserPhase332Tests(Phase332TestCase):
                         )
                         page.get_by_role("button", name="Register destination").click()
                         page.goto(f"{base_url}/setup/{session_id}/website_account")
-                        expect(page.get_by_text("Repository registered")).to_be_visible()
+                        expect(page.get_by_text("Website connected")).to_be_visible()
                         page.get_by_role("button", name="Save account").click()
                         page.goto(f"{base_url}/setup/{session_id}/first_content")
                         page.get_by_label("Title").fill("MVP Dogfood Publication 332")
+                        page.get_by_label("Article body").fill(
+                            "# MVP Dogfood Publication 332\n\nCanonical draft identity."
+                        )
+                        page.get_by_text("SEO & settings").click()
                         page.get_by_label("Slug").fill("mvp-dogfood-publication-332")
                         page.get_by_role("button", name="Create real draft and open composer").click()
                         expect(page.get_by_role("heading", name="Compose", exact=True)).to_be_visible()
@@ -57,17 +61,17 @@ class MVPRealBrowserPhase332Tests(Phase332TestCase):
                         expect(page.get_by_label("Slug")).to_have_value("mvp-dogfood-publication-332")
 
                         page.get_by_label("Title").fill("MVP Dogfood Publication 332 Saved")
-                        expect(page.locator("#autosave-status")).to_contain_text("saved", timeout=8000)
+                        expect(page.locator("#autosave-status")).to_contain_text("Saved", timeout=8000)
                         first_version = int(page.locator("#owned-composer-form").get_attribute("data-version"))
                         self.assertEqual(first_version, api_payload["version"] + 1)
-                        page.get_by_label("Markdown body").fill(
+                        page.get_by_label("Article editor").fill(
                             "# MVP Dogfood Publication 332 Saved\n\nBrowser autosave persisted."
                         )
-                        expect(page.locator("#autosave-status")).to_contain_text("saved", timeout=8000)
+                        expect(page.locator("#autosave-status")).to_contain_text("Saved", timeout=8000)
                         second_version = int(page.locator("#owned-composer-form").get_attribute("data-version"))
                         self.assertEqual(second_version, first_version + 1)
                         page.reload()
-                        expect(page.get_by_label("Markdown body")).to_contain_text("Browser autosave persisted")
+                        expect(page.get_by_label("Article editor")).to_contain_text("Browser autosave persisted")
 
                         ctx_b = browser.new_context(viewport={"width": 1280, "height": 800})
                         ctx_b.close()
@@ -86,14 +90,16 @@ class MVPRealBrowserPhase332Tests(Phase332TestCase):
                         page.get_by_role("link", name="Continue to publication plan").click()
                         page.goto(f"{base_url}/setup/{session_id}/review")
                         page.goto(f"{base_url}/setup/{session_id}/publication_plan")
+                        page.get_by_text("Technical details").click()
                         expect(page.get_by_text("Publication plan ID")).to_be_visible()
                         page.goto(f"{base_url}/setup/{session_id}/review")
+                        page.get_by_text("Technical details").click()
                         expect(page.get_by_text(draft_id, exact=True)).to_be_visible()
                         page.get_by_label("Exact confirmation").fill(mvp_dashboard.CONFIRMATION_TEXT)
                         page.get_by_role("button", name="Publish").click()
-                        expect(page.get_by_text("Git commit created")).to_be_visible(timeout=10000)
+                        expect(page.get_by_text("Website saved")).to_be_visible(timeout=10000)
                         page.goto(f"{base_url}/setup/{session_id}/result")
-                        expect(page.get_by_text("publication_verified")).to_be_visible()
+                        expect(page.get_by_text("Published").first).to_be_visible()
                         self.assertTrue((repo / "articles" / "mvp-dogfood-publication-332.md").exists())
                     finally:
                         browser.close()

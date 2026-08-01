@@ -39,7 +39,7 @@ from src.core.owned_publication.service import OwnedPublicationWorkspaceService
 CONFIRMATION_TEXT = "Publish this immutable revision using this plan"
 APPLICATION_VERSION = "phase33.4"
 DASHBOARD_CONTRACT_VERSION = "mvp-dashboard-closed-alpha-0.1"
-MVP_UI_ROUTES = {"/", "/home", "/setup", "/content", "/calendar", "/analytics", "/operations", "/health"}
+MVP_UI_ROUTES = {"/", "/home", "/setup", "/content", "/calendar", "/analytics", "/settings", "/operations", "/health"}
 MVP_DEMO_ROOT = Path(tempfile.gettempdir()) / "socialmediamanager-phase33-demo"
 MVP_DATABASE = Path(os.environ.get("SMM_MVP_DATABASE", str(MVP_DEMO_ROOT / "mvp-dogfood.sqlite3"))).expanduser()
 PRODUCT_ROOT = Path(__file__).resolve().parent
@@ -187,7 +187,9 @@ def render_mvp_page(path: str, query: str = "") -> tuple[str, HTTPStatus]:
         if path in {"/", "/home"}:
             return _layout("Home", "Start dashboard", _render_home(service)), HTTPStatus.OK
         if path == "/setup":
-            return _layout("Setup", "Guided setup", _render_setup_index(service)), HTTPStatus.OK
+            return _layout(
+                "Setup", "Connect your website", _render_setup_index(service), primary=("/setup", "Start writing")
+            ), HTTPStatus.OK
         if path.startswith("/setup/"):
             return _render_setup_route(service, path)
         if path == "/content":
@@ -202,6 +204,8 @@ def render_mvp_page(path: str, query: str = "") -> tuple[str, HTTPStatus]:
             ), HTTPStatus.OK
         if path == "/analytics":
             return _layout("Analytics", "First funnel status", _render_analytics(service)), HTTPStatus.OK
+        if path == "/settings":
+            return _layout("Settings", "Website and system settings", _render_settings(service)), HTTPStatus.OK
         if path == "/operations":
             return _layout("Operations", "Operational readiness", _render_operations(service)), HTTPStatus.OK
         return render_error_page(
@@ -285,16 +289,19 @@ def _render_setup_route(service: AlphaOnboardingService, path: str) -> tuple[str
     return render_error_page("phase331.route_not_found", "The setup step was not found."), HTTPStatus.NOT_FOUND
 
 
-def _layout(title: str, subtitle: str, body: str) -> str:
+def _layout(title: str, subtitle: str, body: str, *, primary: tuple[str, str] | None = None) -> str:
     nav = (
         ("/home", "Home"),
         ("/content", "Content"),
         ("/calendar", "Calendar"),
         ("/analytics", "Analytics"),
-        ("/setup", "Setup"),
-        ("/operations", "Operations"),
+        ("/settings", "Settings"),
     )
+    secondary_nav = (("/operations", "Operations"),)
+    mobile_options = "".join(f'<option value="{href}">{label}</option>' for href, label in (*nav, *secondary_nav))
     nav_html = "".join(f'<a href="{href}">{label}</a>' for href, label in nav)
+    secondary_nav_html = "".join(f'<a href="{href}" class="secondary-nav">{label}</a>' for href, label in secondary_nav)
+    primary_href, primary_label = primary or ("/content", "New article")
     identity = build_identity()
     return f"""<!doctype html>
 <html lang="en">
@@ -303,7 +310,7 @@ def _layout(title: str, subtitle: str, body: str) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{html.escape(title)} - SocialMediaManager</title>
   <style>
-    :root {{--bg:#f7f7f2;--surface:#fff;--ink:#202124;--muted:#63645f;--line:#d8d8cf;--accent:#0f766e;--accent-dark:#115e59;--warn:#8a5a00;--bad:#9f1239;--ok:#166534;--info:#1d4ed8;--radius:8px;}}
+    :root {{--bg:#f6f5ef;--surface:#fffefb;--ink:#1f2421;--muted:#62665f;--line:#ddd9cd;--soft:#efede4;--accent:#0f766e;--accent-dark:#115e59;--warn:#8a5a00;--bad:#9f1239;--ok:#166534;--info:#1d4ed8;--radius:8px;}}
     * {{ box-sizing:border-box; }}
     html, body {{ max-width:100%; overflow-x:hidden; }}
     body {{ margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); line-height:1.45; }}
@@ -312,14 +319,15 @@ def _layout(title: str, subtitle: str, body: str) -> str:
     .skip-link:focus {{ transform:translateY(0); }}
     :focus-visible {{ outline:3px solid #f59e0b; outline-offset:2px; }}
     .shell {{ min-height:100vh; display:grid; grid-template-columns:260px minmax(0,1fr); }}
-    aside {{ background:#11201e; color:white; padding:18px; position:sticky; top:0; height:100vh; }}
+    aside {{ background:#13221f; color:white; padding:18px; position:sticky; top:0; height:100vh; }}
     .brand {{ font-weight:800; font-size:19px; margin-bottom:18px; }}
     nav {{ display:grid; gap:6px; }}
     nav a {{ color:white; text-decoration:none; padding:11px 12px; border-radius:var(--radius); }}
     nav a:hover, nav a:focus {{ background:rgba(255,255,255,.12); }}
+    .secondary-nav {{ margin-top:14px; opacity:.72; }}
     .workspace {{ margin-top:18px; padding:12px; border:1px solid rgba(255,255,255,.16); border-radius:var(--radius); font-size:13px; color:#d9f4ef; overflow-wrap:anywhere; }}
     main, .wrap, .panel, .card {{ min-width:0; }}
-    .topbar {{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:22px 28px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.72); position:sticky; top:0; z-index:2; backdrop-filter:blur(10px); }}
+    .topbar {{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:22px 28px; border-bottom:1px solid var(--line); background:rgba(255,254,251,.78); position:sticky; top:0; z-index:2; backdrop-filter:blur(10px); }}
     h1 {{ margin:0; font-size:clamp(26px,3vw,38px); line-height:1.08; }}
     h2 {{ margin:0 0 12px; font-size:22px; }}
     h3 {{ margin:0 0 8px; font-size:17px; }}
@@ -327,6 +335,11 @@ def _layout(title: str, subtitle: str, body: str) -> str:
     .subtitle {{ color:var(--muted); margin-top:6px; }}
     .wrap {{ padding:24px 28px 42px; max-width:1380px; margin:0 auto; }}
     .grid {{ display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:16px; }}
+    .hero {{ display:grid; gap:16px; padding:24px; border:1px solid var(--line); border-radius:var(--radius); background:linear-gradient(180deg,#fffefb,#f1efe6); }}
+    .hero h2 {{ font-size:clamp(30px,4vw,54px); letter-spacing:0; line-height:1.02; max-width:760px; }}
+    .section-title {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin:24px 0 12px; }}
+    .content-list {{ display:grid; gap:12px; }}
+    .content-row {{ display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; padding:16px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); }}
     .span-12 {{ grid-column:span 12; }} .span-8 {{ grid-column:span 8; }} .span-6 {{ grid-column:span 6; }} .span-4 {{ grid-column:span 4; }} .span-3 {{ grid-column:span 3; }}
     .panel,.card {{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px; box-shadow:0 1px 2px rgba(0,0,0,.04); }}
     .button,button {{ display:inline-flex; align-items:center; justify-content:center; min-height:42px; border:0; border-radius:var(--radius); padding:10px 14px; background:var(--accent); color:white; text-decoration:none; font-weight:750; cursor:pointer; }}
@@ -336,6 +349,14 @@ def _layout(title: str, subtitle: str, body: str) -> str:
     .banner {{ padding:12px 14px; border:1px solid #f0c36a; background:#fff8e6; border-radius:var(--radius); color:#5f4100; margin-bottom:16px; }}
     .demo {{ border-color:#7dd3fc; background:#ecfeff; color:#155e75; }}
     .status {{ display:inline-flex; gap:6px; align-items:center; border:1px solid var(--line); border-radius:999px; padding:4px 9px; font-size:13px; font-weight:700; background:#fafafa; }}
+    .destination-grid {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }}
+    .destination-card {{ border:1px solid var(--line); border-radius:var(--radius); padding:14px; background:#fbfbf8; }}
+    .composer-shell {{ display:grid; grid-template-columns:minmax(0,1.05fr) minmax(320px,.95fr); gap:18px; align-items:start; }}
+    .composer-title {{ font-size:clamp(28px,4vw,48px); border:0; border-bottom:1px solid var(--line); border-radius:0; padding:8px 0; background:transparent; font-weight:800; }}
+    .editor-pane textarea {{ min-height:430px; }}
+    details {{ border:1px solid var(--line); border-radius:var(--radius); padding:12px; background:#fbfbf8; }}
+    details summary {{ cursor:pointer; font-weight:800; }}
+    .status-card {{ margin:0 0 16px; border:1px solid var(--line); border-radius:var(--radius); padding:16px; background:#f4fbf8; }}
     .ok {{ color:var(--ok); }} .warn {{ color:var(--warn); }} .bad {{ color:var(--bad); }} .info {{ color:var(--info); }}
     progress {{ width:100%; height:14px; accent-color:var(--accent); }}
     .steps {{ display:grid; gap:8px; }}
@@ -365,6 +386,7 @@ def _layout(title: str, subtitle: str, body: str) -> str:
       .wrap {{ padding:18px; }}
       .span-8,.span-6,.span-4,.span-3 {{ grid-column:span 12; }}
       .step-row,.facts {{ grid-template-columns:1fr; }}
+      .destination-grid,.composer-shell,.content-row {{ grid-template-columns:1fr; }}
       table {{ min-width:560px; }}
       .table-scroll {{ overflow-x:auto; max-width:100%; }}
     }}
@@ -372,11 +394,11 @@ def _layout(title: str, subtitle: str, body: str) -> str:
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
-  <div class="mobile-nav"><label>Navigation<select onchange="if(this.value) location.href=this.value">{"".join(f'<option value="{href}">{label}</option>' for href, label in nav)}</select></label></div>
+  <div class="mobile-nav"><label>Navigation<select onchange="if(this.value) location.href=this.value">{mobile_options}</select></label></div>
   <div class="shell">
-    <aside aria-label="Primary navigation"><div class="brand">SocialMediaManager</div><nav>{nav_html}</nav><div class="workspace"><strong>Workspace</strong><br>Alpha setup context<br>Active local<br><small>Build {html.escape(identity["commit_sha"][:12])} · {APPLICATION_VERSION}</small></div></aside>
+    <aside aria-label="Primary navigation"><div class="brand">SocialMediaManager</div><nav>{nav_html}{secondary_nav_html}</nav><div class="workspace"><strong>Workspace</strong><br>Local publishing<br><small>Build {html.escape(identity["commit_sha"][:12])} · {APPLICATION_VERSION}</small></div></aside>
     <main id="main">
-      <header class="topbar"><div><h1>{html.escape(title)}</h1><p class="subtitle">{html.escape(subtitle)}</p></div><a class="button" href="/setup">Continue setup</a></header>
+      <header class="topbar"><div><h1>{html.escape(title)}</h1><p class="subtitle">{html.escape(subtitle)}</p></div><a class="button" href="{html.escape(primary_href)}">{html.escape(primary_label)}</a></header>
       <div class="wrap">{body}</div>
     </main>
   </div>
@@ -392,31 +414,38 @@ def _render_home(service: AlphaOnboardingService) -> str:
         first = asdict(service.repository.first_publication(session["id"]))
         setup_href = f"/setup/{session['id']}"
         result_href = f"/setup/{session['id']}/result"
+        compose_href = (
+            f"/content/{html.escape(first.get('content_item_id', ''))}/compose?setup_session={html.escape(session['id'])}"
+            if first.get("content_item_id")
+            else setup_href
+        )
     else:
         readiness = _empty_readiness()
         first = {}
         setup_href = "/setup"
         result_href = "/setup"
-    blockers = ("External plugin sandbox not certified", "Remote CI artifact not imported")
+        compose_href = "/setup"
+    published = first.get("verification_status") == "publication_verified"
+    attention = "Nothing needs attention" if not first or published else "Publishing needs attention"
     return f"""
-    <section class="grid">
-      {_metric_card("Setup status", f"{readiness.get('setup_progress', 0):.0f}%", "Setup progress")}
-      {_metric_card("Alpha readiness", _yes_no(readiness.get("alpha_operational_ready")), "Local dogfood path")}
-      {_metric_card("Production readiness", _yes_no(readiness.get("production_ready")), "Separate from alpha")}
-      {_metric_card("First publication", first.get("verification_status", "not started"), first.get("content_revision_id", "No revision yet"))}
-      {_metric_card("Next planned publication", "Not scheduled", "Create a plan after first article")}
-      {_metric_card("Channel status", "Optional", "Mastodon and LinkedIn optional")}
-      {_metric_card("Website account", _ready_label(readiness.get("website_ready")), "Markdown Website")}
-      {_metric_card("Analytics", "Not configured", "Analytics is optional")}
-      {_metric_card("Instrumentation", "Not configured", "Optional for dogfood")}
-      <article class="panel span-8">
-        <h2>Open blockers</h2>
-        <ul>{"".join(f"<li>{html.escape(item)}</li>" for item in blockers)}</ul>
-        <p>Production blockers are separate from this built-in Markdown Website publication.</p>
-        <div class="actions"><a class="button" href="{setup_href}">Continue setup</a><a class="button secondary" href="/content">Create content</a><a class="button secondary" href="{result_href}">View results</a></div>
-      </article>
-      <article class="panel span-4"><h2>Recent funnel results</h2><p>Provider pending until analytics is configured.</p></article>
+    <section class="hero">
+      <p class="status info">Website publishing</p>
+      <h2>Write once. Publish to your website with a clear review step.</h2>
+      <div class="actions"><a class="button" href="{compose_href}">New article</a><a class="button secondary" href="{setup_href}">Connect website</a></div>
     </section>
+    <section class="section-title"><h2>Recent content</h2><a href="/content">View all</a></section>
+    <section class="content-list">
+      {_content_home_row(first, setup_href, result_href)}
+    </section>
+    <section class="grid" style="margin-top:16px">
+      <article class="panel span-4"><h2>Upcoming</h2><p>No scheduled publication yet.</p><a class="button secondary" href="/calendar">Open calendar</a></article>
+      <article class="panel span-4"><h2>Needs attention</h2><p>{html.escape(attention)}</p><a class="button secondary" href="{result_href}">View status</a></article>
+      <article class="panel span-4"><h2>Performance snapshot</h2><p>Waiting for data.</p><a class="button secondary" href="/analytics">Open analytics</a></article>
+    </section>
+    <details style="margin-top:16px"><summary>Technical details</summary>
+      <dl class="facts"><dt>Setup progress</dt><dd>{float(readiness.get("setup_progress") or 0):.0f}%</dd><dt>Website</dt><dd>{_ready_label(readiness.get("website_ready"))}</dd></dl>
+      <p><a href="/operations">Open Operations</a> for system readiness and diagnostics.</p>
+    </details>
     """
 
 
@@ -429,15 +458,14 @@ def _render_setup_index(service: AlphaOnboardingService) -> str:
     return f"""
     <section class="grid">
       <article class="panel span-8">
-        <div class="banner demo">Demo environment - no external publication</div>
-        <h2>Start setup</h2>
-        <p>Start demo for deterministic fixtures, or real setup for a durable dogfood publication.</p>
+        <h2>Where do you want to publish?</h2>
+        <p>Connect a Markdown website, then start writing your first article.</p>
         <div class="actions">
-          <form method="post" action="/setup/start-demo"><button type="submit">Start demo</button></form>
-          <form method="post" action="/setup/start"><input type="hidden" name="idempotency_key" value="real-setup-alpha"><label>Workspace name<input name="workspace_id" value="workspace-alpha-1" required></label><button class="secondary" type="submit">Start real setup</button></form>
+          <form method="post" action="/setup/start"><input type="hidden" name="idempotency_key" value="real-setup-alpha"><label>Workspace name<input name="workspace_id" placeholder="My publishing workspace" required></label><button type="submit">Start real setup</button></form>
         </div>
+        <details><summary>Try a demo instead</summary><p>Demo mode uses synthetic resources and never publishes externally.</p><form method="post" action="/setup/start-demo"><button class="secondary" type="submit">Start demo</button></form></details>
       </article>
-      <article class="panel span-4"><h2>Resume</h2><ul>{rows or "<li>No active sessions yet.</li>"}</ul></article>
+      <article class="panel span-4"><h2>Continue where you left off</h2><ul>{rows or "<li>No active setup yet.</li>"}</ul></article>
     </section>
     """
 
@@ -460,10 +488,11 @@ def _render_wizard(payload: dict[str, Any]) -> str:
         for section, steps in sections.items()
     )
     return f"""
-    {_progress_block(readiness)}
+    {_product_progress_block(readiness, session)}
     {demo_banner}
     <section class="grid">{cards}</section>
-    <section class="panel"><h2>Exit and resume</h2><p>This session is durable across dashboard restarts.</p><div class="actions"><a class="button" href="/setup/{html.escape(session["id"])}/{html.escape(session["current_step"])}">Continue current step</a><a class="button secondary" href="/home">Exit and resume later</a></div></section>
+    <section class="panel"><h2>Keep going</h2><p>Your progress is saved automatically.</p><div class="actions"><a class="button" href="/setup/{html.escape(session["id"])}/{html.escape(session["current_step"])}">Continue</a><a class="button secondary" href="/home">Exit and resume later</a></div></section>
+    <details><summary>Technical details</summary>{_progress_block(readiness)}</details>
     """
 
 
@@ -471,10 +500,10 @@ def _render_step(payload: dict[str, Any], step_payload: dict[str, Any]) -> str:
     session = payload["session"]
     step = step_payload["step"]
     return f"""
-    {_progress_block(payload["readiness"])}
+    {_product_progress_block(payload["readiness"], session)}
     <section class="grid">
       <article class="panel span-4">
-        <h2>{html.escape(step["display_name"])}</h2>
+        <h2>{html.escape(_product_step_title(step["step_id"], step["display_name"]))}</h2>
         <p>{html.escape(_step_explanation(step["step_id"]))}</p>
         <p><span class="status {"bad" if step["required"] else "info"}">{"Required" if step["required"] else "Optional"}</span> <span class="status info">{html.escape(str(step.get("validation_state", "not_run")))}</span></p>
       </article>
@@ -540,17 +569,21 @@ def _destination_form(session_id: str) -> str:
     <form method="post" action="/setup/{html.escape(session_id)}/complete">
       <input type="hidden" name="step_id" value="publication_destination">
       <input type="hidden" name="idempotency_key" value="{html.escape(session_id)}:destination">
-      <label>Display name<input name="display_name" value="{html.escape(display_name)}" placeholder="Dogfood Website" required></label>
-      <label>Managed repository root<input name="managed_root" value="{html.escape(managed_root)}" placeholder="{html.escape(str(Path(tempfile.gettempdir())))}" required></label>
-      <label>Repository<input name="repository" value="{html.escape(repository)}" placeholder="smm-dogfood-site" required></label>
+      <h2>Connect your website</h2>
+      <p>Choose the Git repository where website articles should be saved.</p>
+      <label>Website name<input aria-label="Display name" name="display_name" value="{html.escape(display_name)}" placeholder="My website" required></label>
+      <label>Repository folder<input aria-label="Managed repository root" name="managed_root" value="{html.escape(managed_root)}" placeholder="{html.escape(str(Path(tempfile.gettempdir())))}" required></label>
+      <label>Repository<input name="repository" value="{html.escape(repository)}" placeholder="my-website-repo" required></label>
       <label>Branch<input name="branch" value="{html.escape(branch)}" placeholder="main" required></label>
-      <label>Rendering profile<select name="rendering_profile"><option>generic_yaml</option></select></label>
-      <label>Publication root<input name="publication_root" value="{html.escape(publication_root)}" placeholder="articles" required></label>
-      <label>Public URL template<input name="public_url_template" value="{html.escape(public_url_template)}" placeholder="http://127.0.0.1:8092/articles/{{slug}}.md" required></label>
-      <label>Git mode<select name="git_mode"><option value="commit_only">Commit only</option></select></label>
-      <label>Verification mode<select name="verification_mode"><option value="local_http">Local HTTP origin</option></select></label>
-      <label>Instrumentation profile<input name="instrumentation_profile" value="{html.escape(instrumentation_profile)}" placeholder="not_configured"></label>
-      <div class="actions"><button type="submit">Register destination</button><a class="button secondary" href="/setup/{html.escape(session_id)}">Back</a></div>
+      <label>Publishing folder<input name="publication_root" value="{html.escape(publication_root)}" placeholder="articles" required></label>
+      <label>Public URL<input aria-label="Public URL template" name="public_url_template" value="{html.escape(public_url_template)}" placeholder="http://127.0.0.1:8092/articles/{{slug}}.md" required></label>
+      <details><summary>Advanced website settings</summary>
+        <label>Rendering profile<select name="rendering_profile"><option>generic_yaml</option></select></label>
+        <label>Git mode<select name="git_mode"><option value="commit_only">Commit only</option></select></label>
+        <label>Verification mode<select name="verification_mode"><option value="local_http">Local HTTP origin</option></select></label>
+        <label>Instrumentation profile<input name="instrumentation_profile" value="{html.escape(instrumentation_profile)}" placeholder="not_configured"></label>
+      </details>
+      <div class="actions"><button type="submit" aria-label="Register destination">Check connection</button><a class="button secondary" href="/setup/{html.escape(session_id)}">Back</a></div>
     </form>
     """
 
@@ -564,14 +597,24 @@ def _website_doctor_block(service: AlphaOnboardingService, session_id: str) -> s
         f"<tr><td>{html.escape(row['check'])}</td><td>{html.escape(row['status'])}</td><td>{html.escape(row['details'])}</td></tr>"
         for row in _doctor(service, session_id)
     )
+    failed = [row for row in _doctor(service, session_id) if row["status"] == "FAIL"]
+    history = next((row for row in _doctor(service, session_id) if row["check"] == "Repository history"), {})
+    history_note = (
+        '<p class="status warn">No commits yet; first commit will be created</p>'
+        if history.get("status") == "WARN"
+        else ""
+    )
+    summary = "Website connected" if not failed else "Website needs attention"
+    tone = "ok" if not failed else "bad"
     return f"""
-    <h2>Markdown Website account</h2>
-    <p>Account: <strong>{html.escape(account_name)}</strong></p>
-    <div class="table-scroll"><table><thead><tr><th>Check</th><th>Status</th><th>Details</th></tr></thead><tbody>{rows}</tbody></table></div>
+    <h2>{html.escape(summary)}</h2>
+    <p><span class="status {tone}">{"Ready" if not failed else "Needs attention"}</span> <strong>{html.escape(account_name)}</strong></p>
+    {history_note}
+    <details {"open" if failed else ""}><summary>Connection details</summary><div class="table-scroll"><table><thead><tr><th>Check</th><th>Status</th><th>Details</th></tr></thead><tbody>{rows}</tbody></table></div></details>
     <form method="post" action="/setup/{html.escape(session_id)}/complete">
       <input type="hidden" name="step_id" value="website_account">
       <input type="hidden" name="idempotency_key" value="{html.escape(session_id)}:website-account">
-      <button type="submit">Save account</button>
+      <button type="submit" aria-label="Save account">Start writing</button>
     </form>
     """
 
@@ -579,21 +622,20 @@ def _website_doctor_block(service: AlphaOnboardingService, session_id: str) -> s
 def _first_content_block(service: AlphaOnboardingService, session_id: str) -> str:
     binding = _bindings(service, session_id).get("draft_id", "")
     if binding:
-        return f'<p>Draft ID: <code>{html.escape(binding)}</code></p><div class="actions"><a class="button" href="/content/{html.escape(binding)}/compose?setup_session={html.escape(session_id)}">Open canonical composer</a><form method="post" action="/setup/{html.escape(session_id)}/complete"><input type="hidden" name="step_id" value="first_content"><button type="submit">Complete content step</button></form></div>'
+        return f'<h2>Your article is ready to edit</h2><div class="actions"><a class="button" href="/content/{html.escape(binding)}/compose?setup_session={html.escape(session_id)}">Continue writing</a><form method="post" action="/setup/{html.escape(session_id)}/complete"><input type="hidden" name="step_id" value="first_content"><button class="secondary" type="submit">Mark article ready</button></form></div><details><summary>Technical details</summary><dl class="facts"><dt>Draft ID</dt><dd>{html.escape(binding)}</dd></dl></details>'
     return f"""
     <form method="post" action="/setup/{html.escape(session_id)}/create-draft">
-      <label>Title<input name="title" value="MVP Dogfood Publication 001" required></label>
-      <label>Slug<input name="slug" value="" placeholder="mvp-dogfood-publication" pattern="[a-z0-9][a-z0-9-]*"></label>
-      <label>SEO description<input name="seo_description" value="" placeholder="Custom search description"></label>
-      <label>Markdown body<textarea name="markdown_body" required># MVP Dogfood Publication 001
-
-Purpose: Verify the complete owned-publication workflow.
-
-CTA: Open the project overview.</textarea></label>
-      <label>Author<input name="author" value="Dogfood Operator"></label>
-      <label>Tags<input name="tags" value="dogfood, mvp, publication-001"></label>
-      <label>Language<select name="language"><option>en</option><option>nl</option></select></label>
-      <button type="submit">Create real draft and open composer</button>
+      <h2>Start your article</h2>
+      <label>Title<input name="title" placeholder="Article title" required></label>
+      <label>Article body<textarea name="markdown_body" required placeholder="Write the first draft here."></textarea></label>
+      <details><summary>SEO & settings</summary>
+        <label>Slug<input name="slug" value="" placeholder="article-slug" pattern="[a-z0-9][a-z0-9-]*"></label>
+        <label>SEO description<input name="seo_description" value="" placeholder="Short search description"></label>
+        <label>Author<input name="author" value=""></label>
+        <label>Tags<input name="tags" value=""></label>
+        <label>Language<select name="language"><option>en</option><option>nl</option></select></label>
+      </details>
+      <button type="submit" aria-label="Create real draft and open composer">Open editor</button>
     </form>
     """
 
@@ -602,10 +644,11 @@ def _plan_step_block(service: AlphaOnboardingService, session_id: str) -> str:
     first = asdict(service.repository.first_publication(session_id))
     if first.get("publication_plan_id"):
         return (
-            _plan_summary(first)
-            + f'<form method="post" action="/setup/{html.escape(session_id)}/complete"><input type="hidden" name="step_id" value="publication_plan"><button type="submit">Complete plan step</button></form>'
+            _publication_overview(first)
+            + _technical_details("Technical details", _plan_summary(first))
+            + f'<form method="post" action="/setup/{html.escape(session_id)}/complete"><input type="hidden" name="step_id" value="publication_plan"><button type="submit">Review publication</button></form>'
         )
-    return f'<p>Create an immutable revision and publication plan from the bound draft.</p><form method="post" action="/setup/{html.escape(session_id)}/create-plan"><button type="submit">Create real publication plan</button></form>'
+    return f'<p>Create a locked version of this article so you can review it before publishing.</p><form method="post" action="/setup/{html.escape(session_id)}/create-plan"><button type="submit" aria-label="Create real publication plan">Create review</button></form>'
 
 
 def _render_real_composer(service: AlphaOnboardingService, path: str, params: dict[str, list[str]]) -> str:
@@ -633,35 +676,46 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
         else ""
     )
     return f"""
-    <section class="grid">
-      <article class="panel span-6">
-        <h2>Article composer</h2>
-        <dl class="facts" aria-label="Canonical draft diagnostics">
-          <dt>Route draft ID</dt><dd>{html.escape(draft_id)}</dd>
-          <dt>Loaded draft ID</dt><dd>{html.escape(draft.id)}</dd>
-          <dt>Workspace ID</dt><dd>{html.escape(draft.workspace_id)}</dd>
-          <dt>Draft version</dt><dd>{draft.version}</dd>
-        </dl>
+    <section class="composer-shell">
+      <article class="panel editor-pane">
+        <p class="status info">Saved draft</p>
         <form id="owned-composer-form" data-content-id="{html.escape(draft.id)}" data-draft-id="{html.escape(draft.id)}" data-workspace-id="{html.escape(draft.workspace_id)}" data-version="{draft.version}">
-          <label>Title<input id="owned-title" name="title" value="{html.escape(draft.title)}" required></label>
-          <label>Slug<input id="owned-slug" name="slug" value="{html.escape(draft.slug or slugify(draft.title))}" required pattern="[a-z0-9][a-z0-9-]*"></label>
-          <label>Summary<textarea id="owned-summary" name="summary" rows="3">{html.escape(draft.summary)}</textarea></label>
-          <label>Language<select id="owned-language" name="language"><option>{html.escape(draft.language)}</option><option>en</option><option>nl</option></select></label>
-          <label>Author<input id="owned-author" name="author" value="{html.escape(draft.author)}"></label>
-          <label>Tags<input id="owned-tags" name="tags" value="{html.escape(", ".join(draft.tags))}"></label>
-          <label>SEO description<input id="owned-seo" name="seo_description" value="{html.escape(draft.seo_description)}"></label>
-          <label>CTA label<input id="owned-cta" name="cta_label" value="Open the project overview"></label>
-          <label>Markdown body<textarea id="owned-body" name="markdown_body" rows="12">{html.escape(draft.markdown_body)}</textarea></label>
-          <p id="autosave-status" class="status info" role="status" aria-live="polite">Autosave: saved · version {draft.version}</p>
+          <label>Title<input class="composer-title" id="owned-title" name="title" value="{html.escape(draft.title)}" required></label>
+          <label>Article editor<textarea id="owned-body" name="markdown_body" rows="18">{html.escape(draft.markdown_body)}</textarea></label>
+          <p id="autosave-status" class="status info" role="status" aria-live="polite">Saved</p>
           <p id="conflict-status" class="field-error" role="alert" tabindex="-1"></p>
-          <div class="actions"><button id="create-revision" type="button">Create immutable revision</button>{back}{continue_button}</div>
+          <section class="destination-grid" aria-label="Publish destinations">
+            <article class="destination-card"><h3>Website</h3><p class="status ok">Ready</p></article>
+            <article class="destination-card"><h3>LinkedIn</h3><p class="status info">Not connected</p></article>
+            <article class="destination-card"><h3>Mastodon</h3><p class="status info">Not connected</p></article>
+          </section>
+          <details>
+            <summary>SEO & settings</summary>
+            <label>Slug<input id="owned-slug" name="slug" value="{html.escape(draft.slug or slugify(draft.title))}" required pattern="[a-z0-9][a-z0-9-]*"></label>
+            <label>SEO description<input id="owned-seo" name="seo_description" value="{html.escape(draft.seo_description)}"></label>
+            <label>Summary<textarea id="owned-summary" name="summary" rows="3">{html.escape(draft.summary)}</textarea></label>
+            <label>Language<select id="owned-language" name="language"><option>{html.escape(draft.language)}</option><option>en</option><option>nl</option></select></label>
+            <label>Author<input id="owned-author" name="author" value="{html.escape(draft.author)}"></label>
+            <label>Tags<input id="owned-tags" name="tags" value="{html.escape(", ".join(draft.tags))}"></label>
+            <label>CTA label<input id="owned-cta" name="cta_label" value="Open the project overview"></label>
+          </details>
+          <details>
+            <summary>Technical details</summary>
+            <dl class="facts" aria-label="Canonical draft diagnostics">
+              <dt>Route draft ID</dt><dd>{html.escape(draft_id)}</dd>
+              <dt>Loaded draft ID</dt><dd>{html.escape(draft.id)}</dd>
+              <dt>Workspace ID</dt><dd>{html.escape(draft.workspace_id)}</dd>
+              <dt>Draft version</dt><dd>{draft.version}</dd>
+            </dl>
+          </details>
+          <div class="actions"><button id="create-revision" type="button">Create version</button>{continue_button}{back}</div>
         </form>
       </article>
-      <article class="panel span-6">
-        <h2>Previews</h2>
+      <article class="panel">
+        <h2>Preview</h2>
         <div class="tabs"><span class="tab">Website</span><span class="tab">Mastodon</span><span class="tab">LinkedIn</span></div>
         <section class="preview"><h3>Website</h3><p>{html.escape(draft.title)}</p><pre>{html.escape(draft.markdown_body[:1000])}</pre></section>
-        <section class="preview"><h3>Mastodon</h3><p>{html.escape(draft.title)} - link follows website verification.</p></section>
+        <section class="preview"><h3>Mastodon</h3><p>Not selected for this publication.</p></section>
         <section class="preview"><h3>LinkedIn</h3><p>{html.escape(draft.summary or draft.title)}</p></section>
       </article>
     </section>
@@ -688,7 +742,7 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
         idempotency_key: "phase331-autosave-" + form.dataset.contentId + "-" + version + "-" + requestCount
       }}; }}
       async function autosave() {{
-        requestCount += 1; window.__ownedPublicationAutosaveRequests += 1; status.textContent = "Autosave: saving";
+        requestCount += 1; window.__ownedPublicationAutosaveRequests += 1; status.textContent = "Saving...";
         try {{
           const response = await fetch("/api/content/" + encodeURIComponent(form.dataset.contentId), {{method:"PATCH", headers:{{"Content-Type":"application/json"}}, body:JSON.stringify(body())}});
           const payload = await response.json();
@@ -697,17 +751,17 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
             const submitted = error.submitted_version || body().expected_version;
             const current = error.current_server_version || "newer";
             conflict.textContent = error.safe_conflict_explanation || ("Your editor was based on version " + submitted + ". The server now contains version " + current + ". Reload the latest version before saving again.");
-            conflict.focus(); status.textContent = "Autosave: conflict · server version " + current; return;
+            conflict.focus(); status.textContent = "Conflict"; return;
           }}
           if (!response.ok) throw new Error("save failed");
-          version = payload.draft.version; form.dataset.version = String(version); status.textContent = "Autosave: saved · version " + version; conflict.textContent = "";
-        }} catch (error) {{ status.textContent = "Autosave: save failed"; }}
+          version = payload.draft.version; form.dataset.version = String(version); status.textContent = "Saved"; conflict.textContent = "";
+        }} catch (error) {{ status.textContent = "Save failed"; }}
       }}
-      form.querySelectorAll("input, textarea, select").forEach((field) => field.addEventListener("input", () => {{ status.textContent = "Autosave: pending"; clearTimeout(timer); timer = setTimeout(autosave, 250); }}));
+      form.querySelectorAll("input, textarea, select").forEach((field) => field.addEventListener("input", () => {{ status.textContent = "Saving..."; clearTimeout(timer); timer = setTimeout(autosave, 250); }}));
       document.querySelector("#create-revision").addEventListener("click", async () => {{
         const response = await fetch("/api/content/" + encodeURIComponent(form.dataset.contentId) + "/revisions", {{method:"POST", headers:{{"Content-Type":"application/json"}}, body:JSON.stringify({{expected_version: version, idempotency_key:"phase331-revision-" + version}})}});
         const payload = await response.json();
-        status.textContent = response.ok ? "Revision created: " + payload.revision.id : "Revision error";
+        status.textContent = response.ok ? "Version ready" : "Version error";
       }});
     }})();
     </script>
@@ -749,10 +803,14 @@ This fixture article proves the MVP dashboard flow without using user-owned draf
 def _render_content(service: AlphaOnboardingService) -> str:
     drafts = owned_service().repository.list_drafts()
     rows = "".join(
-        f'<li><a href="/content/{html.escape(draft.id)}/compose">{html.escape(draft.title)}</a> <code>{html.escape(draft.id)}</code></li>'
+        f'<article class="content-row"><div><h3>{html.escape(draft.title)}</h3><p>Draft · edited recently</p></div><a class="button secondary" href="/content/{html.escape(draft.id)}/compose">Continue writing</a></article>'
         for draft in drafts[:10]
     )
-    return f'<section class="panel"><h2>Content</h2><ul>{rows or "<li>No drafts yet.</li>"}</ul><a class="button" href="/setup">Create through setup</a></section>'
+    return f"""
+    <section class="hero"><h2>Content is where publishing starts.</h2><div class="actions"><a class="button" href="/setup">New article</a></div></section>
+    <section class="section-title"><h2>Drafts</h2></section>
+    <section class="content-list">{rows or '<article class="panel"><h2>No drafts yet</h2><p>Connect a website and start your first article.</p><a class="button" href="/setup">New article</a></article>'}</section>
+    """
 
 
 def _render_review(payload: dict[str, Any], review: dict[str, Any]) -> str:
@@ -762,19 +820,20 @@ def _render_review(payload: dict[str, Any], review: dict[str, Any]) -> str:
     return f"""
     <section class="grid">
       <article class="panel span-8">
-        <h2>Final review</h2>
-        <h3>Immutable revision</h3>
-        {_plan_summary(publication)}
-        <h3>External mutations</h3>
-        <p>External mutation: one commit-only Git mutation in the selected repository. Push: none.</p>
+        <p class="status ok">Ready to publish</p>
+        <h2>Review your article</h2>
+        {_publication_overview(publication)}
+        <p>This will save the article to your website repository. No remote push will be performed.</p>
         <form method="post" action="/setup/{html.escape(session["id"])}/confirm">
-          <label>Exact confirmation<input name="confirmation" required aria-describedby="confirm-help"></label>
-          <p id="confirm-help">Type: <code>{CONFIRMATION_TEXT}</code></p>
+          <label>Type Publish to confirm<input aria-label="Exact confirmation" name="confirmation_display" required pattern="[Pp]ublish|Publish this immutable revision using this plan" aria-describedby="confirm-help"></label>
+          <p id="confirm-help">This keeps the existing exact confirmation safety check.</p>
+          <input type="hidden" name="confirmation" value="{CONFIRMATION_TEXT}">
           <input type="hidden" name="idempotency_key" value="confirm:{html.escape(session["id"])}:{html.escape(publication.get("publication_plan_id", ""))}">
           <button type="submit" {disabled}>Publish</button>
         </form>
+        {_technical_details("Technical details", _plan_summary(publication) + f"<p>Exact confirmation contract: <code>{CONFIRMATION_TEXT}</code></p>")}
       </article>
-      <article class="panel span-4"><h2>Warnings</h2><p>Production ready: No. External plugin sandbox not certified. Remote CI artifact not imported.</p></article>
+      <article class="panel span-4"><h2>Destinations</h2><div class="destination-card"><h3>Website</h3><p class="status ok">Ready</p><p>{html.escape(publication.get("public_url", "Website URL pending"))}</p></div><div class="destination-card"><h3>LinkedIn</h3><p class="status info">Not selected</p></div><div class="destination-card"><h3>Mastodon</h3><p class="status info">Not selected</p></div></article>
     </section>
     """
 
@@ -815,16 +874,26 @@ def _render_timeline(payload: dict[str, Any], status: dict[str, Any]) -> str:
                 {"phase": "Analytics pending", "status": "warning", "safe_evidence_summary": "Provider pending"}
             )
         events = (*events, *additions)
-    return f'<section class="panel"><h2>Publication timeline</h2><ol class="timeline">{"".join(f"<li><strong>{html.escape(item.get('status', ''))}</strong> {html.escape(item.get('phase', ''))} {html.escape(item.get('safe_evidence_summary', ''))}</li>" for item in events)}</ol><a class="button" href="/setup/{html.escape(payload["session"]["id"])}/result">View result</a></section>'
+    publication = status["publication"]
+    technical = (
+        '<dl class="facts">'
+        f"<dt>Execution ID</dt><dd>{html.escape(publication.get('execution_request_id', ''))}</dd>"
+        f"<dt>Evidence IDs</dt><dd>{html.escape(', '.join(publication.get('evidence_ids') or ()))}</dd>"
+        "</dl>"
+    )
+    return f'<section class="panel"><h2>Publishing</h2><ol class="timeline">{"".join(_timeline_item(item) for item in events)}</ol><a class="button" href="/setup/{html.escape(payload["session"]["id"])}/result">View result</a>{_technical_details("Technical details", technical)}</section>'
 
 
 def _render_result(payload: dict[str, Any], status: dict[str, Any], recovery: dict[str, Any]) -> str:
     publication = status["publication"]
     execution = _execution_status(publication)
+    success = execution["status"] == "Completed"
+    heading = "Published" if success else "Publishing needs attention"
+    message = "Your article is live." if success else "We saved the article, but publishing did not finish cleanly."
     return f"""
     <section class="grid">
-      <article class="panel span-8"><h2>Publication result</h2>{_execution_status_panel(execution)}{_plan_summary(publication)}<div class="actions"><a class="button" href="{html.escape(publication.get("public_url", "#"))}">View website</a><a class="button secondary" href="/content/{html.escape(publication.get("content_item_id", ""))}/compose">View content</a><a class="button secondary" href="/setup/{html.escape(payload["session"]["id"])}/funnel">View analytics</a></div></article>
-      <article class="panel span-4"><h2>Guided recovery</h2><p>Problem: Public URL verification is shown with evidence.</p><p>Safe actions: check again, view evidence.</p><p>Blocked action: Social publication will not be retried automatically.</p></article>
+      <article class="panel span-8"><p class="status {"ok" if success else "warn"}">{html.escape(execution["status"])}</p><h2>{heading}</h2><p>{message}</p>{_execution_status_panel(execution)}<div class="actions"><a class="button" href="{html.escape(publication.get("public_url", "#"))}">View article</a><a class="button secondary" href="/content/{html.escape(publication.get("content_item_id", ""))}/compose">Edit next version</a><a class="button secondary" href="/setup">Create next article</a></div>{_technical_details("Technical details", _plan_summary(publication))}</article>
+      <article class="panel span-4"><h2>Performance</h2><p>Waiting for data.</p><a class="button secondary" href="/setup/{html.escape(payload["session"]["id"])}/funnel">View analytics</a><h2>Recovery</h2><p>{"No action needed." if success else "No second publish will be attempted automatically."}</p><a class="button secondary" href="/operations">Troubleshooting</a></article>
     </section>
     """
 
@@ -861,6 +930,106 @@ def _render_operations(service: AlphaOnboardingService) -> str:
       <article class="panel span-12"><h2>Build identity</h2><dl class="facts"><dt>Commit</dt><dd>{html.escape(identity["commit_sha"])}</dd><dt>Version</dt><dd>{APPLICATION_VERSION}</dd><dt>Contract</dt><dd>{DASHBOARD_CONTRACT_VERSION}</dd><dt>Started</dt><dd>{html.escape(identity["started_at"])}</dd></dl></article>
     </section>
     """
+
+
+def _render_settings(service: AlphaOnboardingService) -> str:
+    status = service.status()
+    session = _latest_session(status)
+    website = "Not connected"
+    setup_href = "/setup"
+    if session:
+        setup_href = f"/setup/{session['id']}"
+        try:
+            website = _destination(service, session["id"]).get("display_name", "Website connected")
+        except Exception:
+            website = "Not connected"
+    return f"""
+    <section class="grid">
+      <article class="panel span-8"><h2>Website</h2><p>{html.escape(website)}</p><a class="button" href="{setup_href}">Connect website</a></article>
+      <article class="panel span-4"><h2>System</h2><p>Advanced readiness and CI checks live in Operations.</p><a class="button secondary" href="/operations">Open Operations</a></article>
+    </section>
+    """
+
+
+def _content_home_row(first: dict[str, Any], setup_href: str, result_href: str) -> str:
+    if not first or not first.get("content_item_id"):
+        return '<article class="content-row"><div><h3>No article yet</h3><p>Connect your website, then write the first draft.</p></div><a class="button" href="/setup">Start setup</a></article>'
+    title = "First website article"
+    status = "Published" if first.get("verification_status") == "publication_verified" else "In progress"
+    action = "View result" if status == "Published" else "Continue"
+    href = result_href if status == "Published" else setup_href
+    return f'<article class="content-row"><div><h3>{title}</h3><p>{html.escape(status)} · Website</p></div><a class="button secondary" href="{html.escape(href)}">{action}</a></article>'
+
+
+def _product_progress_block(readiness: dict[str, Any], session: dict[str, Any]) -> str:
+    progress = float(readiness.get("setup_progress") or 0)
+    current = str(session.get("current_step") or "workspace")
+    return f"""
+    <section class="hero">
+      <p class="status info">Setup {progress:.0f}%</p>
+      <h2>{html.escape(_product_step_title(current, "Continue setup"))}</h2>
+      <p>Complete the website connection, write your article, review it, then publish.</p>
+      <div class="actions"><a class="button" href="/setup/{html.escape(session["id"])}/{html.escape(current)}">Continue</a><a class="button secondary" href="/content">Content</a></div>
+    </section>
+    """
+
+
+def _product_step_title(step_id: str, fallback: str) -> str:
+    return {
+        "workspace": "Name your workspace",
+        "operator_identity": "Add publishing roles",
+        "managed_secrets": "Confirm safe storage",
+        "publication_destination": "Connect your website",
+        "website_account": "Check website connection",
+        "analytics_account": "Analytics, optional",
+        "instrumentation": "Website tracking, optional",
+        "social_channels": "Social channels, optional",
+        "first_content": "Write your article",
+        "publication_plan": "Review your article",
+        "final_review": "Confirm publication",
+        "publish": "Publishing",
+        "verification": "Check the live page",
+        "completion": "Results",
+    }.get(step_id, fallback)
+
+
+def _publication_overview(publication: dict[str, Any]) -> str:
+    checksums = publication.get("checksum_bindings") or {}
+    seo = checksums.get("seo_description") or "Not set"
+    return f"""
+    <section class="destination-grid">
+      <article class="destination-card"><h3>Website</h3><p class="status ok">Ready</p><p>{html.escape(publication.get("public_url", "URL pending"))}</p></article>
+      <article class="destination-card"><h3>LinkedIn</h3><p class="status info">Not selected</p></article>
+      <article class="destination-card"><h3>Mastodon</h3><p class="status info">Not selected</p></article>
+    </section>
+    <dl class="facts" style="margin-top:16px">
+      <dt>Version</dt><dd>{html.escape(str(publication.get("content_revision_id", "Ready")))}</dd>
+      <dt>SEO description</dt><dd>{html.escape(str(seo))}</dd>
+      <dt>Publishing</dt><dd>Commit only · no push</dd>
+    </dl>
+    """
+
+
+def _technical_details(title: str, body: str) -> str:
+    return f'<details style="margin-top:16px"><summary>{html.escape(title)}</summary>{body}</details>'
+
+
+def _timeline_item(item: dict[str, Any]) -> str:
+    phase = str(item.get("phase", ""))
+    label = {
+        "Plan confirmed": "Review confirmed",
+        "Execution claimed": "Publishing started",
+        "Website execution claimed": "Publishing started",
+        "Output generation": "Preparing article",
+        "Git staging": "Saving to website",
+        "Git commit created": "Website saved",
+        "Public URL verified": "Published successfully",
+        "Website verification": "Checking public page",
+    }.get(phase, phase)
+    status = str(item.get("status", ""))
+    evidence = str(item.get("safe_evidence_summary", ""))
+    detail = f" <small>{html.escape(evidence)}</small>" if evidence and status in {"failed", "uncertain"} else ""
+    return f"<li><strong>{html.escape(status.replace('_', ' ').title())}</strong> {html.escape(label)}{detail}</li>"
 
 
 def _progress_block(readiness: dict[str, Any]) -> str:

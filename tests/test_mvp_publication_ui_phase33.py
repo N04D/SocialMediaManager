@@ -9,29 +9,30 @@ class MVPPublicationUIPhase33Tests(Phase33UITestCase):
         session_id = result["payload"]["session"]["id"]
         review = self.assert_html_contains(
             f"/setup/{session_id}/review",
-            "Final review",
-            "Immutable revision",
-            "External mutations",
+            "Review your article",
+            "Ready to publish",
+            "Technical details",
             confirmation_text(),
         )
         self.assertIn("idempotency_key", review)
-        self.assertIn("Exact confirmation", review)
+        self.assertIn("Type Publish to confirm", review)
 
     def test_timeline_result_warning_uncertain_and_reconciliation(self) -> None:
         result = self.complete_demo()
         session_id = result["payload"]["session"]["id"]
         timeline = self.assert_html_contains(
             f"/setup/{session_id}/publish",
-            "Plan confirmed",
-            "Website execution claimed",
-            "Git commit created",
+            "Publishing",
+            "Review confirmed",
+            "Publishing started",
+            "Website saved",
             "Analytics pending",
         )
-        self.assertIn("warning", timeline)
+        self.assertIn("Warning", timeline)
         page = self.assert_html_contains(
-            f"/setup/{session_id}/result", "Guided recovery", "Safe actions", "Blocked action"
+            f"/setup/{session_id}/result", "Recovery", "No second publish will be attempted automatically"
         )
-        self.assertIn("Social publication will not be retried automatically", page)
+        self.assertIn("Technical details", page)
 
 
 if __name__ == "__main__":

@@ -12,13 +12,13 @@ class MVPDashboardPhase33Tests(Phase33UITestCase):
             "Content",
             "Calendar",
             "Analytics",
-            "Setup",
+            "Settings",
             "Operations",
             "Workspace",
-            "Setup status",
-            "Alpha readiness",
-            "Production readiness",
-            "Open blockers",
+            "New article",
+            "Recent content",
+            "Needs attention",
+            "Performance snapshot",
         )
         self.assert_no_sensitive_fixture_data(html)
 
@@ -28,6 +28,9 @@ class MVPDashboardPhase33Tests(Phase33UITestCase):
         html, status = render_mvp_page("/calendar")
         self.assertEqual(status.value, 200)
         self.assertIn("Publication plan calendar", html)
+        html, status = render_mvp_page("/settings")
+        self.assertEqual(status.value, 200)
+        self.assertIn("Website and system settings", html)
 
 
 if __name__ == "__main__":

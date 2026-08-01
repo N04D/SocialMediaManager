@@ -8,14 +8,13 @@ class MVPOnboardingUIPhase33Tests(Phase33UITestCase):
         session_id = self.start_demo_via_ui()
         html = self.assert_html_contains(
             f"/setup/{session_id}",
-            "Setup progress",
-            "Alpha readiness",
-            "Production readiness",
+            "Complete the website connection",
             "Foundation",
             "Analytics",
             "required",
             "optional",
-            "Exit and resume",
+            "Exit and resume later",
+            "Technical details",
         )
         self.assertIn("External plugin sandbox not certified", html)
         self.assertIn("Remote CI artifact not imported", html)
