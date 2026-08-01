@@ -500,7 +500,7 @@ def _render_home(service: AlphaOnboardingService) -> str:
         compose_href = (
             f"/content/{html.escape(first.get('content_item_id', ''))}/compose?setup_session={html.escape(session['id'])}"
             if first.get("content_item_id")
-            else "/content/new"
+            else "/content"
         )
     else:
         first = {}

@@ -17,6 +17,7 @@ class MVPProductUXSimplificationTests(Phase334TestCase):
         self.assertIn("Settings", home)
         self.assertNotIn('href="/calendar"', home)
         self.assertNotIn('href="/operations"', home)
+        self.assertNotIn('href="/content/new"', home)
         self.assertNotIn("Production readiness", home)
         self.assertNotIn("External plugin sandbox not certified", home)
         self.assertNotIn("Remote CI artifact not imported", home)
