@@ -498,6 +498,9 @@ def _layout(title: str, subtitle: str, body: str, *, primary: tuple[str, str] | 
 
 
 def _new_article_form(session_id: str = "", label: str = "New article", *, secondary: bool = False) -> str:
+    if not session_id:
+        css_class = "button secondary" if secondary else "button"
+        return f'<a class="{css_class}" href="/content/new">{html.escape(label)}</a>'
     hidden_session = (
         f'<input type="hidden" name="setup_session" value="{html.escape(session_id)}">' if session_id else ""
     )
@@ -971,12 +974,13 @@ This fixture article proves the MVP dashboard flow without using user-owned draf
 
 def _render_content(service: AlphaOnboardingService) -> str:
     drafts = owned_service().repository.list_drafts()
+    session = _latest_real_session(service.status())
     rows = "".join(
         f'<article class="content-row"><div><h3>{html.escape(draft.title)}</h3><p>Draft · edited recently</p></div><a class="button secondary" href="/content/{html.escape(draft.id)}/compose">Continue writing</a></article>'
         for draft in drafts[:10]
     )
     return f"""
-    <section class="hero"><h2>Write, preview, publish.</h2><div class="actions"><form method="post" action="/content/new"><input type="hidden" name="idempotency_key" value="content-new-{html.escape(stable_checksum(utc_now_iso())[:10])}"><button type="submit">New article</button></form></div></section>
+    <section class="hero"><h2>Write, preview, publish.</h2><div class="actions">{_new_article_form(session["id"] if session else "", "New article")}</div></section>
     <section class="section-title"><h2>Drafts</h2></section>
     <section class="content-list">{rows or '<article class="panel"><h2>No drafts yet</h2><p>Connect your website once, then write here.</p><a class="button" href="/setup">Connect website</a></article>'}</section>
     """
