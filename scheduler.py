@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import importlib
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pipeline import Article
+_pipeline = importlib.import_module("pipeline")
+Article = getattr(_pipeline, "Article", Any)
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -133,7 +135,7 @@ def parse_scheduled_time(value: str) -> datetime:
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
         return parsed
-    return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed.astimezone(UTC).replace(tzinfo=None)
 
 
 def next_due_record(records: list[dict[str, Any]], now: datetime | None = None) -> dict[str, Any] | None:

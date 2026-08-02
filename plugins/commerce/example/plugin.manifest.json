@@ -1,0 +1,20 @@
+{
+  "id": "commerce.example.contract",
+  "name": "Commerce Contract Fixture",
+  "version": "0.1.0",
+  "plugin_api_version": 1,
+  "type": "content",
+  "entrypoint": "plugins.commerce.example",
+  "status": "ready",
+  "capabilities": [
+    "commerce.product_catalog",
+    "entity.product",
+    "entity.collection",
+    "outcome.product_click",
+    "outcome.sale"
+  ],
+  "dependencies": [],
+  "config_schema": {
+    "integration": "contract_only"
+  }
+}

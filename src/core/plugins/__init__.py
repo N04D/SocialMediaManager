@@ -1,4 +1,4 @@
-from .capabilities import Capability
+from .capabilities import Capability, PluginFamily, family_for_capability, family_label
 from .dependencies import PluginDependency
 from .errors import (
     PluginCapabilityError,
@@ -17,10 +17,13 @@ __all__ = [
     "PluginDependency",
     "PluginDependencyError",
     "PluginError",
+    "PluginFamily",
     "PluginLifecycle",
     "PluginManifest",
     "PluginRegistry",
     "PluginStatus",
     "PluginType",
     "PluginValidationError",
+    "family_for_capability",
+    "family_label",
 ]

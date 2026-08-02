@@ -13,7 +13,11 @@
     "channel.publish.text",
     "channel.publish.image",
     "channel.metrics.collect",
-    "channel.health"
+    "channel.health",
+    "channel.linkedin",
+    "action.publish",
+    "outcome.social_metrics",
+    "transformation.accepts.variant.social_text"
   ],
   "dependencies": [
     {

@@ -1,0 +1,20 @@
+{
+  "id": "plugin.transcript_clip_candidates.fixture",
+  "name": "Deterministic Transcript Clip Candidates",
+  "version": "0.1.0",
+  "plugin_api_version": 1,
+  "type": "media",
+  "entrypoint": "content_services.DeterministicClipCandidateTransformation",
+  "status": "ready",
+  "capabilities": [
+    "transformation.transcript.clip_candidates",
+    "transformation.accepts.asset.transcript.timeline",
+    "transformation.produces.asset.clip_candidate",
+    "asset.clip_candidate"
+  ],
+  "dependencies": [],
+  "config_schema": {
+    "deterministic": true,
+    "external_network": false
+  }
+}

@@ -86,6 +86,14 @@ class ContentItem:
     updated_by: str = ""
     source_type: str = ""
     source_reference: str = ""
+    primary_source_type: str = ""
+    primary_source_entity_id: str = ""
+    primary_source_ref: str = ""
+    primary_source_metadata: dict[str, Any] = field(default_factory=dict)
+    canonical_text_representation: str = ""
+    canonical_media_refs: list[str] = field(default_factory=list)
+    canonical_metadata: dict[str, Any] = field(default_factory=dict)
+    source_provenance: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -100,6 +108,13 @@ class ContentRevision:
     summary: str = ""
     language: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    primary_source_type: str = ""
+    primary_source_entity_id: str = ""
+    primary_source_ref: str = ""
+    canonical_representation_id: str = ""
+    canonical_text_representation: str = ""
+    source_provenance: dict[str, Any] = field(default_factory=dict)
+    relationship_ids: list[str] = field(default_factory=list)
     checksum: str = ""
     created_at: str = ""
     created_by: str = ""
@@ -131,6 +146,13 @@ class ChannelContentVariant:
     created_by: str = ""
     updated_by: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    primary_source_type: str = ""
+    primary_source_entity_id: str = ""
+    primary_source_ref: str = ""
+    campaign_id: str = ""
+    intent_id: str = ""
+    transformation_run_id: str = ""
+    source_provenance: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

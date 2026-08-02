@@ -10,7 +10,9 @@
     "media.storage.store",
     "media.storage.read",
     "media.storage.materialize",
-    "media.storage.delete"
+    "media.storage.delete",
+    "provider.media.storage",
+    "asset.storage"
   ],
   "dependencies": [],
   "config_schema": {

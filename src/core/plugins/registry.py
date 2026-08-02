@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .capabilities import PluginFamily, family_for_capability
 from .dependencies import PluginDependency
 from .errors import PluginCapabilityError, PluginDependencyError, PluginValidationError
 from .manifest import SUPPORTED_PLUGIN_API_VERSION, PluginManifest, PluginStatus
@@ -51,6 +52,57 @@ class PluginRegistry:
                 continue
             providers.append(manifest)
         return providers
+
+    def capabilities_by_family(self, *, enabled_only: bool = True) -> dict[str, list[dict[str, str]]]:
+        grouped: dict[str, list[dict[str, str]]] = {}
+        for capability, plugin_ids in sorted(self._capabilities.items()):
+            providers = self.providers_for(capability, enabled_only=enabled_only)
+            if enabled_only and not providers:
+                continue
+            family = family_for_capability(capability).value
+            for manifest in providers if enabled_only else [self._plugins[pid] for pid in plugin_ids]:
+                grouped.setdefault(family, []).append({"capability": capability, "plugin_id": manifest.id})
+        return grouped
+
+    def plugins_by_family(self, family: PluginFamily | str, *, enabled_only: bool = True) -> list[PluginManifest]:
+        resolved = PluginFamily(family) if not isinstance(family, PluginFamily) else family
+        seen: set[str] = set()
+        matches: list[PluginManifest] = []
+        for capability, plugin_ids in self._capabilities.items():
+            if family_for_capability(capability) != resolved:
+                continue
+            for plugin_id in plugin_ids:
+                if plugin_id in seen:
+                    continue
+                manifest = self._plugins[plugin_id]
+                if enabled_only and manifest.status in {
+                    PluginStatus.DISABLED,
+                    PluginStatus.ERROR,
+                    PluginStatus.INCOMPATIBLE,
+                }:
+                    continue
+                seen.add(plugin_id)
+                matches.append(manifest)
+        return sorted(matches, key=lambda item: item.id)
+
+    def discover(self, capability: str, *, enabled_only: bool = True) -> list[PluginManifest]:
+        return self.providers_for(capability, enabled_only=enabled_only)
+
+    def producers_for(self, capability: str, *, enabled_only: bool = True) -> list[PluginManifest]:
+        exact = self.providers_for(capability, enabled_only=enabled_only)
+        produced_by_transformations = self.providers_for(
+            f"transformation.produces.{capability}", enabled_only=enabled_only
+        )
+        combined = {manifest.id: manifest for manifest in [*exact, *produced_by_transformations]}
+        return sorted(combined.values(), key=lambda item: item.id)
+
+    def consumers_for(self, capability: str, *, enabled_only: bool = True) -> list[PluginManifest]:
+        accepted_by_transformations = self.providers_for(
+            f"transformation.accepts.{capability}", enabled_only=enabled_only
+        )
+        return sorted(
+            {manifest.id: manifest for manifest in accepted_by_transformations}.values(), key=lambda item: item.id
+        )
 
     def require_provider_for(self, capability: str) -> PluginManifest:
         providers = self.providers_for(capability)

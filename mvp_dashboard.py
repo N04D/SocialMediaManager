@@ -146,7 +146,7 @@ def handle_mvp_post(
                 service,
                 session.id,
                 {
-                    "title": "Untitled article",
+                    "title": "Untitled content",
                     "markdown_body": "",
                     "slug": "",
                     "idempotency_key": _field(form, "idempotency_key") or "content-new-" + utc_now_iso(),
@@ -498,7 +498,7 @@ def _layout(title: str, subtitle: str, body: str, *, primary: tuple[str, str] | 
 </html>"""
 
 
-def _new_article_form(session_id: str = "", label: str = "New article", *, secondary: bool = False) -> str:
+def _new_article_form(session_id: str = "", label: str = "New content", *, secondary: bool = False) -> str:
     if not session_id:
         css_class = "button secondary" if secondary else "button"
         return f'<a class="{css_class}" href="/setup">Connect website</a>'
@@ -511,6 +511,8 @@ def _new_article_form(session_id: str = "", label: str = "New article", *, secon
         '<form method="post" action="/content/new">'
         f"{hidden_session}"
         f'<input type="hidden" name="idempotency_key" value="content-new-{html.escape(stable_checksum(key_seed + utc_now_iso())[:12])}">'
+        '<input type="hidden" name="source_type" value="written">'
+        '<span class="meta">Sources: Write · YouTube</span>'
         f'<button{button_class} type="submit">{html.escape(label)}</button>'
         "</form>"
     )
@@ -533,18 +535,18 @@ def _render_home(service: AlphaOnboardingService) -> str:
     needs_attention = bool(first and not published and first.get("execution_request_id"))
     attention_html = (
         '<article class="panel span-6"><h2>Needs attention</h2><p>Publishing needs attention.</p>'
-        f'<a class="button secondary" href="{html.escape(compose_href)}">Open article</a></article>'
+        f'<a class="button secondary" href="{html.escape(compose_href)}">Open content</a></article>'
         if needs_attention
         else ""
     )
     primary_action = (
-        _new_article_form(session["id"], "New article")
+        _new_article_form(session["id"], "New content")
         if session
         else '<a class="button" href="/setup">Connect website</a>'
     )
     return f"""
     <section class="hero">
-      <h2>Write the next article.</h2>
+      <h2>Create from a source.</h2><p>Write · YouTube</p>
       <div class="actions">{primary_action}</div>
     </section>
     <section class="section-title"><h2>Recent content</h2><a href="/content">View all</a></section>
@@ -796,10 +798,10 @@ def _composer_publish_panel(service: AlphaOnboardingService, setup_session: str,
         <section class="status-card" aria-live="polite">
           <p><strong>Publishing status</strong><br><span class="status {"ok" if success else "warn"}">{html.escape(execution["status"])}</span></p>
           <h3>{"Published" if success else "Publishing needs attention"}</h3>
-          <p>{"Your article is live." if success else "No second publish will be attempted automatically."}</p>
+          <p>{"Your content is live." if success else "No second publish will be attempted automatically."}</p>
           <div class="actions">
-            <a class="button" href="{html.escape(publication.get("public_url", "#"))}">View article</a>
-            <form method="post" action="/content/new"><input type="hidden" name="setup_session" value="{html.escape(setup_session)}"><input type="hidden" name="idempotency_key" value="content-next-{html.escape(stable_checksum(setup_session + utc_now_iso())[:12])}"><button class="secondary" type="submit">Create next article</button></form>
+            <a class="button" href="{html.escape(publication.get("public_url", "#"))}">View content</a>
+            <form method="post" action="/content/new"><input type="hidden" name="setup_session" value="{html.escape(setup_session)}"><input type="hidden" name="idempotency_key" value="content-next-{html.escape(stable_checksum(setup_session + utc_now_iso())[:12])}"><button class="secondary" type="submit">Create next content</button></form>
           </div>
           <p>Performance: waiting for data.</p>
           {_technical_details("Technical details", _execution_status_panel(execution) + _plan_summary(publication))}
@@ -864,7 +866,7 @@ def _render_real_composer(service: AlphaOnboardingService, path: str, params: di
         <p class="status info">Draft</p>
         <form id="owned-composer-form" data-content-id="{html.escape(draft.id)}" data-draft-id="{html.escape(draft.id)}" data-workspace-id="{html.escape(draft.workspace_id)}" data-version="{draft.version}">
           <label>Title<input class="composer-title" id="owned-title" name="title" value="{html.escape(draft.title)}" required autofocus></label>
-          <label>Article editor<textarea id="owned-body" name="markdown_body" rows="18">{html.escape(draft.markdown_body)}</textarea></label>
+          <label>Canonical editor<textarea id="owned-body" name="markdown_body" rows="18" aria-label="Article editor">{html.escape(draft.markdown_body)}</textarea></label>
           <p id="autosave-status" class="status info" role="status" aria-live="polite">Saved</p>
           <p id="conflict-status" class="field-error" role="alert" tabindex="-1"></p>
           <section class="destination-grid" aria-label="Publish destinations">
@@ -992,7 +994,7 @@ def _render_content(service: AlphaOnboardingService) -> str:
         for draft in drafts[:10]
     )
     new_action = (
-        _new_article_form(session["id"], "New article")
+        _new_article_form(session["id"], "New content")
         if session
         else '<a class="button" href="/setup">Connect website</a>'
     )
@@ -1102,10 +1104,10 @@ def _render_result(payload: dict[str, Any], status: dict[str, Any], recovery: di
     execution = _execution_status(publication)
     success = execution["status"] == "Completed"
     heading = "Published" if success else "Publishing needs attention"
-    message = "Your article is live." if success else "We saved the article, but publishing did not finish cleanly."
+    message = "Your content is live." if success else "We saved the content, but publishing did not finish cleanly."
     return f"""
     <section class="grid">
-      <article class="panel span-8"><p class="status {"ok" if success else "warn"}">{html.escape(execution["status"])}</p><h2>{heading}</h2><p>{message}</p>{_execution_status_panel(execution)}<div class="actions"><a class="button" href="{html.escape(publication.get("public_url", "#"))}">View article</a><a class="button secondary" href="/content/{html.escape(publication.get("content_item_id", ""))}/compose">Edit next version</a><a class="button secondary" href="/setup">Create next article</a></div>{_technical_details("Technical details", _plan_summary(publication))}</article>
+      <article class="panel span-8"><p class="status {"ok" if success else "warn"}">{html.escape(execution["status"])}</p><h2>{heading}</h2><p>{message}</p>{_execution_status_panel(execution)}<div class="actions"><a class="button" href="{html.escape(publication.get("public_url", "#"))}">View content</a><a class="button secondary" href="/content/{html.escape(publication.get("content_item_id", ""))}/compose">Edit next version</a><a class="button secondary" href="/setup">Create next content</a></div>{_technical_details("Technical details", _plan_summary(publication))}</article>
       <article class="panel span-4"><h2>Performance</h2><p>Waiting for data.</p><a class="button secondary" href="/setup/{html.escape(payload["session"]["id"])}/funnel">View analytics</a><h2>Recovery</h2><p>{"No action needed." if success else "No second publish will be attempted automatically."}</p><a class="button secondary" href="/operations">Troubleshooting</a></article>
     </section>
     """
@@ -1150,7 +1152,7 @@ def _render_settings(service: AlphaOnboardingService) -> str:
     session = _latest_real_session(status)
     publishing = """
       <h2>Publishing</h2>
-      <p>Connect a website once. New articles will open directly in the composer after that.</p>
+      <p>Connect a website once. New contents will open directly in the composer after that.</p>
       <form method="post" action="/setup/start">
         <input type="hidden" name="idempotency_key" value="settings-publishing-start">
         <label>Workspace name<input name="workspace_id" placeholder="My publishing workspace" required></label>
@@ -1184,7 +1186,7 @@ def _content_home_row(first: dict[str, Any]) -> str:
         return '<article class="content-row"><div><h3>No article yet</h3><p>Connect your website, then write the first draft.</p></div><a class="button" href="/setup">Connect website</a></article>'
     title = "First website article"
     status = "Published" if first.get("verification_status") == "publication_verified" else "In progress"
-    action = "View article" if status == "Published" else "Continue"
+    action = "View content" if status == "Published" else "Continue"
     href = first.get("public_url") if status == "Published" else f"/content/{first.get('content_item_id', '')}/compose"
     return f'<article class="content-row"><div><h3>{title}</h3><p>{html.escape(status)} · Website</p></div><a class="button secondary" href="{html.escape(href)}">{action}</a></article>'
 

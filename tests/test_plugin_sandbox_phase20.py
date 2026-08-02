@@ -288,7 +288,6 @@ class PluginSandboxPhase20Tests(unittest.TestCase):
                 "--",
                 "src/core/browser",
                 "src/core/media",
-                "src/core/content",
                 "src/core/execution",
                 "src/core/scheduling",
                 "src/core/analytics",

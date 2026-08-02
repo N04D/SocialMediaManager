@@ -17,10 +17,12 @@ from src.core.content import (
     CONTENT_ITEM_CONTRACT_VERSION,
     CONTENT_REQUIREMENTS_CONTRACT_VERSION,
     CONTENT_REVISION_CONTRACT_VERSION,
+    Campaign,
     ChannelContentRequirements,
     ChannelContentVariant,
     ChannelContentVariantStatus,
     ChannelContentVariantType,
+    ClipCandidate,
     ContentAuditEvent,
     ContentConflictError,
     ContentIntegrityIssue,
@@ -32,6 +34,15 @@ from src.core.content import (
     ContentStatus,
     ContentType,
     ContentValidationError,
+    Entity,
+    Outcome,
+    Playbook,
+    PolicyRule,
+    ProvenanceRecord,
+    Relationship,
+    TimelineSegment,
+    TransformationContract,
+    TransformationRun,
 )
 
 T = TypeVar("T")
@@ -51,6 +62,34 @@ FORBIDDEN_METADATA_KEYS = {
 
 def _path(name: str) -> Path:
     return channel_store.STUDIO_DATA_DIR / name
+
+
+def entities_path() -> Path:
+    return _path("content_entities.json")
+
+
+def relationships_path() -> Path:
+    return _path("content_relationships.json")
+
+
+def transformation_runs_path() -> Path:
+    return _path("content_transformation_runs.json")
+
+
+def campaigns_path() -> Path:
+    return _path("content_campaigns.json")
+
+
+def outcomes_path() -> Path:
+    return _path("content_outcomes.json")
+
+
+def playbooks_path() -> Path:
+    return _path("content_playbooks.json")
+
+
+def policies_path() -> Path:
+    return _path("content_policies.json")
 
 
 def content_items_path() -> Path:
@@ -153,7 +192,17 @@ def _canonical_json(payload: dict[str, Any]) -> str:
 
 
 def content_revision_checksum(
-    *, title: str, body: str, summary: str = "", language: str = "", metadata: dict[str, Any] | None = None
+    *,
+    title: str,
+    body: str,
+    summary: str = "",
+    language: str = "",
+    metadata: dict[str, Any] | None = None,
+    primary_source_type: str = "written",
+    primary_source_entity_id: str = "",
+    primary_source_ref: str = "",
+    canonical_text_representation: str = "",
+    source_provenance: dict[str, Any] | None = None,
 ) -> str:
     payload = {
         "contract_version": CONTENT_REVISION_CONTRACT_VERSION,
@@ -162,6 +211,10 @@ def content_revision_checksum(
         "summary": summary.strip(),
         "language": language.strip().lower(),
         "metadata": _safe_metadata(metadata),
+        "primary_source_type": primary_source_type.strip(),
+        "primary_source_entity_id": primary_source_entity_id.strip(),
+        "primary_source_ref": primary_source_ref.strip(),
+        "canonical_text_representation": (canonical_text_representation or body).replace("\r\n", "\n").strip(),
     }
     return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
 
@@ -462,6 +515,10 @@ class LegacyContentAdapter:
             created_by="legacy_adapter",
             source_type="legacy_content",
             source_reference=getattr(legacy, "id", identifier),
+            primary_source_type="written",
+            primary_source_ref=getattr(legacy, "id", identifier),
+            canonical_text_representation=body,
+            source_provenance={"actor_type": "import", "provider": "legacy_content_adapter"},
             metadata={
                 "compatibility_source": "content_store",
                 "legacy_slug": getattr(legacy, "slug", ""),
@@ -469,6 +526,232 @@ class LegacyContentAdapter:
             },
             change_reason="lazy_legacy_migration",
         )
+
+
+class AgenticGraphService:
+    def save_entity(self, entity: Entity) -> Entity:
+        def mutate(records: list[Entity]):
+            for index, record in enumerate(records):
+                if record.id == entity.id:
+                    records[index] = entity
+                    return True, entity
+            records.append(entity)
+            return True, entity
+
+        return _mutate_records(entities_path(), Entity, mutate)
+
+    def list_entities(self, *, entity_type: str = "") -> list[Entity]:
+        records = _load_records(entities_path(), Entity)
+        if entity_type:
+            records = [record for record in records if record.entity_type == entity_type]
+        return sorted(records, key=lambda item: (item.updated_at or item.created_at, item.id), reverse=True)
+
+    def add_relationship(
+        self,
+        *,
+        workspace_id: str,
+        from_entity_id: str,
+        relationship_type: str,
+        to_entity_id: str,
+        metadata: dict[str, Any] | None = None,
+        provenance: dict[str, Any] | None = None,
+    ) -> Relationship:
+        now = channel_store.now_iso()
+        relationship = Relationship(
+            id=f"relationship_{uuid4().hex}",
+            workspace_id=workspace_id,
+            from_entity_id=from_entity_id,
+            relationship_type=relationship_type,
+            to_entity_id=to_entity_id,
+            metadata=_safe_metadata(metadata),
+            provenance=ProvenanceRecord(**_safe_metadata(provenance))
+            if provenance
+            else ProvenanceRecord(created_at=now),
+            created_at=now,
+        )
+
+        def mutate(records: list[Relationship]):
+            records.append(relationship)
+            return True, relationship
+
+        return _mutate_records(relationships_path(), Relationship, mutate)
+
+    def list_relationships(self, *, entity_id: str = "", relationship_type: str = "") -> list[Relationship]:
+        records = _load_records(relationships_path(), Relationship)
+        if entity_id:
+            records = [r for r in records if r.from_entity_id == entity_id or r.to_entity_id == entity_id]
+        if relationship_type:
+            records = [r for r in records if r.relationship_type == relationship_type]
+        return records
+
+    def record_transformation_run(
+        self,
+        *,
+        workspace_id: str,
+        transformation: TransformationContract,
+        input_refs: tuple[str, ...],
+        output_refs: tuple[str, ...] = (),
+        configuration: dict[str, Any] | None = None,
+        evidence: dict[str, Any] | None = None,
+    ) -> TransformationRun:
+        run = TransformationRun(
+            id=f"transformation_run_{uuid4().hex}",
+            workspace_id=workspace_id,
+            transformation_id=transformation.id,
+            plugin_id=transformation.plugin_id,
+            input_refs=input_refs,
+            output_refs=output_refs,
+            configuration=_safe_metadata(configuration),
+            evidence=_safe_metadata(evidence),
+            provenance=ProvenanceRecord(
+                actor_type="plugin", plugin_id=transformation.plugin_id, created_at=channel_store.now_iso()
+            ),
+            created_at=channel_store.now_iso(),
+        )
+
+        def mutate(records: list[TransformationRun]):
+            records.append(run)
+            return True, run
+
+        return _mutate_records(transformation_runs_path(), TransformationRun, mutate)
+
+    def list_transformation_runs(self, *, workspace_id: str = "") -> list[TransformationRun]:
+        records = _load_records(transformation_runs_path(), TransformationRun)
+        return [record for record in records if not workspace_id or record.workspace_id == workspace_id]
+
+    def save_campaign(self, campaign: Campaign) -> Campaign:
+        def mutate(records: list[Campaign]):
+            for index, record in enumerate(records):
+                if record.id == campaign.id:
+                    records[index] = campaign
+                    return True, campaign
+            records.append(campaign)
+            return True, campaign
+
+        return _mutate_records(campaigns_path(), Campaign, mutate)
+
+    def list_campaigns(self, *, workspace_id: str = "") -> list[Campaign]:
+        records = _load_records(campaigns_path(), Campaign)
+        return [record for record in records if not workspace_id or record.workspace_id == workspace_id]
+
+    def save_outcome(self, outcome: Outcome) -> Outcome:
+        def mutate(records: list[Outcome]):
+            records.append(outcome)
+            return True, outcome
+
+        return _mutate_records(outcomes_path(), Outcome, mutate)
+
+    def list_outcomes(self, *, workspace_id: str = "") -> list[Outcome]:
+        records = _load_records(outcomes_path(), Outcome)
+        return [record for record in records if not workspace_id or record.workspace_id == workspace_id]
+
+    def save_playbook(self, playbook: Playbook) -> Playbook:
+        def mutate(records: list[Playbook]):
+            for index, record in enumerate(records):
+                if record.id == playbook.id:
+                    records[index] = playbook
+                    return True, playbook
+            records.append(playbook)
+            return True, playbook
+
+        return _mutate_records(playbooks_path(), Playbook, mutate)
+
+    def list_playbooks(self) -> list[Playbook]:
+        return _load_records(playbooks_path(), Playbook)
+
+    def validate_policy(self, policy: PolicyRule) -> tuple[bool, str]:
+        if policy.effect not in {"allow", "deny", "require_confirmation"}:
+            return False, "policy.effect_invalid"
+        if any(str(key).startswith("exec") or str(key).startswith("eval") for key in policy.conditions):
+            return False, "policy.executable_condition_forbidden"
+        return True, "ok"
+
+    def save_policy(self, policy: PolicyRule) -> PolicyRule:
+        ok, code = self.validate_policy(policy)
+        if not ok:
+            raise ContentValidationError(code, "Policy rule is invalid.")
+
+        def mutate(records: list[PolicyRule]):
+            records.append(policy)
+            return True, policy
+
+        return _mutate_records(policies_path(), PolicyRule, mutate)
+
+    def agent_context(self, *, workspace_id: str, content_service: ContentService) -> dict[str, Any]:
+        items = content_service.list_content(workspace_id=workspace_id, include_deleted=False)
+        variants = content_service.variant_repository.list_all()
+        revisions = content_service.revision_repository.list_all()
+        return {
+            "entities": [asdict(entity) for entity in self.list_entities()],
+            "content": [asdict(item) for item in items],
+            "primary_sources": [
+                {
+                    "content_item_id": item.id,
+                    "primary_source_type": item.primary_source_type or item.source_type or "written",
+                    "primary_source_entity_id": item.primary_source_entity_id,
+                    "primary_source_ref": item.primary_source_ref or item.source_reference,
+                    "canonical_text_representation": item.canonical_text_representation or item.body,
+                    "canonical_media_refs": list(item.canonical_media_refs),
+                    "canonical_metadata": dict(item.canonical_metadata),
+                    "provenance": dict(item.source_provenance),
+                }
+                for item in items
+            ],
+            "relationships": [asdict(relationship) for relationship in self.list_relationships()],
+            "transformations": [asdict(run) for run in self.list_transformation_runs(workspace_id=workspace_id)],
+            "variants": [asdict(variant) for variant in variants if variant.workspace_id == workspace_id],
+            "revisions": [asdict(revision) for revision in revisions if revision.workspace_id == workspace_id],
+            "campaigns": [asdict(campaign) for campaign in self.list_campaigns(workspace_id=workspace_id)],
+            "outcomes": [asdict(outcome) for outcome in self.list_outcomes(workspace_id=workspace_id)],
+            "playbooks": [asdict(playbook) for playbook in self.list_playbooks()],
+        }
+
+
+class DeterministicClipCandidateTransformation:
+    contract = TransformationContract(
+        id="transformation.transcript.clip_candidates.deterministic",
+        plugin_id="plugin.transcript_clip_candidates.fixture",
+        accepts=("asset.transcript.timeline",),
+        produces=("asset.clip_candidate",),
+    )
+
+    def run(self, segments: list[TimelineSegment], *, max_candidates: int = 3) -> list[ClipCandidate]:
+        candidates: list[ClipCandidate] = []
+        for segment in segments:
+            duration = max(0.0, float(segment.end_time) - float(segment.start_time))
+            text = segment.text.strip()
+            if not text or duration <= 0:
+                continue
+            keyword_bonus = (
+                0.25 if any(word in text.lower() for word in ["launch", "why", "how", "secret", "mistake"]) else 0.0
+            )
+            duration_score = 1.0 - min(abs(duration - 45.0) / 45.0, 1.0)
+            score = round(0.55 * duration_score + 0.35 * min(len(text) / 240.0, 1.0) + keyword_bonus, 4)
+            candidates.append(
+                ClipCandidate(
+                    start=float(segment.start_time),
+                    end=float(segment.end_time),
+                    transcript_excerpt=text[:280],
+                    score=score,
+                    reason="duration_text_keyword_score",
+                    provenance=ProvenanceRecord(actor_type="plugin", plugin_id=self.contract.plugin_id),
+                )
+            )
+        return sorted(candidates, key=lambda item: (-item.score, item.start))[:max_candidates]
+
+    def render_synthetic_short_asset(
+        self, candidate: ClipCandidate, *, synthetic_video_ref: str = ""
+    ) -> dict[str, Any]:
+        if not synthetic_video_ref:
+            return {"status": "unsupported", "reason": "synthetic_video_missing"}
+        return {
+            "status": "available",
+            "asset_type": "short_clip",
+            "source_ref": synthetic_video_ref,
+            "start": candidate.start,
+            "end": candidate.end,
+            "provenance": {"plugin_id": self.contract.plugin_id, "transformation_id": self.contract.id},
+        }
 
 
 class ContentService:
@@ -479,6 +762,7 @@ class ContentService:
         self.revision_repository = RevisionRepository()
         self.variant_repository = ChannelVariantRepository()
         self.requirement_registry = ContentRequirementRegistry()
+        self.graph_service = AgenticGraphService()
         self.media_library_service = app_runtime.media_library_service(config)
         self.legacy_adapter = LegacyContentAdapter(self)
 
@@ -494,10 +778,24 @@ class ContentService:
         created_by: str = "",
         source_type: str = "",
         source_reference: str = "",
+        primary_source_type: str = "",
+        primary_source_entity_id: str = "",
+        primary_source_ref: str = "",
+        primary_source_metadata: dict[str, Any] | None = None,
+        canonical_text_representation: str = "",
+        canonical_media_refs: list[str] | None = None,
+        canonical_metadata: dict[str, Any] | None = None,
+        source_provenance: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
         change_reason: str = "create",
     ) -> ContentItem:
         now = channel_store.now_iso()
+        resolved_primary_source_type = (primary_source_type or source_type or "written").strip()
+        resolved_primary_source_ref = (primary_source_ref or source_reference or "").strip()
+        resolved_canonical_text = (canonical_text_representation or body).replace("\r\n", "\n").strip()
+        resolved_source_provenance = dict(source_provenance or {})
+        if not resolved_source_provenance:
+            resolved_source_provenance = {"actor_type": "manual", "provider": "content_service", "created_at": now}
         item = ContentItem(
             id=f"content_{uuid4().hex}",
             workspace_id=workspace_id,
@@ -513,8 +811,16 @@ class ContentService:
             updated_at=now,
             created_by=created_by,
             updated_by=created_by,
-            source_type=source_type,
-            source_reference=source_reference,
+            source_type=source_type or resolved_primary_source_type,
+            source_reference=source_reference or resolved_primary_source_ref,
+            primary_source_type=resolved_primary_source_type,
+            primary_source_entity_id=primary_source_entity_id.strip(),
+            primary_source_ref=resolved_primary_source_ref,
+            primary_source_metadata=_safe_metadata(primary_source_metadata),
+            canonical_text_representation=resolved_canonical_text,
+            canonical_media_refs=list(canonical_media_refs or []),
+            canonical_metadata=_safe_metadata(canonical_metadata),
+            source_provenance=_safe_metadata(resolved_source_provenance),
             metadata=_safe_metadata(metadata),
         )
         self.content_repository.create(item)
@@ -526,6 +832,79 @@ class ContentService:
         self._event("content.item.created", item.workspace_id, "content_item", item.id, created_by)
         self._audit("content.create", item.workspace_id, "content_item", item.id, created_by)
         return item
+
+    def create_written_content(
+        self,
+        *,
+        workspace_id: str,
+        title: str,
+        body: str,
+        summary: str = "",
+        language: str = "",
+        created_by: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> ContentItem:
+        return self.create_content(
+            workspace_id=workspace_id,
+            title=title,
+            body=body,
+            summary=summary,
+            language=language,
+            content_type=ContentType.SOCIAL_POST.value,
+            created_by=created_by,
+            primary_source_type="written",
+            canonical_text_representation=body,
+            source_provenance={"actor_type": "manual", "provider": "content_service"},
+            metadata=metadata,
+            change_reason="create_written_source",
+        )
+
+    def create_youtube_source_content(
+        self,
+        *,
+        workspace_id: str,
+        youtube_url: str,
+        video_id: str,
+        title: str,
+        transcript: str,
+        transcript_provenance: dict[str, Any] | None = None,
+        edited_transcript: str = "",
+        created_by: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> ContentItem:
+        canonical_transcript = (edited_transcript or transcript).replace("\r\n", "\n").strip()
+        provenance = {
+            "actor_type": "manual",
+            "provider": "transcript_import",
+            "original_ref": youtube_url.strip(),
+            "original_transcript_preserved": bool(transcript.strip()),
+        }
+        provenance.update(transcript_provenance or {})
+        canonical_metadata = {
+            "video_id": video_id.strip(),
+            "transcript_original": transcript,
+            "transcript_edited": edited_transcript,
+            "transcript_changed": bool(edited_transcript and edited_transcript != transcript),
+        }
+        return self.create_content(
+            workspace_id=workspace_id,
+            title=title,
+            body=canonical_transcript,
+            summary="",
+            language="",
+            content_type=ContentType.SOCIAL_POST.value,
+            created_by=created_by,
+            source_type="youtube_video",
+            source_reference=video_id.strip() or youtube_url.strip(),
+            primary_source_type="youtube_video",
+            primary_source_ref=youtube_url.strip(),
+            primary_source_metadata={"video_id": video_id.strip(), "url": youtube_url.strip()},
+            canonical_text_representation=canonical_transcript,
+            canonical_metadata=canonical_metadata,
+            source_provenance=provenance,
+            metadata=metadata,
+            change_reason="create_youtube_source",
+        )
 
     def update_content(
         self,
@@ -654,6 +1033,16 @@ class ContentService:
             created_by=created_by,
             updated_by=created_by,
             metadata=_safe_metadata(metadata),
+            primary_source_type=revision.primary_source_type
+            or item.primary_source_type
+            or item.source_type
+            or "written",
+            primary_source_entity_id=revision.primary_source_entity_id or item.primary_source_entity_id,
+            primary_source_ref=revision.primary_source_ref or item.primary_source_ref or item.source_reference,
+            campaign_id=str((metadata or {}).get("campaign_id") or item.metadata.get("campaign_id") or ""),
+            intent_id=str((metadata or {}).get("intent_id") or item.metadata.get("intent_id") or ""),
+            transformation_run_id=str((metadata or {}).get("transformation_run_id") or ""),
+            source_provenance=dict(revision.source_provenance or item.source_provenance),
         )
         result = self.requirement_registry.validate(
             channel_plugin_id=channel_plugin_id,
@@ -861,6 +1250,7 @@ class ContentService:
                 "variants": True,
             },
             "requirements_registered": len(self.requirement_registry.list_channel_requirements()),
+            "agentic_graph": True,
             "media_library": bool(self.media_library_service),
         }
 
@@ -875,12 +1265,24 @@ class ContentService:
             summary=item.summary,
             language=item.language,
             metadata=dict(item.metadata),
+            primary_source_type=item.primary_source_type or item.source_type or "written",
+            primary_source_entity_id=item.primary_source_entity_id,
+            primary_source_ref=item.primary_source_ref or item.source_reference,
+            canonical_representation_id=f"canonical_{item.id}_{item.current_revision_id or 'initial'}",
+            canonical_text_representation=item.canonical_text_representation or item.body,
+            source_provenance=dict(item.source_provenance),
+            relationship_ids=list(item.metadata.get("relationship_ids", []) or []),
             checksum=content_revision_checksum(
                 title=item.title,
                 body=item.body,
                 summary=item.summary,
                 language=item.language,
                 metadata=item.metadata,
+                primary_source_type=item.primary_source_type or item.source_type or "written",
+                primary_source_entity_id=item.primary_source_entity_id,
+                primary_source_ref=item.primary_source_ref or item.source_reference,
+                canonical_text_representation=item.canonical_text_representation or item.body,
+                source_provenance=item.source_provenance,
             ),
             created_at=channel_store.now_iso(),
             created_by=actor,

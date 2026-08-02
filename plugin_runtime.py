@@ -37,6 +37,11 @@ MASTODON_PLUGIN_MANIFEST = ROOT_DIR / "channels" / "mastodon" / "plugin.manifest
 LEGACY_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "legacy_browser" / "plugin.manifest.json"
 AUTO_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "auto_browser" / "plugin.manifest.json"
 LOCAL_MEDIA_STORAGE_MANIFEST = ROOT_DIR / "plugins" / "providers" / "local_media_storage" / "plugin.manifest.json"
+YOUTUBE_SOURCE_MANIFEST = ROOT_DIR / "plugins" / "sources" / "youtube" / "plugin.manifest.json"
+TRANSCRIPT_CLIP_MANIFEST = (
+    ROOT_DIR / "plugins" / "transformations" / "transcript_clip_candidates" / "plugin.manifest.json"
+)
+COMMERCE_CONTRACT_MANIFEST = ROOT_DIR / "plugins" / "commerce" / "example" / "plugin.manifest.json"
 
 
 @dataclass
@@ -538,6 +543,9 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
         LEGACY_BROWSER_MANIFEST,
         AUTO_BROWSER_MANIFEST,
         LOCAL_MEDIA_STORAGE_MANIFEST,
+        YOUTUBE_SOURCE_MANIFEST,
+        TRANSCRIPT_CLIP_MANIFEST,
+        COMMERCE_CONTRACT_MANIFEST,
         LINKEDIN_PLUGIN_MANIFEST,
         MASTODON_PLUGIN_MANIFEST,
     ]:

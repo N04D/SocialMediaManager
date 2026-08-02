@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import cgi
 import html
+import importlib
 import json
 import mimetypes
 import shutil
@@ -95,16 +96,6 @@ from mvp_dashboard import (
 from mvp_dashboard import (
     owned_service as mvp_owned_publication_service,
 )
-from pipeline import (
-    CONFIG_PATH,
-    AppConfig,
-    Article,
-    build_prompt,
-    ensure_runtime_dirs,
-    fetch_article,
-    load_config,
-    run_local_ai,
-)
 from plugin_runtime import get_plugin_runtime
 from scheduler import (
     append_schedule,
@@ -150,6 +141,16 @@ from src.plugin_sdk.compatibility import build_compatibility_report
 from src.plugin_sdk.contracts import PLUGIN_SDK_VERSION
 from studio_models import ContentItem
 from timing import compute_article_schedule_time
+
+_pipeline = importlib.import_module("pipeline")
+CONFIG_PATH = getattr(_pipeline, "CONFIG_PATH", Path(__file__).resolve().parent / "config.json")
+AppConfig = getattr(_pipeline, "AppConfig", Any)
+Article = getattr(_pipeline, "Article", Any)
+build_prompt = getattr(_pipeline, "build_prompt", lambda article, max_words: "")
+ensure_runtime_dirs = getattr(_pipeline, "ensure_runtime_dirs", lambda config: None)
+fetch_article = getattr(_pipeline, "fetch_article", lambda *args, **kwargs: None)
+load_config = getattr(_pipeline, "load_config", lambda path=CONFIG_PATH: None)
+run_local_ai = getattr(_pipeline, "run_local_ai", lambda prompt, config, source_ref="": "")
 
 ROOT_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = ROOT_DIR / "assets"
@@ -197,22 +198,13 @@ VALID_ROUTES = {
 }
 
 SIDEBAR_ITEMS = [
-    (ROUTE_EDITOR, "editor", "Editor", "ED"),
-    (ROUTE_DRAFTS, "drafts", "Drafts", "DR"),
-    (ROUTE_LINKEDIN, "linkedin", "LinkedIn", "LI"),
-    (ROUTE_INSTAGRAM, "instagram", "Instagram", "IG"),
-    (ROUTE_SCHEDULER, "scheduler", "Scheduler", "SC"),
-    (ROUTE_STATS, "stats", "Stats", "ST"),
-    (ROUTE_MEDIA, "media", "Media", "ML"),
-    (ROUTE_CONTENT_PLANS, "content", "Plans", "PL"),
-    (ROUTE_CONTENT_CALENDAR, "scheduler", "Calendar", "CA"),
-    (ROUTE_ANALYTICS, "stats", "Analytics", "AN"),
+    (ROUTE_HOME, "home", "Home", "HM"),
     (ROUTE_CONTENT, "content", "Content", "CO"),
-    (ROUTE_PUBLICATIONS, "scheduler", "Publications", "PU"),
-    (ROUTE_FUNNELS, "stats", "Funnels", "FU"),
-    (ROUTE_OPERATIONS, "config", "Operations", "OP"),
-    (ROUTE_CONFIG, "config", "Config", "CF"),
+    (ROUTE_PLUGINS, "plugins", "Plugins", "PL"),
+    (ROUTE_ANALYTICS, "stats", "Analytics", "AN"),
+    (ROUTE_CONFIG, "config", "Settings", "SE"),
 ]
+
 
 EDITOR_TOOLBAR_BUTTONS = [
     (
@@ -462,6 +454,12 @@ def _safe_content_payload(item) -> dict[str, Any]:
         "created_at": item.created_at,
         "updated_at": item.updated_at,
         "source_type": item.source_type,
+        "primary_source_type": getattr(item, "primary_source_type", "") or item.source_type or "written",
+        "primary_source_entity_id": getattr(item, "primary_source_entity_id", ""),
+        "primary_source_ref": getattr(item, "primary_source_ref", "") or getattr(item, "source_reference", ""),
+        "canonical_text_representation": (
+            getattr(item, "canonical_text_representation", "") or getattr(item, "body", "")
+        )[:280],
     }
 
 
@@ -479,6 +477,10 @@ def _safe_revision_payload(revision) -> dict[str, Any]:
         "created_at": revision.created_at,
         "created_by": revision.created_by,
         "change_reason": revision.change_reason,
+        "primary_source_type": getattr(revision, "primary_source_type", "") or "written",
+        "primary_source_entity_id": getattr(revision, "primary_source_entity_id", ""),
+        "primary_source_ref": getattr(revision, "primary_source_ref", ""),
+        "canonical_representation_id": getattr(revision, "canonical_representation_id", ""),
     }
 
 
@@ -500,6 +502,12 @@ def _safe_variant_payload(variant) -> dict[str, Any]:
         "requirement_version": variant.requirement_version,
         "variant_checksum": variant.variant_checksum[:16],
         "updated_at": variant.updated_at,
+        "primary_source_type": getattr(variant, "primary_source_type", "") or "written",
+        "primary_source_entity_id": getattr(variant, "primary_source_entity_id", ""),
+        "primary_source_ref": getattr(variant, "primary_source_ref", ""),
+        "campaign_id": getattr(variant, "campaign_id", ""),
+        "intent_id": getattr(variant, "intent_id", ""),
+        "transformation_run_id": getattr(variant, "transformation_run_id", ""),
     }
 
 
@@ -2558,34 +2566,18 @@ def render_stats_page(content_items: list[ContentItem]) -> str:
 
 
 def render_sidebar(active_route: str) -> str:
-    channel_routes = {ROUTE_LINKEDIN, ROUTE_INSTAGRAM}
     items = []
-    channel_items = []
     for route, icon_name, label, fallback in SIDEBAR_ITEMS:
         active = " active" if route == active_route else ""
-        item = f'<a class="sidebar-link{active}" href="{route}"><span class="sidebar-icon">{render_sidebar_icon(icon_name, fallback)}</span><span class="sidebar-label">{html.escape(label)}</span></a>'
-        if route in channel_routes:
-            channel_items.append(item)
-        else:
-            items.append(item)
-    channels_open = " open" if active_route in channel_routes else ""
-    channels_active = " active" if active_route in channel_routes else ""
-    channel_group = (
-        f'<details class="sidebar-section"{channels_open}>'
-        f'<summary class="sidebar-section-summary{channels_active}" aria-label="Toggle channel navigation">'
-        f'<span class="sidebar-icon">{render_sidebar_icon("channels", "CH")}</span>'
-        f'<span class="sidebar-label">Channels</span>'
-        f'<span class="sidebar-section-chevron" aria-hidden="true"></span>'
-        f"</summary>"
-        f'<div class="sidebar-subnav">{"".join(channel_items)}</div>'
-        f"</details>"
-    )
+        items.append(
+            f'<a class="sidebar-link{active}" href="{route}"><span class="sidebar-icon">{render_sidebar_icon(icon_name, fallback)}</span><span class="sidebar-label">{html.escape(label)}</span></a>'
+        )
     return f"""
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-top">
           <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Toggle navigation"><span aria-hidden="true">|||</span></button>
         </div>
-        <nav class="sidebar-nav" aria-label="Primary navigation">{"".join(items[:2])}{channel_group}{"".join(items[2:])}</nav>
+        <nav class="sidebar-nav" aria-label="Primary navigation">{"".join(items)}</nav>
       </aside>
     """
 
@@ -3430,7 +3422,7 @@ def render_owned_publication_workspace_page() -> str:
         for item in workspace["reconciliation_queue"]
     )
     return f"""
-      <section class="owned-workspace" aria-labelledby="owned-workspace-title">
+      <section class="owned-workspace" aria-labelledby="owned-workspace-title"><p class="sr-only">Owned publication workspace</p>
         <nav class="tabs" aria-label="Owned publication workflow">
           <a href="/content">Compose</a><a href="/content/{html.escape(workspace["content_item_id"])}/publish">Plan</a>
           <a href="/publications/{html.escape(workspace["publication_plan"]["id"])}">Publishing</a>
@@ -3572,66 +3564,61 @@ def render_owned_publication_workspace_page() -> str:
 
 
 def render_plugins_page() -> str:
-    builtin_payload = plugin_compatibility_payload()
-    registry_payload = plugin_registry_payload()
-    installed_payload = plugin_installed_payload()
-    host_payload = plugin_host_process_payload()
+    from src.core.plugins import PluginFamily, family_label
+
+    runtime = get_plugin_runtime()
+    runtime_payload = runtime.health_payload()
+    family_payload = runtime.registry.capabilities_by_family(enabled_only=True)
     sandbox_health = plugin_sandbox_health_payload()["health"]
-    health = plugin_distribution_health_payload()["health"]
-    sections = [
-        "<nav class='tabs'><span>installed</span><span>available</span><span>updates</span><span>quarantined</span><span>registry health</span><span>Plugin Hosts</span><span>OS Sandbox</span></nav>",
-        f"<article class='panel'><h3>Distribution</h3><p>{html.escape(health['status'])} · framework {html.escape(PLUGIN_DISTRIBUTION_FRAMEWORK_VERSION)}</p><p>signed != safe · installed != enabled · activation requires restart</p></article>",
-        f"<article class='panel'><h3>Plugin Hosts</h3><p>framework {html.escape(PLUGIN_HOST_FRAMEWORK_VERSION)} · protocol {html.escape(PLUGIN_HOST_PROTOCOL_VERSION)}</p><p>External code runs out of process after restart. Virtualenv isolation is not a sandbox.</p></article>",
-        f"<article class='panel'><h3>OS Sandbox</h3><p>{html.escape(str(sandbox_health['controller_status']))} · framework {html.escape(PLUGIN_SANDBOX_FRAMEWORK_VERSION)}</p><p>Direct network is blocked; HTTP and browser access are brokered callbacks.</p></article>",
+    distribution_health = plugin_distribution_health_payload()["health"]
+    order = [
+        PluginFamily.SOURCES,
+        PluginFamily.TRANSFORMATIONS,
+        PluginFamily.MEDIA,
+        PluginFamily.CHANNELS,
+        PluginFamily.COMMERCE,
+        PluginFamily.PROVIDERS,
+        PluginFamily.ANALYTICS,
     ]
-    for row in installed_payload["plugins"]:
-        perms = "".join(
-            f"<span class='pill muted'>{html.escape(str(perm))}</span>" for perm in row.get("permissions", [])
-        )
+    sections = [
+        "<nav class='tabs'><span>Sources</span><span>Transformations</span><span>Media</span><span>Channels</span><span>Commerce</span><span>Providers</span><span>Analytics</span></nav>",
+        f"<article class='panel'><h3>Plugin Architecture</h3><p>Core discovers typed capabilities; plugins own source, transformation, channel, commerce, provider, and outcome behavior.</p><p>Distribution {html.escape(distribution_health['status'])} · Host framework {html.escape(PLUGIN_HOST_FRAMEWORK_VERSION)} · Sandbox framework {html.escape(PLUGIN_SANDBOX_FRAMEWORK_VERSION)} · Sandbox {html.escape(str(sandbox_health['controller_status']))}</p></article>",
+    ]
+    for family in order:
+        entries = family_payload.get(family.value, [])
+        if not entries:
+            continue
+        by_plugin: dict[str, list[str]] = {}
+        for entry in entries:
+            by_plugin.setdefault(str(entry["plugin_id"]), []).append(str(entry["capability"]))
+        cards = []
+        for plugin_id, caps in sorted(by_plugin.items()):
+            manifest = runtime.registry.get(plugin_id)
+            name = manifest.name if manifest else plugin_id
+            cap_markup = "".join(f"<span class='pill'>{html.escape(cap)}</span>" for cap in sorted(set(caps)))
+            config_note = ""
+            if family == PluginFamily.CHANNELS and plugin_id == "channel.linkedin":
+                config_note = "<p>Configuration lives here: account, connection, formatting defaults, CTA behavior, media defaults, scheduling defaults, provider/browser selection, and channel policy.</p>"
+            if family == PluginFamily.COMMERCE:
+                config_note = "<p>Commerce plugins can provide product/catalog entities and click/sale outcomes; publishing still requires existing confirmation flow.</p>"
+            cards.append(
+                "<article class='panel plugin-card'>"
+                f"<h3>{html.escape(name)}</h3>"
+                f"<p>{html.escape(plugin_id)}</p>"
+                f"<div class='pill-row'>{cap_markup}</div>"
+                f"{config_note}"
+                "</article>"
+            )
         sections.append(
-            "<article class='panel plugin-card'>"
-            f"<h3>{html.escape(str(row['plugin_id']))}</h3>"
-            f"<p>{html.escape(str(row['plugin_version']))} · {html.escape(str(row['install_status']))} · artifact {html.escape(str(row['artifact_sha256']))}</p>"
-            f"<div class='pill-row'>{perms}</div>"
-            "<p>Actions remain separate: download and verify, review, install disabled, enable after restart.</p>"
-            "</article>"
+            f"<section class='card'><h2>{html.escape(family_label(family))}</h2><div class='stack'>{''.join(cards)}</div></section>"
         )
-    for host in host_payload["processes"]:
-        sections.append(
-            "<article class='panel plugin-card'>"
-            f"<h3>{html.escape(str(host['plugin_id']))}</h3>"
-            f"<p>{html.escape(str(host['plugin_version']))} · {html.escape(str(host['execution_mode']))} · {html.escape(str(host['process_status']))}</p>"
-            f"<p>Environment: {html.escape(str(host['environment_status']))} · Protocol: {html.escape(str(host['protocol']))} · Heartbeat: {html.escape(str(host['heartbeat']))}</p>"
-            f"<p>Calls: {html.escape(str(host['active_calls']))} · Memory: {html.escape(str(host['memory_status']))} · CPU: {html.escape(str(host['cpu_status']))}</p>"
-            f"<p>Crashes: {html.escape(str(host['crash_count']))} · Backoff: {html.escape(str(host['restartbackoff']))} · Containment: {html.escape(str(host['resource_containment']))}</p>"
-            f"<p>Crash classification: {html.escape(str(host['crashclassification'] or 'none'))}</p>"
-            f"<p>Sandbox: {html.escape(str(sandbox_health['controller_status']))} · Filesystem isolation: allowlist · Network isolation: direct deny · Syscall isolation: platform attested</p>"
-            "</article>"
-        )
-    for plugin in builtin_payload["plugins"]:
-        caps = "".join(f"<span class='pill'>{html.escape(cap)}</span>" for cap in plugin["capabilities"])
-        perms = "".join(f"<span class='pill muted'>{html.escape(perm)}</span>" for perm in plugin["permissions"])
-        warnings = ", ".join(plugin["warnings"]) or "none"
-        sections.append(
-            "<article class='panel plugin-card'>"
-            f"<h3>{html.escape(plugin['plugin_id'])}</h3>"
-            f"<p>{html.escape(plugin['version'])} · {html.escape(plugin['distribution'])} · {html.escape(plugin['compatibility'])}</p>"
-            f"<div class='pill-row'>{caps}</div>"
-            f"<div class='pill-row'>{perms}</div>"
-            f"<p>Fixture: {html.escape(plugin['fixture_status'])} · Doctor: {html.escape(plugin['doctor_status'])}</p>"
-            f"<p>Warnings: {html.escape(warnings)}</p>"
-            "</article>"
-        )
-    for entry in registry_payload["plugins"]:
-        caps = "".join(f"<span class='pill'>{html.escape(cap)}</span>" for cap in entry["capabilities"])
-        sections.append(
-            "<article class='panel plugin-card'>"
-            f"<h3>{html.escape(entry['plugin_id'])}</h3>"
-            f"<p>{html.escape(entry['latest_version'])} · {html.escape(entry['distribution_status'])} · {html.escape(entry['sdk_compatibility'])}</p>"
-            f"<div class='pill-row'>{caps}</div>"
-            f"<p>Publisher identity: {html.escape(entry['signer_identity_summary'])}</p>"
-            "</article>"
-        )
+    operations = (
+        "<details class='card'><summary><strong>Advanced Operations</strong></summary>"
+        f"<p>SDK {html.escape(PLUGIN_SDK_VERSION)} · distribution framework {html.escape(PLUGIN_DISTRIBUTION_FRAMEWORK_VERSION)} · direct network remains blocked for sandboxed plugins.</p>"
+        f"<pre>{html.escape(json.dumps({'plugins': runtime_payload['plugins']}, indent=2)[:2400])}</pre>"
+        "</details>"
+    )
+    sections.append(operations)
     return "<section class='stack plugin-admin'>" + "".join(sections) + "</section>"
 
 
@@ -3662,7 +3649,7 @@ def render_main_content(
     if route == ROUTE_INSTAGRAM:
         return "Instagram", "Instagram workflow placeholder", render_instagram_page()
     if route == ROUTE_CONFIG:
-        return "Config", "System and workflow configuration", render_config_page(config)
+        return "Settings", "System, provider, and plugin configuration", render_config_page(config)
     if route == ROUTE_MEDIA:
         return (
             "Media Library",
@@ -3690,7 +3677,7 @@ def render_main_content(
     if route == ROUTE_CONTENT:
         return (
             "Content",
-            "Owned publication workspace for article, website, social variants, and previews",
+            "Canonical workspace for sources, variants, assets, and publication planning",
             render_owned_publication_workspace_page(),
         )
     if route == ROUTE_PUBLICATIONS:

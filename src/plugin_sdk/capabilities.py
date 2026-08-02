@@ -45,6 +45,38 @@ CORE_CAPABILITIES = {
     "analytics.attribution",
     "analytics.readmodels",
     "analytics.integrity",
+    "source.written",
+    "source.youtube",
+    "source.video",
+    "source.transcript.import",
+    "source.metadata",
+    "entity.product",
+    "entity.collection",
+    "entity.release",
+    "asset.video",
+    "asset.transcript",
+    "asset.transcript.timeline",
+    "asset.clip_candidate",
+    "asset.short_video",
+    "asset.image",
+    "asset.storage",
+    "transformation.transcript.clip_candidates",
+    "transformation.accepts.asset.transcript",
+    "transformation.accepts.asset.transcript.timeline",
+    "transformation.accepts.asset.image",
+    "transformation.accepts.variant.social_text",
+    "transformation.produces.asset.clip_candidate",
+    "transformation.produces.asset.short_video",
+    "transformation.produces.asset.image",
+    "transformation.image.basic",
+    "action.publish",
+    "channel.linkedin",
+    "channel.mastodon",
+    "provider.media.storage",
+    "commerce.product_catalog",
+    "outcome.social_metrics",
+    "outcome.product_click",
+    "outcome.sale",
 }
 
 RESERVED_FUTURE_CHANNEL_CAPABILITIES = {
@@ -68,7 +100,7 @@ CORE_PERMISSIONS = {
     "account_configuration",
 }
 
-PLUGIN_ID_PATTERN = re.compile(r"^(channel|provider|media)\.[a-z0-9][a-z0-9_.-]{1,80}$")
+PLUGIN_ID_PATTERN = re.compile(r"^(channel|provider|media|source|commerce|plugin)\.[a-z0-9][a-z0-9_.-]{1,80}$")
 CAPABILITY_PATTERN = re.compile(r"^[a-z][a-z0-9]*(\.[a-z][a-z0-9_-]*)+$")
 
 
@@ -91,7 +123,7 @@ def validate_plugin_id(plugin_id: str) -> None:
     if not PLUGIN_ID_PATTERN.match(plugin_id):
         raise PluginManifestValidationError(
             "plugin_manifest.invalid_id",
-            "Plugin id must be namespaced, lowercase ASCII, and start with channel/provider/media.",
+            "Plugin id must be namespaced, lowercase ASCII, and start with channel/provider/media/source/commerce/plugin.",
             {"plugin_id": plugin_id},
         )
     if "/" in plugin_id or "\\" in plugin_id or ".." in plugin_id:

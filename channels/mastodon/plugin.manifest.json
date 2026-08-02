@@ -13,7 +13,10 @@
     "channel.publish.text",
     "channel.publish.image",
     "channel.metrics.collect",
-    "channel.health"
+    "channel.health",
+    "channel.mastodon",
+    "action.publish",
+    "outcome.social_metrics"
   ],
   "dependencies": [
     {

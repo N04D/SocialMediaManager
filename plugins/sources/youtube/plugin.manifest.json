@@ -1,0 +1,22 @@
+{
+  "id": "source.youtube",
+  "name": "YouTube Source",
+  "version": "0.1.0",
+  "plugin_api_version": 1,
+  "type": "content",
+  "entrypoint": "plugins.sources.youtube",
+  "status": "ready",
+  "capabilities": [
+    "source.youtube",
+    "source.video",
+    "source.transcript.import",
+    "source.metadata",
+    "asset.video",
+    "asset.transcript"
+  ],
+  "dependencies": [],
+  "config_schema": {
+    "automatic_transcript_retrieval": "not_configured",
+    "fallback": "paste_import_transcript"
+  }
+}

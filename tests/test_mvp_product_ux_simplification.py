@@ -33,15 +33,15 @@ class MVPProductUXSimplificationTests(Phase334TestCase):
         self.assertIn("External plugin sandbox ready", operations)
         self.assertIn("CI certification ready", operations)
 
-    def test_returning_user_new_article_is_one_direct_action(self) -> None:
+    def test_returning_user_new_content_is_one_direct_action(self) -> None:
         session_id = self.start_real_session()
         home = self.page("/home")
-        self.assertEqual(home.count("New article"), 1)
+        self.assertEqual(home.count("New content"), 1)
         self.assertNotIn('href="/content/new"', home)
 
         payload, status = self.post(
             "/content/new",
-            {"setup_session": session_id, "idempotency_key": "product-ux-returning-new-article"},
+            {"setup_session": session_id, "idempotency_key": "product-ux-returning-new-content"},
         )
         self.assertEqual(status, 303)
         self.assertIn("/content/", payload)
@@ -62,7 +62,7 @@ class MVPProductUXSimplificationTests(Phase334TestCase):
         session_id = self.start_real_session()
         self.complete_foundation(session_id)
         payload, status = self.post(
-            "/content/new", {"setup_session": session_id, "idempotency_key": "product-ux-new-article"}
+            "/content/new", {"setup_session": session_id, "idempotency_key": "product-ux-new-content"}
         )
         self.assertEqual(status, 303)
         self.assertIn("/content/", payload)
@@ -74,7 +74,7 @@ class MVPProductUXSimplificationTests(Phase334TestCase):
         self.complete_foundation(session_id)
         draft_id = self.create_real_draft(session_id, title="Product UX Article")
         composer = self.page(f"/content/{draft_id}/compose?setup_session={session_id}")
-        self.assertIn("Article editor", composer)
+        self.assertIn("Canonical editor", composer)
         self.assertIn("Preview", composer)
         self.assertIn("Website", composer)
         self.assertIn("SEO & settings", composer)
@@ -89,20 +89,20 @@ class MVPProductUXSimplificationTests(Phase334TestCase):
         with self.static_server(repo) as port:
             session_id, draft_id = self.prepare_publication_with_custom_seo(repo, port)
             review_legacy = self.page(f"/setup/{session_id}/review")
-            self.assertIn("Article editor", review_legacy)
+            self.assertIn("Canonical editor", review_legacy)
             self.assertIn("Ready to publish", review_legacy)
             self.assertNotIn("Final Review", review_legacy)
 
             publication = self.publish_session(session_id)
             timeline_legacy = self.page(f"/setup/{session_id}/publish")
             self.assertIn("Published", timeline_legacy)
-            self.assertIn("View article", timeline_legacy)
+            self.assertIn("View content", timeline_legacy)
             self.assertNotIn("Publication Timeline", timeline_legacy)
 
             result = self.page(f"/content/{draft_id}/compose?setup_session={session_id}")
             self.assertIn("Published", result)
-            self.assertIn("Your article is live", result)
-            self.assertIn("View article", result)
+            self.assertIn("Your content is live", result)
+            self.assertIn("View content", result)
             self.assertIn("Technical details", result)
             self.assertIn(publication["execution_request_id"], result)
 
