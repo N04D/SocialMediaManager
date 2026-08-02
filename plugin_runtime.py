@@ -13,9 +13,12 @@ from content_services import ContentService
 from media_library import MediaLibraryService
 from media_processing_runtime import MediaProcessingRuntime
 from media_runtime import MediaRuntime
+from plugins.commerce.catalog import CommerceCatalogPlugin
 from plugins.providers.auto_browser import AutoBrowserProvider
 from plugins.providers.legacy_browser import LegacyBrowserProvider
 from plugins.providers.local_media_storage import LocalMediaStorageProvider
+from plugins.sources.youtube import YouTubeSourcePlugin
+from plugins.transformations.video_repurpose import VideoRepurposePlugin
 from publication_execution import PublicationExecutionService
 from publication_planning import PublicationPlanningService
 from publication_scheduling import CampaignService, ExecutionCalendarService, ScheduleMaterializationService
@@ -38,9 +41,11 @@ LEGACY_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "legacy_browser" 
 AUTO_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "auto_browser" / "plugin.manifest.json"
 LOCAL_MEDIA_STORAGE_MANIFEST = ROOT_DIR / "plugins" / "providers" / "local_media_storage" / "plugin.manifest.json"
 YOUTUBE_SOURCE_MANIFEST = ROOT_DIR / "plugins" / "sources" / "youtube" / "plugin.manifest.json"
+VIDEO_REPURPOSE_MANIFEST = ROOT_DIR / "plugins" / "transformations" / "video_repurpose" / "plugin.manifest.json"
 TRANSCRIPT_CLIP_MANIFEST = (
     ROOT_DIR / "plugins" / "transformations" / "transcript_clip_candidates" / "plugin.manifest.json"
 )
+COMMERCE_CATALOG_MANIFEST = ROOT_DIR / "plugins" / "commerce" / "catalog" / "plugin.manifest.json"
 COMMERCE_CONTRACT_MANIFEST = ROOT_DIR / "plugins" / "commerce" / "example" / "plugin.manifest.json"
 
 
@@ -544,7 +549,9 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
         AUTO_BROWSER_MANIFEST,
         LOCAL_MEDIA_STORAGE_MANIFEST,
         YOUTUBE_SOURCE_MANIFEST,
+        VIDEO_REPURPOSE_MANIFEST,
         TRANSCRIPT_CLIP_MANIFEST,
+        COMMERCE_CATALOG_MANIFEST,
         COMMERCE_CONTRACT_MANIFEST,
         LINKEDIN_PLUGIN_MANIFEST,
         MASTODON_PLUGIN_MANIFEST,
@@ -597,6 +604,33 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
         local_media.health = health
         local_media.health["default_priority"] = 5
         local_media.status = PluginStatus.READY if health.get("status") == "ready" else PluginStatus.DEGRADED
+
+    youtube_source = runtime.runtimes.get("source.youtube")
+    if youtube_source is not None:
+        service = YouTubeSourcePlugin()
+        health = service.health_check()
+        youtube_source.instance = service
+        youtube_source.register_service("source_service", service)
+        youtube_source.health = health
+        youtube_source.status = PluginStatus.READY if health.get("status") == "ready" else PluginStatus.DEGRADED
+
+    video_repurpose = runtime.runtimes.get("plugin.video_repurpose")
+    if video_repurpose is not None:
+        service = VideoRepurposePlugin()
+        health = service.health_check()
+        video_repurpose.instance = service
+        video_repurpose.register_service("transformation_service", service)
+        video_repurpose.health = health
+        video_repurpose.status = PluginStatus.READY if health.get("status") == "ready" else PluginStatus.DEGRADED
+
+    commerce_catalog = runtime.runtimes.get("commerce.catalog")
+    if commerce_catalog is not None:
+        service = CommerceCatalogPlugin()
+        health = service.health_check()
+        commerce_catalog.instance = service
+        commerce_catalog.register_service("commerce_service", service)
+        commerce_catalog.health = health
+        commerce_catalog.status = PluginStatus.READY if health.get("status") == "ready" else PluginStatus.DEGRADED
 
     linkedin = runtime.runtimes.get("channel.linkedin")
     if linkedin is not None:

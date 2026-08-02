@@ -3428,9 +3428,54 @@ def render_owned_publication_workspace_page() -> str:
           <a href="/publications/{html.escape(workspace["publication_plan"]["id"])}">Publishing</a>
           <a href="/funnels/{html.escape(workspace["content_item_id"])}">Performance</a>
         </nav>
+        <section class="panel" aria-labelledby="new-content-title">
+          <h2 id="new-content-title">New content</h2>
+          <div class="actions" role="list" aria-label="Available source types">
+            <button type="button">Write</button>
+            <button type="button" class="secondary">YouTube</button>
+          </div>
+          <div class="editor-two-up">
+            <label>YouTube URL or video ID <input value="https://www.youtube.com/watch?v=sabr1234567"></label>
+            <label>Transcript import <textarea rows="3">0:00-0:18 Sabr means choosing patience while you keep moving with purpose.</textarea></label>
+          </div>
+          <p class="meta">Transcript retrieval not configured. Paste transcript and import transcript are explicit source actions.</p>
+        </section>
         <div class="workspace-grid">
           <article class="panel workspace-editor">
             <h2 id="owned-workspace-title">Article composer</h2>
+            <section class="source-context" aria-label="Source-aware content context">
+              <p><strong>Primary source</strong> YouTube</p>
+              <details>
+                <summary>Source details</summary>
+                <p class="meta">URL https://www.youtube.com/watch?v=sabr1234567</p>
+                <p class="meta">Video ID sabr1234567</p>
+                <p class="meta">Transcript provenance: source.youtube paste transcript import; canonical edited transcript is stored separately from original transcript.</p>
+              </details>
+              <div class="tabs" aria-label="Canonical workspace sections">
+                <button type="button">Canonical</button>
+                <button type="button" class="secondary">Variants</button>
+                <button type="button" class="secondary">Assets</button>
+                <button type="button" class="secondary">Related products</button>
+              </div>
+              <div class="workspace-grid">
+                <article class="source-context-box">
+                  <h3>Clip candidates</h3>
+                  <p>Selected: strong educational hook · 0:00-0:18 · deterministic score 0.98</p>
+                  <p class="meta">Transformation provenance: plugin.video_repurpose · transcript timeline input.</p>
+                </article>
+                <article class="source-context-box">
+                  <h3>Related product</h3>
+                  <p><strong>Sabr T-shirt</strong><br>EUR 29 · In stock</p>
+                  <p class="meta">Matched to topic: Sabr · relationship provenance: agent/playbook.</p>
+                  <div class="actions">
+                    <button type="button">Use in campaign</button>
+                    <button type="button" class="secondary">Accept</button>
+                    <button type="button" class="secondary">Change</button>
+                    <button type="button" class="secondary">Remove</button>
+                  </div>
+                </article>
+              </div>
+            </section>
             <form id="owned-composer-form" data-content-id="{html.escape(workspace["content_item_id"])}" data-version="{html.escape(str(draft["version"]))}">
               <label>Title <input id="owned-title" name="title" value="{html.escape(draft["title"])}" aria-describedby="title-validation"></label>
               <label for="owned-summary">Summary</label><textarea id="owned-summary" name="summary" rows="3">{html.escape(draft["summary"])}</textarea>
@@ -3597,9 +3642,28 @@ def render_plugins_page() -> str:
             name = manifest.name if manifest else plugin_id
             cap_markup = "".join(f"<span class='pill'>{html.escape(cap)}</span>" for cap in sorted(set(caps)))
             config_note = ""
+            if family == PluginFamily.SOURCES and plugin_id == "source.youtube":
+                config_note = (
+                    "<p><strong>Installed</strong></p>"
+                    "<p>Configuration: source-only URL/video ID validation, paste transcript, import transcript, transcript provenance, and timestamped timeline output.</p>"
+                    "<p class='meta'>Transcript retrieval not configured; no scraping or credentials are used.</p>"
+                )
+            if family == PluginFamily.TRANSFORMATIONS and plugin_id == "plugin.video_repurpose":
+                config_note = (
+                    "<p>Transcript to clip candidates · short video asset contract · generic social text and article variants.</p>"
+                    "<p class='meta'>Platform-agnostic transformation; channel plugins consume variants later.</p>"
+                )
+            if family == PluginFamily.MEDIA and plugin_id == "plugin.video_repurpose":
+                config_note = "<p>Short video capability is typed. Rendering reports capability status when local media execution is unavailable.</p>"
             if family == PluginFamily.CHANNELS and plugin_id == "channel.linkedin":
                 config_note = "<p>Configuration lives here: account, connection, formatting defaults, CTA behavior, media defaults, scheduling defaults, provider/browser selection, and channel policy.</p>"
-            if family == PluginFamily.COMMERCE:
+            if family == PluginFamily.COMMERCE and plugin_id == "commerce.catalog":
+                config_note = (
+                    "<p><strong>Generic Product Catalog</strong></p>"
+                    "<p>Products, catalog status, promotion policy, product media, and click/sale outcome capabilities.</p>"
+                    "<p class='meta'>Fixture catalog is read-only; no payment, order, or store mutation is available.</p>"
+                )
+            elif family == PluginFamily.COMMERCE:
                 config_note = "<p>Commerce plugins can provide product/catalog entities and click/sale outcomes; publishing still requires existing confirmation flow.</p>"
             cards.append(
                 "<article class='panel plugin-card'>"
@@ -3612,6 +3676,16 @@ def render_plugins_page() -> str:
         sections.append(
             f"<section class='card'><h2>{html.escape(family_label(family))}</h2><div class='stack'>{''.join(cards)}</div></section>"
         )
+    sections.append(
+        "<section class='card'><h2>Playbooks</h2>"
+        "<article class='panel plugin-card'>"
+        "<h3>Creator Commerce Repurpose</h3>"
+        "<p>Intent: educate with secondary sell_product.</p>"
+        "<p>Requires: [ok] Video source · [ok] Transcript · [ok] Clip transformation · [ok] Product catalog.</p>"
+        "<p>Optional: LinkedIn · Markdown website · Mastodon · product click · sale.</p>"
+        "<p class='meta'>Policies: never invent discounts; only promote available products; commercial CTA requires explicit confirmation; do not publish automatically.</p>"
+        "</article></section>"
+    )
     operations = (
         "<details class='card'><summary><strong>Advanced Operations</strong></summary>"
         f"<p>SDK {html.escape(PLUGIN_SDK_VERSION)} · distribution framework {html.escape(PLUGIN_DISTRIBUTION_FRAMEWORK_VERSION)} · direct network remains blocked for sandboxed plugins.</p>"
@@ -3871,6 +3945,24 @@ def render_page(
     }}
     .card::before {{ content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; border-radius: var(--radius) 0 0 var(--radius); background: rgba(113, 113, 122, 0.18); }}
     .compact-card {{ padding: 18px 20px; }}
+    .source-context {{
+      display: grid;
+      gap: 12px;
+      margin: 0 0 18px;
+      padding: 14px;
+      border: 1px solid rgba(113, 113, 122, 0.16);
+      border-radius: var(--radius);
+      background: rgba(10, 10, 12, 0.42);
+    }}
+    .source-context-box {{
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid rgba(113, 113, 122, 0.14);
+      border-radius: var(--radius);
+      background: rgba(244, 244, 245, 0.04);
+    }}
     .card-heading {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }}
     h1, h2, h3 {{ margin: 0 0 12px; }}
     .meta {{ color: var(--muted); font-size: 14px; }}

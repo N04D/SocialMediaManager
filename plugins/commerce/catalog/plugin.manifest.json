@@ -1,0 +1,23 @@
+{
+  "id": "commerce.catalog",
+  "name": "Generic Product Catalog",
+  "version": "0.1.0",
+  "plugin_api_version": 1,
+  "type": "content",
+  "entrypoint": "plugins.commerce.catalog",
+  "status": "ready",
+  "capabilities": [
+    "entity.product",
+    "commerce.product_catalog",
+    "commerce.product_lookup",
+    "commerce.product_media",
+    "outcome.product_click",
+    "outcome.sale"
+  ],
+  "dependencies": [],
+  "config_schema": {
+    "catalog": "fixture_read_only",
+    "payment_mutation": false,
+    "order_creation": false
+  }
+}

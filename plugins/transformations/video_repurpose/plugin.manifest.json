@@ -1,0 +1,28 @@
+{
+  "id": "plugin.video_repurpose",
+  "name": "Video Repurpose",
+  "version": "0.1.0",
+  "plugin_api_version": 1,
+  "type": "media",
+  "entrypoint": "plugins.transformations.video_repurpose",
+  "status": "ready",
+  "capabilities": [
+    "transformation.clip_candidates",
+    "transformation.accepts.asset.video",
+    "transformation.accepts.timeline.transcript",
+    "transformation.accepts.canonical.text",
+    "transformation.produces.transformation.clip_candidates",
+    "transformation.produces.asset.short_video",
+    "transformation.produces.variant.social_text",
+    "transformation.produces.variant.article",
+    "asset.short_video",
+    "variant.social_text",
+    "variant.article"
+  ],
+  "dependencies": [],
+  "config_schema": {
+    "deterministic": true,
+    "network_required": false,
+    "short_video_rendering": "contract_only"
+  }
+}

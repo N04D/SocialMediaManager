@@ -9,14 +9,18 @@
   "capabilities": [
     "source.youtube",
     "source.video",
+    "source.transcript",
     "source.transcript.import",
     "source.metadata",
+    "timeline.transcript",
     "asset.video",
-    "asset.transcript"
+    "asset.transcript",
+    "asset.transcript.timeline"
   ],
   "dependencies": [],
   "config_schema": {
     "automatic_transcript_retrieval": "not_configured",
-    "fallback": "paste_import_transcript"
+    "fallback": "paste_import_transcript",
+    "network_required": false
   }
 }
