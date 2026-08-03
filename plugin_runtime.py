@@ -14,6 +14,7 @@ from media_library import MediaLibraryService
 from media_processing_runtime import MediaProcessingRuntime
 from media_runtime import MediaRuntime
 from plugins.commerce.catalog import CommerceCatalogPlugin
+from plugins.commerce.woocommerce import WooCommerceCatalogPlugin
 from plugins.providers.auto_browser import AutoBrowserProvider
 from plugins.providers.legacy_browser import LegacyBrowserProvider
 from plugins.providers.local_media_storage import LocalMediaStorageProvider
@@ -48,6 +49,7 @@ TRANSCRIPT_CLIP_MANIFEST = (
     ROOT_DIR / "plugins" / "transformations" / "transcript_clip_candidates" / "plugin.manifest.json"
 )
 COMMERCE_CATALOG_MANIFEST = ROOT_DIR / "plugins" / "commerce" / "catalog" / "plugin.manifest.json"
+COMMERCE_WOOCOMMERCE_MANIFEST = ROOT_DIR / "plugins" / "commerce" / "woocommerce" / "plugin.manifest.json"
 COMMERCE_CONTRACT_MANIFEST = ROOT_DIR / "plugins" / "commerce" / "example" / "plugin.manifest.json"
 
 
@@ -564,6 +566,7 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
         VIDEO_REPURPOSE_MANIFEST,
         TRANSCRIPT_CLIP_MANIFEST,
         COMMERCE_CATALOG_MANIFEST,
+        COMMERCE_WOOCOMMERCE_MANIFEST,
         COMMERCE_CONTRACT_MANIFEST,
         LINKEDIN_PLUGIN_MANIFEST,
         MASTODON_PLUGIN_MANIFEST,
@@ -653,6 +656,15 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
         commerce_catalog.register_service("commerce_service", service)
         commerce_catalog.health = health
         commerce_catalog.status = PluginStatus.READY if health.get("status") == "ready" else PluginStatus.DEGRADED
+
+    woocommerce = runtime.runtimes.get("commerce.woocommerce")
+    if woocommerce is not None:
+        service = WooCommerceCatalogPlugin()
+        health = service.health_check()
+        woocommerce.instance = service
+        woocommerce.register_service("commerce_service", service)
+        woocommerce.health = health
+        woocommerce.status = PluginStatus.READY if health.get("status") == "ready" else PluginStatus.DEGRADED
 
     linkedin = runtime.runtimes.get("channel.linkedin")
     if linkedin is not None:

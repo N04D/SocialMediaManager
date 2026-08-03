@@ -1,0 +1,27 @@
+{
+  "id": "commerce.woocommerce",
+  "name": "WooCommerce",
+  "version": "0.1.0",
+  "plugin_api_version": 1,
+  "type": "content",
+  "entrypoint": "plugins.commerce.woocommerce",
+  "status": "ready",
+  "capabilities": [
+    "entity.product",
+    "commerce.product_catalog",
+    "commerce.product_lookup",
+    "commerce.product_media",
+    "outcome.product_click",
+    "outcome.sale"
+  ],
+  "dependencies": [],
+  "config_schema": {
+    "store_url": "required",
+    "consumer_key_secret_ref": "required",
+    "consumer_secret_secret_ref": "required",
+    "timeout": 10,
+    "page_size": 25,
+    "verify_tls": true,
+    "read_only": true
+  }
+}

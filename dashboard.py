@@ -3511,7 +3511,11 @@ def render_owned_publication_workspace_page() -> str:
                 <article class="source-context-box">
                   <h3>Related product</h3>
                   <p><strong>Sabr T-shirt</strong><br>EUR 29 · In stock</p>
-                  <p class="meta">Matched to topic: Sabr · relationship provenance: agent/playbook.</p>
+                  <p class="meta">From WooCommerce · Matched to topic: Sabr · relationship provenance: agent/playbook.</p>
+                  <details>
+                    <summary>Product details</summary>
+                    <p class="meta">Category apparel · Tags sabr, patience, calligraphy · Store link available · Catalog source WooCommerce · Last synced 12 minutes ago.</p>
+                  </details>
                   <div class="actions">
                     <button type="button" class="secondary">Use in campaign</button>
                   </div>
@@ -3724,6 +3728,17 @@ def render_plugins_page() -> str:
                     "<p><strong>Generic Product Catalog</strong></p>"
                     "<p>Products, catalog status, promotion policy, product media, and click/sale outcome capabilities.</p>"
                     "<p class='meta'>Fixture catalog is read-only; no payment, order, or store mutation is available.</p>"
+                )
+            elif family == PluginFamily.COMMERCE and plugin_id == "commerce.woocommerce":
+                health = runtime.runtimes[plugin_id].health
+                config_note = (
+                    "<p><strong>WooCommerce</strong></p>"
+                    f"<p>Status: {html.escape(str(health.get('status') or 'unknown'))} · Catalog status: {html.escape(str(health.get('catalog_status') or 'not_synced'))}</p>"
+                    f"<p>Store: {html.escape(str(health.get('store') or 'not configured'))}</p>"
+                    f"<p>Products synced: {html.escape(str(health.get('product_count') or 0))} · Last sync: {html.escape(str(health.get('last_sync_at') or 'never'))}</p>"
+                    "<p>Capabilities: product catalog, product lookup, product media, product click outcome, sale outcome.</p>"
+                    "<div class='actions'><button type='button'>Configure</button><button type='button' class='secondary'>Test connection</button><button type='button' class='secondary'>Sync products</button></div>"
+                    "<p class='meta'>Secret refs are configured through managed secrets and are never shown here. Read-only adapter: no product, order, payment, coupon, or refund mutation.</p>"
                 )
             elif family == PluginFamily.COMMERCE:
                 config_note = "<p>Commerce plugins can provide product/catalog entities and click/sale outcomes; publishing still requires existing confirmation flow.</p>"
