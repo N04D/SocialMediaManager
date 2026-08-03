@@ -3477,12 +3477,25 @@ def render_owned_publication_workspace_page() -> str:
               <div class="workspace-grid">
                 <article class="source-context-box">
                   <h3>Suggested clips</h3>
+                  <p class="meta">Recommended</p>
                   <p><strong>Why does Sabr matter in daily creative work?</strong><br>10 sec · 00:10 → 00:20</p>
                   <p>It helps you keep moving without rushing the result.</p>
-                  <p class="meta">Strong standalone opening · complete thought.</p>
+                  <p class="meta">Strong hook · Complete thought · Natural visual boundary</p>
+                  <details>
+                    <summary>Why this clip?</summary>
+                    <ul>
+                      <li>Opens with a direct question.</li>
+                      <li>Contains a complete explanation.</li>
+                      <li>Ends on a natural sentence boundary.</li>
+                      <li>Speech energy stays stronger than the quiet passage.</li>
+                      <li>Starts near a scene change.</li>
+                    </ul>
+                    <p class="meta">Advanced: semantic 0.86 · hook 0.92 · completeness 0.89 · audio 0.68 · scene 0.77</p>
+                  </details>
                   <div class="actions">
                     <button type="button" class="secondary">Preview segment</button>
                     <button type="button">Use clip</button>
+                    <button type="button" class="secondary">Dismiss</button>
                   </div>
                 </article>
                 <article class="source-context-box">
@@ -3684,6 +3697,8 @@ def render_plugins_page() -> str:
             if family == PluginFamily.TRANSFORMATIONS and plugin_id == "plugin.video_repurpose":
                 config_note = (
                     "<p>Transcript to clip candidates · short video asset contract · generic social text and article variants.</p>"
+                    "<p><strong>Clip intelligence</strong></p>"
+                    "<p>✓ Semantic analysis · ✓ Hook detection · ✓ Completeness · ✓ Audio signal · ✓ Scene boundaries · ○ Speaker boundaries unavailable without labels.</p>"
                     "<p class='meta'>Platform-agnostic transformation; channel plugins consume variants later.</p>"
                 )
             if family == PluginFamily.MEDIA and plugin_id == "plugin.video_repurpose":

@@ -22,6 +22,7 @@ FAMILY_PREFIXES: tuple[tuple[str, PluginFamily], ...] = (
     ("source.", PluginFamily.SOURCES),
     ("entity.", PluginFamily.SOURCES),
     ("transformation.", PluginFamily.TRANSFORMATIONS),
+    ("clip.", PluginFamily.TRANSFORMATIONS),
     ("asset.", PluginFamily.MEDIA),
     ("media.", PluginFamily.MEDIA),
     ("channel.", PluginFamily.CHANNELS),

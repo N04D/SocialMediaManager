@@ -12,6 +12,13 @@
     "transformation.video_extract",
     "transformation.video_reframe",
     "transformation.caption_render",
+    "clip.signal.semantic",
+    "clip.signal.hook",
+    "clip.signal.completeness",
+    "clip.signal.audio_energy",
+    "clip.signal.scene_boundary",
+    "clip.signal.speaker_boundary",
+    "clip.rank.fusion",
     "transformation.accepts.asset.video",
     "transformation.accepts.timeline.transcript",
     "transformation.accepts.canonical.text",
@@ -31,6 +38,15 @@
   "config_schema": {
     "deterministic": true,
     "network_required": false,
-    "short_video_rendering": "available_with_local_ffmpeg"
+    "short_video_rendering": "available_with_local_ffmpeg",
+    "clip_intelligence": {
+      "semantic": "ready",
+      "hook": "ready",
+      "completeness": "ready",
+      "audio_energy": "ready_with_valid_audio",
+      "scene_boundary": "ready_with_video_stream",
+      "speaker_boundary": "unavailable_without_speaker_labels",
+      "ranking_strategy": "multimodal_fusion_v1"
+    }
   }
 }

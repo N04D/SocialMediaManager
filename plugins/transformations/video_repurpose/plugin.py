@@ -11,6 +11,19 @@ from uuid import uuid4
 
 import channel_store
 from media_store import list_media_assets, save_media_asset
+from plugins.transformations.video_repurpose.clip_intelligence import (
+    AudioEnergySignalAnalyzer,
+    ClipSignalFusionRanker,
+    ClipSignalResult,
+    CompletenessSignalAnalyzer,
+    FusionConfig,
+    HookSignalAnalyzer,
+    RankedClipCandidate,
+    SceneBoundarySignalAnalyzer,
+    SemanticSignalAnalyzer,
+    SpeakerBoundarySignalAnalyzer,
+    select_with_user_feedback,
+)
 from plugins.transformations.video_repurpose.ffmpeg_boundary import (
     FFmpegBoundaryError,
     ensure_managed_path,
@@ -77,6 +90,13 @@ class VideoRepurposePlugin:
         "transformation.video_extract",
         "transformation.video_reframe",
         "transformation.caption_render",
+        "clip.signal.semantic",
+        "clip.signal.hook",
+        "clip.signal.completeness",
+        "clip.signal.audio_energy",
+        "clip.signal.scene_boundary",
+        "clip.signal.speaker_boundary",
+        "clip.rank.fusion",
         "transformation.accepts.asset.video",
         "transformation.accepts.timeline.transcript",
         "transformation.accepts.canonical.text",
@@ -114,6 +134,15 @@ class VideoRepurposePlugin:
             "shell": "not_used",
             "short_video_rendering": "available_with_local_ffmpeg",
             "render_steps": ["clip_selection", "video_extract", "video_reframe", "caption_render"],
+            "clip_intelligence": {
+                "semantic": "ready",
+                "hook": "ready",
+                "completeness": "ready",
+                "audio_energy": "ready_with_valid_audio",
+                "scene_boundary": "ready_with_video_stream",
+                "speaker_boundary": "unavailable_without_speaker_labels",
+                "fallback": "baseline",
+            },
         }
 
     def parse_timestamped_transcript(self, transcript: str) -> list[TimelineSegment]:
@@ -202,6 +231,66 @@ class VideoRepurposePlugin:
                 )
             )
         return sorted(candidates, key=lambda candidate: (-candidate.score, candidate.start_time))[:max_candidates]
+
+    def multimodal_clip_candidates(
+        self,
+        segments: list[TimelineSegment],
+        *,
+        source_video_path: Path | None = None,
+        max_candidates: int = 5,
+        min_duration: float = 8.0,
+        max_duration: float = 60.0,
+        fusion_config: FusionConfig | None = None,
+    ) -> list[RankedClipCandidate]:
+        baseline = self.clip_candidates(
+            segments,
+            max_candidates=max_candidates,
+            min_duration=min_duration,
+            max_duration=max_duration,
+        )
+        if not baseline:
+            return []
+        semantic = SemanticSignalAnalyzer()
+        hook = HookSignalAnalyzer()
+        completeness = CompletenessSignalAnalyzer()
+        speaker = SpeakerBoundarySignalAnalyzer()
+        audio = AudioEnergySignalAnalyzer()
+        scene = SceneBoundarySignalAnalyzer()
+        audio_windows = None
+        scene_changes = None
+        if source_video_path is not None:
+            try:
+                audio_windows = audio.analyze_source(source_video_path)
+            except FFmpegBoundaryError:
+                audio_windows = None
+            try:
+                scene_changes = scene.analyze_source(source_video_path)
+            except FFmpegBoundaryError:
+                scene_changes = None
+        signals: dict[str, list[ClipSignalResult]] = {
+            semantic.signal_id: [semantic.score(candidate, segments) for candidate in baseline],
+            hook.signal_id: [hook.score(candidate, segments) for candidate in baseline],
+            completeness.signal_id: [completeness.score(candidate, segments) for candidate in baseline],
+            audio.signal_id: [audio.score(candidate, audio_windows) for candidate in baseline],
+            scene.signal_id: [scene.score(candidate, scene_changes) for candidate in baseline],
+            speaker.signal_id: [speaker.score(candidate, segments) for candidate in baseline],
+        }
+        return ClipSignalFusionRanker(fusion_config).rank(baseline, signals)
+
+    def selected_ranked_candidate(
+        self,
+        ranked: RankedClipCandidate,
+        *,
+        selected_at: str,
+        adjusted_start: float | None = None,
+        adjusted_end: float | None = None,
+    ) -> RankedClipCandidate:
+        return select_with_user_feedback(
+            ranked,
+            selected_at=selected_at,
+            adjusted_start=adjusted_start,
+            adjusted_end=adjusted_end,
+        )
 
     def import_long_form_video(
         self,
