@@ -38,4 +38,4 @@ class Phase35VideoRepurposePluginTests(unittest.TestCase):
         health = self.plugin.health_check()
         self.assertFalse(health["network_required"])
         self.assertEqual(health["shell"], "not_used")
-        self.assertEqual(health["short_video_rendering"], "rendering capability not configured")
+        self.assertEqual(health["short_video_rendering"], "available_with_local_ffmpeg")

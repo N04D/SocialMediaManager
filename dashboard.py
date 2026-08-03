@@ -3433,23 +3433,25 @@ def render_owned_publication_workspace_page() -> str:
           <div class="actions" role="list" aria-label="Available source types">
             <button type="button">Write</button>
             <button type="button" class="secondary">YouTube</button>
+            <button type="button" class="secondary">Video</button>
           </div>
           <div class="editor-two-up">
             <label>YouTube URL or video ID <input value="https://www.youtube.com/watch?v=sabr1234567"></label>
-            <label>Transcript import <textarea rows="3">0:00-0:18 Sabr means choosing patience while you keep moving with purpose.</textarea></label>
+            <label>Video file <input value="phase36-longform.mp4"></label>
+            <label>Transcript import <textarea rows="3">00:00:10.000 --> 00:00:20.000&#10;Why does Sabr matter in daily creative work? It helps you keep moving without rushing the result.</textarea></label>
           </div>
-          <p class="meta">Transcript retrieval not configured. Paste transcript and import transcript are explicit source actions.</p>
+          <p class="meta">Video uses managed media import. Transcript retrieval not configured; paste transcript and import transcript are explicit source actions.</p>
         </section>
         <div class="workspace-grid">
           <article class="panel workspace-editor">
             <h2 id="owned-workspace-title">Article composer</h2>
             <section class="source-context" aria-label="Source-aware content context">
-              <p><strong>Primary source</strong> YouTube</p>
+              <p><strong>Primary source</strong> Video</p>
               <details>
                 <summary>Source details</summary>
-                <p class="meta">URL https://www.youtube.com/watch?v=sabr1234567</p>
-                <p class="meta">Video ID sabr1234567</p>
-                <p class="meta">Transcript provenance: source.youtube paste transcript import; canonical edited transcript is stored separately from original transcript.</p>
+                <p class="meta">Filename phase36-longform.mp4</p>
+                <p class="meta">Duration 40 sec · 640x360 · audio present</p>
+                <p class="meta">Transcript status: imported with timestamps; original timestamps are preserved in provenance.</p>
               </details>
               <div class="tabs" aria-label="Canonical workspace sections">
                 <button type="button">Canonical</button>
@@ -3459,22 +3461,38 @@ def render_owned_publication_workspace_page() -> str:
               </div>
               <div class="workspace-grid">
                 <article class="source-context-box">
-                  <h3>Clip candidates</h3>
-                  <p>Selected: strong educational hook · 0:00-0:18 · deterministic score 0.98</p>
-                  <p class="meta">Transformation provenance: plugin.video_repurpose · transcript timeline input.</p>
+                  <h3>Suggested clips</h3>
+                  <p><strong>Why does Sabr matter in daily creative work?</strong><br>10 sec · 00:10 → 00:20</p>
+                  <p>It helps you keep moving without rushing the result.</p>
+                  <p class="meta">Strong standalone opening · complete thought.</p>
+                  <div class="actions">
+                    <button type="button" class="secondary">Preview segment</button>
+                    <button type="button">Use clip</button>
+                  </div>
+                </article>
+                <article class="source-context-box">
+                  <h3>Rendered clips</h3>
+                  <p><strong>Short clip</strong><br>10 sec · 9:16 · Captions included</p>
+                  <video controls aria-label="Short clip preview"></video>
+                  <p class="meta">Rendered only after explicit selection. Preview appears when media inspection succeeds.</p>
+                  <div class="actions">
+                    <button type="button">Create variant</button>
+                    <button type="button" class="secondary">Download</button>
+                  </div>
                 </article>
                 <article class="source-context-box">
                   <h3>Related product</h3>
                   <p><strong>Sabr T-shirt</strong><br>EUR 29 · In stock</p>
                   <p class="meta">Matched to topic: Sabr · relationship provenance: agent/playbook.</p>
                   <div class="actions">
-                    <button type="button">Use in campaign</button>
-                    <button type="button" class="secondary">Accept</button>
-                    <button type="button" class="secondary">Change</button>
-                    <button type="button" class="secondary">Remove</button>
+                    <button type="button" class="secondary">Use in campaign</button>
                   </div>
                 </article>
               </div>
+              <details>
+                <summary>Advanced provenance</summary>
+                <p class="meta">Original timestamps 00:10 → 00:20 · transform chain: extract, reframe, caption render · source relation preserved.</p>
+              </details>
             </section>
             <form id="owned-composer-form" data-content-id="{html.escape(workspace["content_item_id"])}" data-version="{html.escape(str(draft["version"]))}">
               <label>Title <input id="owned-title" name="title" value="{html.escape(draft["title"])}" aria-describedby="title-validation"></label>
