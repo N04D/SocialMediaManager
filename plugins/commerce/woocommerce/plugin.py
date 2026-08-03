@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
+from plugins.commerce.attribution import approved_metadata
 from src.core.content import Entity
 
 PLUGIN_ID = "commerce.woocommerce"
@@ -43,6 +44,10 @@ class WooCommerceConfig:
     store_id: str = ""
     currency: str = "EUR"
     max_pages: int = 10
+    attribution_id_meta_keys: tuple[str, ...] = ()
+    campaign_meta_keys: tuple[str, ...] = ()
+    content_meta_keys: tuple[str, ...] = ()
+    utm_meta_keys: tuple[str, ...] = ()
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> WooCommerceConfig:
@@ -56,6 +61,10 @@ class WooCommerceConfig:
             store_id=str(payload.get("store_id") or ""),
             currency=str(payload.get("currency") or "EUR").upper(),
             max_pages=int(payload.get("max_pages", 10)),
+            attribution_id_meta_keys=tuple(str(item) for item in payload.get("attribution_id_meta_keys", ())),
+            campaign_meta_keys=tuple(str(item) for item in payload.get("campaign_meta_keys", ())),
+            content_meta_keys=tuple(str(item) for item in payload.get("content_meta_keys", ())),
+            utm_meta_keys=tuple(str(item) for item in payload.get("utm_meta_keys", ())),
         )
         return config.validate()
 
@@ -88,6 +97,10 @@ class WooCommerceConfig:
             "store_id": self.store_id,
             "currency": self.currency,
             "max_pages": self.max_pages,
+            "attribution_id_meta_keys": list(self.attribution_id_meta_keys),
+            "campaign_meta_keys": list(self.campaign_meta_keys),
+            "content_meta_keys": list(self.content_meta_keys),
+            "utm_meta_keys": list(self.utm_meta_keys),
         }
 
 
@@ -101,6 +114,32 @@ class WooCommerceVariant:
     stock_status: str
     stock_quantity: int | None = None
     image: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class WooCommerceOrderLineItem:
+    line_id: str
+    product_id: str
+    variation_id: str
+    quantity: int
+    subtotal: float | None
+    total: float | None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class WooCommerceOrder:
+    order_id: str
+    external_ref: str
+    status: str
+    recognized_sale: bool
+    created_at: str
+    completed_at: str
+    currency: str
+    total: float | None
+    line_items: tuple[WooCommerceOrderLineItem, ...]
+    attribution_metadata: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -208,6 +247,10 @@ class WooCommerceCatalogPlugin:
         "commerce.product_media",
         "outcome.product_click",
         "outcome.sale",
+        "outcome.purchase",
+        "outcome.revenue",
+        "commerce.orders.read",
+        "commerce.order_line_items.read",
     )
 
     def __init__(
@@ -232,6 +275,14 @@ class WooCommerceCatalogPlugin:
             "store_id": self.config.store_id,
         }
         self._source_missing: set[str] = set()
+        self._orders: tuple[WooCommerceOrder, ...] = ()
+        self._outcome_sync: dict[str, Any] = {
+            "status": "not_synced",
+            "last_outcome_sync_at": "",
+            "orders_observed": 0,
+            "outcomes_created_or_updated": 0,
+            "store_id": self.config.store_id,
+        }
 
     def health_check(self) -> dict[str, Any]:
         configured = bool(
@@ -250,6 +301,7 @@ class WooCommerceCatalogPlugin:
             "payment_mutation": False,
             "order_creation": False,
             "mutation_methods": [],
+            "outcome_sync": dict(self._outcome_sync),
             "config": self.config.redacted(),
         }
 
@@ -354,7 +406,82 @@ class WooCommerceCatalogPlugin:
         ]
 
     def outcome_capabilities(self) -> tuple[str, ...]:
-        return ("outcome.product_click", "outcome.sale")
+        return (
+            "outcome.product_click",
+            "outcome.sale",
+            "outcome.purchase",
+            "outcome.revenue",
+            "commerce.orders.read",
+            "commerce.order_line_items.read",
+        )
+
+    def list_orders(self) -> list[WooCommerceOrder]:
+        return list(self._orders)
+
+    def order_outcomes(
+        self,
+        order: WooCommerceOrder,
+        *,
+        workspace_id: str,
+        click_bindings: dict[str, dict[str, str]] | None = None,
+        campaign_bindings: dict[str, dict[str, str]] | None = None,
+        allow_inferred: bool = False,
+    ) -> list[Any]:
+        from plugins.commerce.outcomes import order_outcomes
+
+        return order_outcomes(
+            order,
+            workspace_id=workspace_id,
+            click_bindings=click_bindings,
+            campaign_bindings=campaign_bindings,
+            allow_inferred=allow_inferred,
+        )
+
+    def record_order_outcomes(
+        self, graph: Any, order: WooCommerceOrder, *, workspace_id: str, **kwargs: Any
+    ) -> list[Any]:
+        from plugins.commerce.outcomes import record_order_outcomes
+
+        return record_order_outcomes(graph, order, workspace_id=workspace_id, **kwargs)
+
+    def sync_orders(self) -> dict[str, Any]:
+        self._outcome_sync = dict(self._outcome_sync) | {"status": "running"}
+        staged: list[WooCommerceOrder] = []
+        pages_fetched = 0
+        try:
+            for page in range(1, self.config.max_pages + 1):
+                payload = self.client.get_json("/orders", {"per_page": self.config.page_size, "page": page})
+                if not isinstance(payload, list):
+                    raise WooCommerceError("provider_output_invalid", "WooCommerce orders page is invalid.")
+                if not payload:
+                    break
+                pages_fetched += 1
+                for item in payload:
+                    if not isinstance(item, dict):
+                        raise WooCommerceError("provider_output_invalid", "WooCommerce order payload is invalid.")
+                    staged.append(map_order(item, config=self.config))
+                if len(payload) < self.config.page_size:
+                    break
+        except WooCommerceError as exc:
+            self._outcome_sync = {
+                **self._outcome_sync,
+                "status": "failed",
+                "error_code": exc.code,
+                "message": exc.message,
+                "pages_fetched": pages_fetched,
+                "orders_observed": len(self._orders),
+            }
+            return dict(self._outcome_sync)
+        self._orders = tuple(staged)
+        self._outcome_sync = {
+            "status": "succeeded",
+            "last_outcome_sync_at": now_iso(),
+            "orders_observed": len(self._orders),
+            "outcomes_created_or_updated": sum(1 for order in self._orders if order.recognized_sale),
+            "pages_fetched": pages_fetched,
+            "store_id": self.config.store_id,
+        }
+        return dict(self._outcome_sync)
 
     def promotion_policy(self) -> dict[str, Any]:
         return {
@@ -399,6 +526,10 @@ def default_config_payload() -> dict[str, Any]:
         "page_size": 25,
         "verify_tls": True,
         "currency": "EUR",
+        "attribution_id_meta_keys": [],
+        "campaign_meta_keys": [],
+        "content_meta_keys": [],
+        "utm_meta_keys": [],
     }
 
 
@@ -419,6 +550,69 @@ def stable_store_id(store_url: str) -> str:
     parsed = urlparse(store_url)
     host = re.sub(r"[^a-z0-9]+", "-", (parsed.netloc or "store").lower()).strip("-")
     return host or "store"
+
+
+RECOGNIZED_SALE_STATUSES = {"processing", "completed"}
+
+
+def map_order(payload: dict[str, Any], *, config: WooCommerceConfig) -> WooCommerceOrder:
+    external_id = payload.get("id")
+    if external_id is None:
+        raise WooCommerceError("provider_output_invalid", "WooCommerce order id is required.")
+    status = plain_text(str(payload.get("status") or "unknown")).lower()
+    total, _ = parse_price(payload.get("total"))
+    items: list[WooCommerceOrderLineItem] = []
+    for raw in payload.get("line_items") or []:
+        if not isinstance(raw, dict) or raw.get("id") is None:
+            raise WooCommerceError("provider_output_invalid", "WooCommerce order line item is invalid.")
+        subtotal, _ = parse_price(raw.get("subtotal"))
+        line_total, _ = parse_price(raw.get("total"))
+        items.append(
+            WooCommerceOrderLineItem(
+                line_id=str(raw["id"]),
+                product_id=f"woocommerce.{config.store_id}.{raw.get('product_id')}" if raw.get("product_id") else "",
+                variation_id=str(raw.get("variation_id") or ""),
+                quantity=int(raw.get("quantity") or 0),
+                subtotal=subtotal,
+                total=line_total,
+                metadata={
+                    "sku": str(raw.get("sku") or ""),
+                    "name": plain_text(str(raw.get("name") or "")),
+                },
+            )
+        )
+    raw_meta = {
+        str(item.get("key")): item.get("value")
+        for item in payload.get("meta_data") or []
+        if isinstance(item, dict) and item.get("key")
+    }
+    approved = approved_metadata(
+        raw_meta,
+        attribution_id_keys=config.attribution_id_meta_keys,
+        campaign_keys=config.campaign_meta_keys,
+        content_keys=config.content_meta_keys,
+        utm_keys=config.utm_meta_keys,
+    )
+    return WooCommerceOrder(
+        order_id=str(external_id),
+        external_ref=f"woocommerce:{config.store_id}:order:{external_id}",
+        status=status,
+        recognized_sale=status in RECOGNIZED_SALE_STATUSES,
+        created_at=str(payload.get("date_created") or ""),
+        completed_at=str(payload.get("date_completed") or ""),
+        currency=str(payload.get("currency") or config.currency).upper(),
+        total=total,
+        line_items=tuple(items),
+        attribution_metadata=approved,
+        metadata={
+            "source_plugin": PLUGIN_ID,
+            "store_id": config.store_id,
+            "order_id": str(external_id),
+            "status": status,
+            "privacy": "customer_pii_not_ingested",
+            "trust_boundary": "external_untrusted_commerce_data",
+        },
+    )
 
 
 def map_product(

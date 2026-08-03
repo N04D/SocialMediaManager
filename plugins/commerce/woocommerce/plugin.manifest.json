@@ -12,7 +12,11 @@
     "commerce.product_lookup",
     "commerce.product_media",
     "outcome.product_click",
-    "outcome.sale"
+    "outcome.sale",
+    "outcome.purchase",
+    "outcome.revenue",
+    "commerce.orders.read",
+    "commerce.order_line_items.read"
   ],
   "dependencies": [],
   "config_schema": {
@@ -22,6 +26,10 @@
     "timeout": 10,
     "page_size": 25,
     "verify_tls": true,
+    "attribution_id_meta_keys": [],
+    "campaign_meta_keys": [],
+    "content_meta_keys": [],
+    "utm_meta_keys": [],
     "read_only": true
   }
 }

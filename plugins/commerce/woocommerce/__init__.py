@@ -1,8 +1,11 @@
 from .plugin import (
     WooCommerceCatalogPlugin,
     WooCommerceConfig,
+    WooCommerceOrder,
+    WooCommerceOrderLineItem,
     WooCommerceProduct,
     WooCommerceVariant,
+    map_order,
 )
 
 __all__ = [
@@ -10,4 +13,7 @@ __all__ = [
     "WooCommerceConfig",
     "WooCommerceProduct",
     "WooCommerceVariant",
+    "WooCommerceOrder",
+    "WooCommerceOrderLineItem",
+    "map_order",
 ]

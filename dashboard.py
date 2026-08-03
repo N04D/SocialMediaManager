@@ -2373,8 +2373,18 @@ def render_instagram_page() -> str:
 def render_analytics_page(config: AppConfig) -> str:
     runtime = get_plugin_runtime(config, reset=True, strict=False)
     bundle = runtime.analytics_bundle(config)
+    from plugins.commerce.outcomes import outcome_summary
+
     readmodels = bundle.read_model_service
     workspace_id = "linkedin"
+    commerce_outcomes = runtime.content_service(config).graph_service.list_outcomes(workspace_id=workspace_id)
+    commerce_summary = outcome_summary(commerce_outcomes)
+    commerce_currency_rows = "".join(
+        f"<tr><td>{html.escape(currency)}</td><td>{html.escape(str(values.get('direct', 0.0)))}</td>"
+        f"<td>{html.escape(str(values.get('strong', 0.0)))}</td><td>{html.escape(str(values.get('inferred', 0.0)))}</td>"
+        f"<td>{html.escape(str(values.get('unknown', 0.0)))}</td></tr>"
+        for currency, values in sorted(commerce_summary["revenue"].items())
+    )
     definitions = bundle.metric_registry.list_definitions("channel.linkedin")
     runs = bundle.collection_run_repository.list_all(workspace_id=workspace_id)[:8]
     attributions = bundle.attribution_repository.list_all(workspace_id=workspace_id)[:20]
@@ -2488,6 +2498,13 @@ def render_analytics_page(config: AppConfig) -> str:
               <thead><tr><th>Metric</th><th>Value</th><th>Observed</th><th>Publication</th><th>Status</th></tr></thead>
               <tbody>{observation_rows or "<tr><td colspan='5'>No observations yet.</td></tr>"}</tbody>
             </table>
+          </section>
+          <section class="card">
+            <h2>Commerce outcomes</h2>
+            <p class="meta">Purchase and revenue values are evidence-based; unknown attribution is never counted as attributable.</p>
+            <p>Purchases observed: <strong>{html.escape(str(commerce_summary["purchases"]))}</strong></p>
+            <table><thead><tr><th>Currency</th><th>Direct</th><th>Strong</th><th>Inferred</th><th>Unknown</th></tr></thead>
+            <tbody>{commerce_currency_rows or "<tr><td colspan='5'>Not collected</td></tr>"}</tbody></table>
           </section>
         </div>
         <div class="stack">
@@ -3736,8 +3753,9 @@ def render_plugins_page() -> str:
                     f"<p>Status: {html.escape(str(health.get('status') or 'unknown'))} · Catalog status: {html.escape(str(health.get('catalog_status') or 'not_synced'))}</p>"
                     f"<p>Store: {html.escape(str(health.get('store') or 'not configured'))}</p>"
                     f"<p>Products synced: {html.escape(str(health.get('product_count') or 0))} · Last sync: {html.escape(str(health.get('last_sync_at') or 'never'))}</p>"
-                    "<p>Capabilities: product catalog, product lookup, product media, product click outcome, sale outcome.</p>"
-                    "<div class='actions'><button type='button'>Configure</button><button type='button' class='secondary'>Test connection</button><button type='button' class='secondary'>Sync products</button></div>"
+                    "<p>Capabilities: product catalog, product lookup, product media, product click, purchase, revenue, and read-only orders.</p>"
+                    "<p><strong>Commerce outcomes</strong>: Orders and revenue are not collected until an explicit outcome sync runs.</p>"
+                    "<div class='actions'><button type='button'>Configure</button><button type='button' class='secondary'>Test connection</button><button type='button' class='secondary'>Sync products</button><button type='button' class='secondary'>Sync outcomes</button></div>"
                     "<p class='meta'>Secret refs are configured through managed secrets and are never shown here. Read-only adapter: no product, order, payment, coupon, or refund mutation.</p>"
                 )
             elif family == PluginFamily.COMMERCE:
