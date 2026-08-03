@@ -17,6 +17,7 @@ from plugins.commerce.catalog import CommerceCatalogPlugin
 from plugins.providers.auto_browser import AutoBrowserProvider
 from plugins.providers.legacy_browser import LegacyBrowserProvider
 from plugins.providers.local_media_storage import LocalMediaStorageProvider
+from plugins.providers.local_transcription import LocalTranscriptionProvider
 from plugins.sources.youtube import YouTubeSourcePlugin
 from plugins.transformations.video_repurpose import VideoRepurposePlugin
 from publication_execution import PublicationExecutionService
@@ -40,6 +41,7 @@ MASTODON_PLUGIN_MANIFEST = ROOT_DIR / "channels" / "mastodon" / "plugin.manifest
 LEGACY_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "legacy_browser" / "plugin.manifest.json"
 AUTO_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "auto_browser" / "plugin.manifest.json"
 LOCAL_MEDIA_STORAGE_MANIFEST = ROOT_DIR / "plugins" / "providers" / "local_media_storage" / "plugin.manifest.json"
+LOCAL_TRANSCRIPTION_MANIFEST = ROOT_DIR / "plugins" / "providers" / "local_transcription" / "plugin.manifest.json"
 YOUTUBE_SOURCE_MANIFEST = ROOT_DIR / "plugins" / "sources" / "youtube" / "plugin.manifest.json"
 VIDEO_REPURPOSE_MANIFEST = ROOT_DIR / "plugins" / "transformations" / "video_repurpose" / "plugin.manifest.json"
 TRANSCRIPT_CLIP_MANIFEST = (
@@ -76,6 +78,15 @@ class ApplicationPluginRuntime:
         return self.resolver.resolve_service(
             "media.storage",
             "media_storage_provider",
+            preferred_provider_id=preferred_provider_id,
+        )
+
+    def transcription_provider(self, *, preferred_provider_id: str = ""):
+        if self.resolver is None:
+            self.resolver = ProviderResolver(self.registry, self.runtimes)
+        return self.resolver.resolve_service(
+            "transcription.media",
+            "transcription_provider",
             preferred_provider_id=preferred_provider_id,
         )
 
@@ -548,6 +559,7 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
         LEGACY_BROWSER_MANIFEST,
         AUTO_BROWSER_MANIFEST,
         LOCAL_MEDIA_STORAGE_MANIFEST,
+        LOCAL_TRANSCRIPTION_MANIFEST,
         YOUTUBE_SOURCE_MANIFEST,
         VIDEO_REPURPOSE_MANIFEST,
         TRANSCRIPT_CLIP_MANIFEST,
@@ -604,6 +616,16 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
         local_media.health = health
         local_media.health["default_priority"] = 5
         local_media.status = PluginStatus.READY if health.get("status") == "ready" else PluginStatus.DEGRADED
+
+    local_transcription = runtime.runtimes.get("provider.transcription.local")
+    if local_transcription is not None:
+        provider = LocalTranscriptionProvider(config=config)
+        health = provider.health_check()
+        local_transcription.instance = provider
+        local_transcription.register_service("transcription_provider", provider)
+        local_transcription.health = health
+        local_transcription.health["default_priority"] = health.get("default_priority", 5)
+        local_transcription.status = PluginStatus.READY if health.get("status") == "ready" else PluginStatus.DEGRADED
 
     youtube_source = runtime.runtimes.get("source.youtube")
     if youtube_source is not None:

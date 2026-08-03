@@ -1,0 +1,32 @@
+{
+  "id": "provider.transcription.local",
+  "name": "Local Transcription",
+  "version": "0.1.0",
+  "plugin_api_version": 1,
+  "type": "provider",
+  "entrypoint": "plugins.providers.local_transcription.provider",
+  "capabilities": [
+    "transcription.media",
+    "transcription.local",
+    "transcription.accepts.asset.video",
+    "transcription.accepts.asset.audio",
+    "transcription.produces.transcript.text",
+    "transcription.produces.timeline.transcript",
+    "transcript.text",
+    "timeline.transcript",
+    "canonical.text"
+  ],
+  "dependencies": [
+    {
+      "capability": "media.storage"
+    }
+  ],
+  "config_schema": {
+    "transcription_provider_contract_version": "0.1",
+    "engine": "whisper_compatible_local",
+    "model": "not_configured_by_default",
+    "device": "cpu",
+    "compute_type": "default",
+    "language": "auto"
+  }
+}

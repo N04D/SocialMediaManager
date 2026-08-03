@@ -27,6 +27,8 @@ FAMILY_PREFIXES: tuple[tuple[str, PluginFamily], ...] = (
     ("channel.", PluginFamily.CHANNELS),
     ("commerce.", PluginFamily.COMMERCE),
     ("provider.", PluginFamily.PROVIDERS),
+    ("transcription.", PluginFamily.PROVIDERS),
+    ("transcript.", PluginFamily.PROVIDERS),
     ("browser.", PluginFamily.PROVIDERS),
     ("analytics.", PluginFamily.ANALYTICS),
     ("outcome.", PluginFamily.ANALYTICS),

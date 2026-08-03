@@ -3438,9 +3438,15 @@ def render_owned_publication_workspace_page() -> str:
           <div class="editor-two-up">
             <label>YouTube URL or video ID <input value="https://www.youtube.com/watch?v=sabr1234567"></label>
             <label>Video file <input value="phase36-longform.mp4"></label>
+            <label>Transcript <input value="Transcript ready · English"></label>
             <label>Transcript import <textarea rows="3">00:00:10.000 --> 00:00:20.000&#10;Why does Sabr matter in daily creative work? It helps you keep moving without rushing the result.</textarea></label>
           </div>
-          <p class="meta">Video uses managed media import. Transcript retrieval not configured; paste transcript and import transcript are explicit source actions.</p>
+          <div class="actions">
+            <button type="button">Generate transcript</button>
+            <button type="button" class="secondary">Paste transcript</button>
+            <button type="button" class="secondary">Import transcript</button>
+          </div>
+          <p class="meta">Video uses managed media import. Automatic transcription runs only after explicit action; paste transcript and import transcript are explicit source actions.</p>
         </section>
         <div class="workspace-grid">
           <article class="panel workspace-editor">
@@ -3451,8 +3457,17 @@ def render_owned_publication_workspace_page() -> str:
                 <summary>Source details</summary>
                 <p class="meta">Filename phase36-longform.mp4</p>
                 <p class="meta">Duration 40 sec · 640x360 · audio present</p>
-                <p class="meta">Transcript status: imported with timestamps; original timestamps are preserved in provenance.</p>
+                <p class="meta">Transcript status: ready · English · generated with Local Transcription. Original timestamps are preserved in provenance.</p>
               </details>
+              <article class="source-context-box">
+                <h3>Transcript</h3>
+                <p>Generated with Local Transcription</p>
+                <p class="meta">Processing: Local · Original transcript preserved · Canonical transcript editable.</p>
+                <div class="actions">
+                  <button type="button">Edit transcript</button>
+                  <button type="button" class="secondary">Retranscribe</button>
+                </div>
+              </article>
               <div class="tabs" aria-label="Canonical workspace sections">
                 <button type="button">Canonical</button>
                 <button type="button" class="secondary">Variants</button>
@@ -3673,6 +3688,20 @@ def render_plugins_page() -> str:
                 )
             if family == PluginFamily.MEDIA and plugin_id == "plugin.video_repurpose":
                 config_note = "<p>Short video capability is typed. Rendering reports capability status when local media execution is unavailable.</p>"
+            if family == PluginFamily.PROVIDERS and plugin_id == "provider.transcription.local":
+                health = runtime.runtimes[plugin_id].health
+                ready = bool(health.get("ready"))
+                supported_inputs = ", ".join(str(item) for item in health.get("supported_inputs", []))
+                config_note = (
+                    "<p><strong>Local Transcription</strong></p>"
+                    f"<p>Status: {html.escape('Ready' if ready else 'Local transcription unavailable')}</p>"
+                    f"<p>Engine: {html.escape(str(health.get('engine_id') or health.get('engine') or 'unknown'))} · Model: {html.escape(str(health.get('model') or 'not_configured'))}</p>"
+                    f"<p>Supported inputs: {html.escape(supported_inputs)} · Language mode: {html.escape(str(health.get('language_mode') or 'auto_detect'))}</p>"
+                    "<p><span class='pill'>Transcription</span></p>"
+                    "<details><summary>Advanced</summary>"
+                    f"<pre>{html.escape(json.dumps(health, indent=2)[:1200])}</pre>"
+                    "</details>"
+                )
             if family == PluginFamily.CHANNELS and plugin_id == "channel.linkedin":
                 config_note = "<p>Configuration lives here: account, connection, formatting defaults, CTA behavior, media defaults, scheduling defaults, provider/browser selection, and channel policy.</p>"
             if family == PluginFamily.COMMERCE and plugin_id == "commerce.catalog":
