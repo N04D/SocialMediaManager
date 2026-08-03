@@ -5,6 +5,7 @@ from .provider import (
     TranscriptionError,
     TranscriptResult,
     TranscriptSegment,
+    WhisperLocalEngine,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "TranscriptionError",
     "TranscriptResult",
     "TranscriptSegment",
+    "WhisperLocalEngine",
 ]

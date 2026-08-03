@@ -111,8 +111,17 @@ class WhisperLocalEngine:
     def available(self, config: LocalTranscriptionConfig) -> tuple[bool, str]:
         if not config.model:
             return False, "model_unavailable"
+        model_path = Path(config.model).expanduser()
+        if not model_path.exists():
+            return False, "model_unavailable"
         if importlib.util.find_spec("faster_whisper") is None:
             return False, "engine_unavailable"
+        try:
+            from faster_whisper import WhisperModel  # type: ignore[import-not-found]
+
+            WhisperModel(str(model_path.resolve()), device=config.device, compute_type=config.compute_type)
+        except Exception:
+            return False, "model_unavailable"
         return True, "ready"
 
     def transcribe(
@@ -123,7 +132,10 @@ class WhisperLocalEngine:
             raise TranscriptionError(code, "Local Whisper-compatible engine is not configured.")
         from faster_whisper import WhisperModel  # type: ignore[import-not-found]
 
-        model = WhisperModel(config.model, device=config.device, compute_type=config.compute_type)
+        model_path = Path(config.model).expanduser().resolve()
+        if not model_path.exists():
+            raise TranscriptionError("model_unavailable", "Configured local transcription model was not found.")
+        model = WhisperModel(str(model_path), device=config.device, compute_type=config.compute_type)
         language = None if config.language == "auto" else config.language
         segments_raw, info = model.transcribe(str(audio_path), language=language)
         segments: list[TranscriptSegment] = []
@@ -147,7 +159,7 @@ class WhisperLocalEngine:
             duration=source_duration,
             provider_id=PROVIDER_ID,
             engine=self.engine_id,
-            model=config.model,
+            model=str(model_path),
             created_at=channel_store.now_iso(),
             source_asset_id="",
         )
