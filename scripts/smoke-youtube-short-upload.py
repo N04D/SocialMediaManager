@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -12,6 +13,10 @@ from channels.youtube.transport import HttpYouTubeTransport
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Run one private YouTube upload smoke.")
+    parser.add_argument("--privacy", default="private", choices=("private",))
+    parser.add_argument("--notify-subscribers", default="false", choices=("false",))
+    parser.parse_args()
     required = ("YOUTUBE_ACCESS_TOKEN", "YOUTUBE_ASSET_PATH")
     if not all(os.environ.get(key) for key in required):
         print("REAL YOUTUBE SHORT UPLOAD SMOKE: NOT CONFIGURED")
