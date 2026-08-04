@@ -3542,6 +3542,16 @@ def render_owned_publication_workspace_page() -> str:
                 <summary>Advanced provenance</summary>
                 <p class="meta">Original timestamps 00:10 → 00:20 · transform chain: extract, reframe, caption render · source relation preserved.</p>
               </details>
+              <article class="source-context-box" aria-label="YouTube publish review">
+                <h3>YouTube publish review</h3>
+                <p><strong>Video</strong><br>Short clip · 9:16 · captions included</p>
+                <p><strong>Title</strong><br>Why does Sabr matter in daily creative work?</p>
+                <p><strong>Description</strong><br>A complete thought from the selected short.</p>
+                <p><strong>Privacy</strong><br>Private</p>
+                <p><strong>Notify subscribers</strong><br>No</p>
+                <button type="button">Publish to YouTube</button>
+                <p class="meta">Publishing requires confirmation of this immutable asset, metadata, channel, and privacy setting.</p>
+              </article>
             </section>
             <form id="owned-composer-form" data-content-id="{html.escape(workspace["content_item_id"])}" data-version="{html.escape(str(draft["version"]))}">
               <label>Title <input id="owned-title" name="title" value="{html.escape(draft["title"])}" aria-describedby="title-validation"></label>
@@ -3740,6 +3750,16 @@ def render_plugins_page() -> str:
                 )
             if family == PluginFamily.CHANNELS and plugin_id == "channel.linkedin":
                 config_note = "<p>Configuration lives here: account, connection, formatting defaults, CTA behavior, media defaults, scheduling defaults, provider/browser selection, and channel policy.</p>"
+            if family == PluginFamily.CHANNELS and plugin_id == "channel.youtube":
+                health = runtime.runtimes[plugin_id].health
+                config_note = (
+                    "<p><strong>YouTube Channel</strong></p>"
+                    f"<p>Status: {html.escape('Ready' if health.get('status') == 'ready' else str(health.get('status') or 'not configured'))}</p>"
+                    f"<p>Channel: {html.escape(str(health.get('channel_name') or 'Not connected'))}</p>"
+                    "<p>Upload capability: Short video · Default privacy: Private · Notify subscribers: No</p>"
+                    "<div class='actions'><button type='button'>Connect</button><button type='button' class='secondary'>Reconnect</button><button type='button' class='secondary'>Disconnect</button><button type='button' class='secondary'>Test connection</button></div>"
+                    "<details><summary>Advanced</summary><p>OAuth scopes: youtube.upload. Tokens and resumable upload state are managed and redacted.</p></details>"
+                )
             if family == PluginFamily.COMMERCE and plugin_id == "commerce.catalog":
                 config_note = (
                     "<p><strong>Generic Product Catalog</strong></p>"

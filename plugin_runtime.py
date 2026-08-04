@@ -9,6 +9,7 @@ from typing import Any
 from analytics_services import AnalyticsServiceBundle
 from channels.linkedin.runtime import LinkedInChannelRuntime
 from channels.mastodon.runtime import MastodonChannelRuntime
+from channels.youtube.runtime import YouTubeChannelRuntime
 from content_services import ContentService
 from media_library import MediaLibraryService
 from media_processing_runtime import MediaProcessingRuntime
@@ -39,6 +40,7 @@ from src.core.plugins.runtime import PluginRuntime, ProviderResolver
 ROOT_DIR = Path(__file__).resolve().parent
 LINKEDIN_PLUGIN_MANIFEST = ROOT_DIR / "channels" / "linkedin" / "plugin.manifest.json"
 MASTODON_PLUGIN_MANIFEST = ROOT_DIR / "channels" / "mastodon" / "plugin.manifest.json"
+YOUTUBE_CHANNEL_MANIFEST = ROOT_DIR / "channels" / "youtube" / "plugin.manifest.json"
 LEGACY_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "legacy_browser" / "plugin.manifest.json"
 AUTO_BROWSER_MANIFEST = ROOT_DIR / "plugins" / "providers" / "auto_browser" / "plugin.manifest.json"
 LOCAL_MEDIA_STORAGE_MANIFEST = ROOT_DIR / "plugins" / "providers" / "local_media_storage" / "plugin.manifest.json"
@@ -570,6 +572,7 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
         COMMERCE_CONTRACT_MANIFEST,
         LINKEDIN_PLUGIN_MANIFEST,
         MASTODON_PLUGIN_MANIFEST,
+        YOUTUBE_CHANNEL_MANIFEST,
     ]:
         try:
             manifest = runtime.registry.register(load_plugin_manifest(path))
@@ -715,6 +718,23 @@ def bootstrap_plugins(config: Any, *, strict: bool = True) -> ApplicationPluginR
         except Exception as exc:
             mastodon.status = PluginStatus.ERROR
             mastodon.health = {"status": "error", "message": str(exc)}
+            startup_errors.append(str(exc))
+
+    youtube = runtime.runtimes.get("channel.youtube")
+    if youtube is not None:
+        try:
+            youtube_service = YouTubeChannelRuntime(
+                manifest=youtube.manifest,
+                app_runtime=runtime,
+                config=config,
+            )
+            youtube.instance = youtube_service
+            youtube.register_service("channel_runtime", youtube_service)
+            youtube.health = youtube_service.health_check()
+            youtube.status = PluginStatus.READY
+        except Exception as exc:
+            youtube.status = PluginStatus.ERROR
+            youtube.health = {"status": "error", "message": str(exc)}
             startup_errors.append(str(exc))
 
     runtime.resolver = ProviderResolver(runtime.registry, runtime.runtimes)

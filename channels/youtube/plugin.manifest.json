@@ -1,0 +1,46 @@
+{
+  "id": "channel.youtube",
+  "name": "YouTube",
+  "version": "0.1.0",
+  "plugin_api_version": 1,
+  "type": "channel",
+  "entrypoint": "channels.youtube",
+  "status": "ready",
+  "capabilities": [
+    "channel.connect",
+    "channel.disconnect",
+    "channel.status",
+    "channel.health",
+    "channel.publish.video",
+    "channel.publish.short_video",
+    "channel.youtube",
+    "publication.video",
+    "publication.status.read",
+    "action.publish",
+    "transformation.accepts.asset.short_video",
+    "transformation.accepts.variant.short_caption"
+  ],
+  "dependencies": [
+    {"capability": "publication.execution", "min_version": "0.1.0"},
+    {"capability": "media.library", "min_version": "0.3.0"}
+  ],
+  "config_schema": {
+    "client_id": {"type": "string", "sensitive": false},
+    "client_secret_ref": {"type": "secret_ref", "sensitive": true},
+    "redirect_uri": {"type": "url", "sensitive": false},
+    "refresh_token_secret_ref": {"type": "secret_ref", "sensitive": true},
+    "default_privacy": {"enum": ["private", "unlisted", "public"], "default": "private"},
+    "notify_subscribers": {"type": "boolean", "default": false}
+  },
+  "schema_version": "1.0",
+  "plugin_type": "channel",
+  "sdk_contract_version": "1.0.0",
+  "channel_family": "video_distribution",
+  "framework_contract_versions": {"media": "0.3", "content": "0.1", "execution": "0.1", "channel": "1.0"},
+  "permissions": ["outbound_network", "secret_storage", "media_read", "execution_reporting", "account_configuration"],
+  "distribution": "builtin",
+  "maintainers": [{"name": "Core maintainers", "role": "owner", "contact_reference": "project repository"}],
+  "license": "Proprietary local project",
+  "documentation": "channels/youtube/README.md",
+  "compatibility": {"test_profiles": ["channel.api_first", "channel.video_publish", "channel.resumable_upload"]}
+}
