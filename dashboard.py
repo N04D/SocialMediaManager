@@ -8741,6 +8741,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "check_session",
                     log_name=f"{channel_id}-session-check.log",
                 )
+            elif path == "/channels/prompt/save":
+                channel_id = form_value(form, "channel_id").strip()
+                prompt_template = form_value(form, "prompt_template")
+                if not channel_id:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "channel_id is required.")
+                    return
+                if channel_id == "linkedin":
+                    from channels.linkedin.server.actions import save_prompt_template
+                    save_prompt_template(prompt_template)
+                else:
+                    prompt_dir = Path("channels") / channel_id / "prompts"
+                    prompt_dir.mkdir(parents=True, exist_ok=True)
+                    (prompt_dir / "linkedin-post.md").write_text(prompt_template, encoding="utf-8")
             elif path == "/channels/force-unlock":
                 channel_id = form_value(form, "channel_id").strip()
                 reason = form_value(form, "reason", "").strip()

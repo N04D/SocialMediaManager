@@ -20,6 +20,18 @@ def load_rules() -> dict[str, Any]:
     return loaded if isinstance(loaded, dict) else {}
 
 
+def load_prompt_template() -> str:
+    if not PROMPT_PATH.exists():
+        return ""
+    return PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def save_prompt_template(new_template: str) -> None:
+    PROMPT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PROMPT_PATH.write_text(new_template, encoding="utf-8")
+
+
+
 def validate_derivative(*, title: str, body: str, output_type: str) -> dict[str, Any]:
     rules = load_rules()
     limits = rules.get("limits", {})
@@ -67,7 +79,7 @@ def validate_derivative(*, title: str, body: str, output_type: str) -> dict[str,
 
 def generate_derivative(*, source_item: ContentItem, config: AppConfig, output_type: str) -> dict[str, Any]:
     rules = load_rules()
-    prompt_template = PROMPT_PATH.read_text(encoding="utf-8")
+    prompt_template = load_prompt_template()
     prompt = prompt_template.format(
         rules_json=json.dumps(rules, ensure_ascii=False, indent=2),
         title=source_item.title.strip() or "Untitled",

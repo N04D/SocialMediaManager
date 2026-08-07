@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+from pathlib import Path
 from typing import Any
 
 from channel_actions import document_performance, engagement_rate
@@ -51,6 +52,44 @@ def _capability_list(entry: ChannelRegistryEntry) -> str:
             f"<li><strong>{html.escape(label)}</strong>: {html.escape(str(bool(capabilities.get(key))).lower())}</li>"
         )
     return "".join(items)
+
+
+def _render_prompt_editor(entry: ChannelRegistryEntry, *, return_to: str) -> str:
+    prompt_content = ""
+    if entry.id == "linkedin":
+        try:
+            from channels.linkedin.server.actions import load_prompt_template
+            prompt_content = load_prompt_template()
+        except Exception:
+            prompt_content = ""
+    else:
+        prompt_path = Path("channels") / entry.id / "prompts" / "linkedin-post.md"
+        if prompt_path.exists():
+            prompt_content = prompt_path.read_text(encoding="utf-8")
+
+    if not prompt_content and not (entry.manifest.get("capabilities", {}).get("canGenerate")):
+        return ""
+
+    return f"""
+    <details class="editor-panel">
+      <summary class="editor-panel-summary">
+        <span class="editor-panel-summary-left"><span>AI Prompt Configuration</span></span>
+        <span class="editor-panel-chevron" aria-hidden="true"></span>
+      </summary>
+      <div class="editor-panel-body">
+        <p class="meta">Customize the AI prompt template used to generate derivative posts for {html.escape(str(entry.manifest.get('name', entry.id)))}.</p>
+        <form method="post" action="/channels/prompt/save">
+          <input type="hidden" name="channel_id" value="{html.escape(entry.id)}" />
+          <input type="hidden" name="return_to" value="{html.escape(return_to)}" />
+          <label for="prompt-template-{html.escape(entry.id)}">Prompt Template (Markdown & Placeholders)</label>
+          <textarea id="prompt-template-{html.escape(entry.id)}" name="prompt_template" class="editor-textarea" style="min-height: 180px; font-family: monospace;">{html.escape(prompt_content)}</textarea>
+          <div class="actions" style="margin-top: 10px;">
+            <button class="secondary" type="submit">Save AI Prompt</button>
+          </div>
+        </form>
+      </div>
+    </details>
+    """
 
 
 def _artifact_link(path_value: str, label: str) -> str:
@@ -362,6 +401,7 @@ def render_channel_cards(*, return_to: str) -> str:
                   <ul>{health_markup}</ul>
                 </div>
               </details>
+              {_render_prompt_editor(entry, return_to=return_to)}
             </section>
             """
         )
