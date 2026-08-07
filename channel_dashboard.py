@@ -20,6 +20,15 @@ from channel_store import (
 from studio_models import ContentItem
 
 
+def _has_capability(manifest: dict[str, Any], capability_name: str) -> bool:
+    capabilities = manifest.get("capabilities", {})
+    if isinstance(capabilities, dict):
+        return bool(capabilities.get(capability_name))
+    elif isinstance(capabilities, (list, tuple, set)):
+        return capability_name in capabilities
+    return False
+
+
 def render_channel_checkbox_grid(selected_channels: set[str]) -> str:
     labels: list[str] = []
     for entry in scan_channel_registry():
@@ -48,8 +57,14 @@ def _capability_list(entry: ChannelRegistryEntry) -> str:
         ("canReadComments", "Comments"),
         ("requiresApproval", "Approval required"),
     ]:
+        if isinstance(capabilities, dict):
+            val = bool(capabilities.get(key))
+        elif isinstance(capabilities, (list, tuple, set)):
+            val = key in capabilities
+        else:
+            val = False
         items.append(
-            f"<li><strong>{html.escape(label)}</strong>: {html.escape(str(bool(capabilities.get(key))).lower())}</li>"
+            f"<li><strong>{html.escape(label)}</strong>: {html.escape(str(val).lower())}</li>"
         )
     return "".join(items)
 
@@ -67,7 +82,7 @@ def _render_prompt_editor(entry: ChannelRegistryEntry, *, return_to: str) -> str
         if prompt_path.exists():
             prompt_content = prompt_path.read_text(encoding="utf-8")
 
-    if not prompt_content and not (entry.manifest.get("capabilities", {}).get("canGenerate")):
+    if not prompt_content and not _has_capability(entry.manifest, "canGenerate"):
         return ""
 
     return f"""
@@ -512,7 +527,7 @@ def render_derivatives_panel(source_item: ContentItem, *, return_to: str) -> str
     generate_actions: list[str] = []
     for entry in entries.values():
         manifest = entry.manifest
-        if manifest.get("capabilities", {}).get("canGenerate"):
+        if _has_capability(manifest, "canGenerate"):
             output_type = manifest.get("outputTypes", [""])[0]
             generate_actions.append(
                 f'<form method="post" action="/derivatives/generate" class="inline-form">'

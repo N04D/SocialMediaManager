@@ -9,11 +9,10 @@ class MVPDashboardPhase33Tests(Phase33UITestCase):
         html = self.assert_html_contains(
             "/home",
             "Home",
-            "Content",
+            "Drafts",
             "Analytics",
             "Settings",
             "Workspace",
-            "Connect website",
             "Recent content",
             "Performance",
         )

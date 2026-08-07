@@ -201,8 +201,11 @@ VALID_ROUTES = {
 
 SIDEBAR_ITEMS = [
     (ROUTE_HOME, "home", "Home", "HM"),
-    (ROUTE_CONTENT, "content", "Content", "CO"),
-    (ROUTE_PLUGINS, "plugins", "Plugins", "PL"),
+    (ROUTE_EDITOR, "editor", "Editor", "ED"),
+    (ROUTE_DRAFTS, "drafts", "Drafts", "DR"),
+    (ROUTE_CHANNELS, "channels", "Channels & AI", "CH"),
+    (ROUTE_LINKEDIN, "linkedin", "LinkedIn", "LI"),
+    (ROUTE_SETUP, "config", "Website Setup", "SU"),
     (ROUTE_ANALYTICS, "stats", "Analytics", "AN"),
     (ROUTE_CONFIG, "config", "Settings", "SE"),
 ]
@@ -1032,6 +1035,11 @@ def save_config_value(config_path: str, updates: dict[str, Any]) -> None:
 
 def render_sidebar_icon(name: str, fallback: str) -> str:
     icons = {
+        "home": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-9.5z"></path>
+            </svg>
+        """,
         "editor": """
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M5 4.5h9.5L19 9v10.5H5z"></path>
@@ -2587,20 +2595,8 @@ def render_stats_page(content_items: list[ContentItem]) -> str:
 
 
 def render_sidebar(active_route: str) -> str:
-    items = []
-    for route, icon_name, label, fallback in SIDEBAR_ITEMS:
-        active = " active" if route == active_route else ""
-        items.append(
-            f'<a class="sidebar-link{active}" href="{route}"><span class="sidebar-icon">{render_sidebar_icon(icon_name, fallback)}</span><span class="sidebar-label">{html.escape(label)}</span></a>'
-        )
-    return f"""
-      <aside class="sidebar" id="sidebar">
-        <div class="sidebar-top">
-          <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Toggle navigation"><span aria-hidden="true">|||</span></button>
-        </div>
-        <nav class="sidebar-nav" aria-label="Primary navigation">{"".join(items)}</nav>
-      </aside>
-    """
+    from sidebar_registry import render_modular_sidebar
+    return render_modular_sidebar(active_route, render_sidebar_icon)
 
 
 def _builtin_plugin_paths() -> dict[str, Path]:
@@ -3891,11 +3887,11 @@ def render_main_content(
             "Release gates, workers, storage health, backups, and recovery",
             render_owned_publication_operations_page(),
         )
-    if route == ROUTE_PLUGINS:
+    if route == ROUTE_PLUGINS or route == ROUTE_CHANNELS:
         return (
-            "Plugins",
-            "SDK compatibility, capabilities, and developer readiness",
-            render_plugins_page(),
+            "Plugins & Channels",
+            "Channel cards, AI Prompt configurations, and plugin readiness",
+            f'<div class="stack">{render_channel_cards(return_to=route)}{render_plugins_page()}</div>',
         )
     assert snapshot is not None
     return (
@@ -3929,16 +3925,7 @@ def render_page(
         content_items,
         selected_content_item,
     )
-    header_markup = (
-        '<header class="page-header">'
-        f'<div><p class="page-kicker">{html.escape(route.strip("/") or "editor")}</p>'
-        f'<h1 class="page-title">{html.escape(page_title)}</h1>'
-        f'<p class="page-subtitle">{html.escape(page_intro)}</p></div>'
-        f'<p class="page-feed meta">RSS feed <code>{html.escape(config.rss_url)}</code></p>'
-        "</header>"
-        if page_title or page_intro
-        else ""
-    )
+    header_markup = ""
     return f"""<!doctype html>
 <html lang=\"en\">
 <head>
@@ -3996,7 +3983,7 @@ def render_page(
     .sidebar-toggle {{
       border: 1px solid rgba(113, 113, 122, 0.22); border-radius: var(--radius);
       background: rgba(31, 31, 35, 0.78); color: var(--text);
-      width: 38px; height: 38px; cursor: pointer; font-size: 13px;
+      width: 34px; height: 34px; cursor: pointer; font-size: 12px;
       transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
     }}
     .sidebar-toggle:hover {{
@@ -4004,10 +3991,10 @@ def render_page(
       border-color: rgba(161, 161, 170, 0.24);
       transform: translateY(-1px);
     }}
-    .sidebar-nav {{ display: grid; gap: 6px; }}
-    .sidebar-section {{ display: grid; gap: 6px; }}
+    .sidebar-nav {{ display: grid; gap: 2px; }}
+    .sidebar-section {{ display: grid; gap: 2px; }}
     .sidebar-section-summary {{
-      display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 10px;
+      display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 8px;
       border: 1px solid transparent; border-radius: var(--radius); color: var(--muted);
       cursor: pointer; list-style: none; user-select: none;
       transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
@@ -4020,30 +4007,35 @@ def render_page(
       transform: rotate(45deg); transition: transform 0.2s ease; opacity: 0.72; flex-shrink: 0;
     }}
     .sidebar-section[open] .sidebar-section-chevron {{ transform: rotate(225deg); }}
-    .sidebar-subnav {{ display: grid; gap: 4px; padding-left: 18px; }}
-    .sidebar-subnav .sidebar-link {{ min-height: 42px; }}
-    .sidebar-link {{
-      display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 10px;
+    .sidebar-subnav {{ display: grid; gap: 2px; padding-left: 10px; margin-top: 2px; border-left: 1.5px solid rgba(113, 113, 122, 0.22); margin-left: 12px; }}
+    .sidebar-subnav .sidebar-link {{ min-height: 34px; padding: 4px 8px; font-size: 12.5px; font-weight: 500; }}
+    .sidebar-nav a, .sidebar-link {{
+      display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 8px;
       border: 1px solid transparent; border-radius: var(--radius); text-decoration: none;
-      color: var(--muted); transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+      color: var(--muted); font-weight: 600; font-size: 13px; transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
     }}
-    .sidebar-link:hover {{ background: rgba(244, 244, 245, 0.06); border-color: rgba(113, 113, 122, 0.20); color: var(--text); }}
+    .sidebar-link:hover {{ background: rgba(244, 244, 245, 0.08); border-color: rgba(113, 113, 122, 0.24); color: #ffffff; }}
     .sidebar-link.active {{
-      background: rgba(63, 63, 70, 0.70);
-      color: var(--text); border-color: rgba(161, 161, 170, 0.26);
-      box-shadow: inset 3px 0 0 var(--accent);
+      background: rgba(63, 63, 70, 0.78);
+      color: #ffffff; border-color: rgba(161, 161, 170, 0.35);
+      box-shadow: inset 3px 0 0 #f4f4f5;
+      font-weight: 700;
+    }}
+    .sidebar-link.active:hover {{
+      background: rgba(82, 82, 91, 0.90);
+      color: #ffffff; border-color: rgba(212, 212, 216, 0.45);
     }}
     .sidebar-icon {{
-      width: 32px; height: 32px; border-radius: var(--radius); background: rgba(244, 244, 245, 0.07);
+      width: 24px; height: 24px; border-radius: var(--radius); background: rgba(244, 244, 245, 0.07);
       display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;
       color: currentColor;
     }}
     .sidebar-icon svg {{
-      width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8;
+      width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8;
       stroke-linecap: round; stroke-linejoin: round;
     }}
-    .sidebar-fallback {{ font-size: 11px; letter-spacing: 0.08em; }}
-    .sidebar-label {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; font-weight: 600; }}
+    .sidebar-fallback {{ font-size: 10px; letter-spacing: 0.04em; font-weight: 700; }}
+    .sidebar-label {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 600; }}
     .main-shell {{ flex: 1; min-width: 0; transition: margin 0.2s ease, width 0.2s ease; }}
     .wrap {{ max-width: 1360px; margin: 0 auto; padding: 28px 24px 40px; }}
     .page-header {{ display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; margin-bottom: 24px; padding-bottom: 18px; border-bottom: 1px solid rgba(113, 113, 122, 0.18); }}

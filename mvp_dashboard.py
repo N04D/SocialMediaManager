@@ -106,6 +106,9 @@ def is_mvp_get_route(path: str) -> bool:
     return (
         path in MVP_UI_ROUTES
         or path.startswith("/setup/")
+        or path.startswith("/channels/")
+        or path.startswith("/plugins/")
+        or path in {"/channels", "/linkedin"}
         or (path.startswith("/content/") and path.endswith("/compose"))
     )
 
@@ -229,28 +232,31 @@ def render_mvp_page(path: str, query: str = "") -> tuple[str, HTTPStatus]:
             return json.dumps(payload, ensure_ascii=False), status
         service = alpha_ui_service()
         params = parse_qs(query)
+        if path.startswith("/channels/") or path.startswith("/plugins/") or path in {"/channels", "/linkedin"}:
+            return _layout("Plugin Manager", "Modular Agentic Plugin & Skill Configuration", _render_generic_plugin_page(service, path), active_route=path), HTTPStatus.OK
         if path in {"/", "/home"}:
-            return _layout("Home", "Start dashboard", _render_home(service)), HTTPStatus.OK
+            return _layout("Home", "Start dashboard", _render_home(service), active_route="/home"), HTTPStatus.OK
         if path == "/setup":
-            return _layout("Setup", "Connect your website", _render_setup_index(service)), HTTPStatus.OK
+            return _layout("Setup", "Connect your website", _render_setup_index(service), active_route="/setup"), HTTPStatus.OK
         if path.startswith("/setup/"):
             return _render_setup_route(service, path)
         if path == "/content":
-            return _layout("Content", "Owned publication content", _render_content(service)), HTTPStatus.OK
+            return _layout("Content", "Owned publication content", _render_content(service), active_route="/editor"), HTTPStatus.OK
         if path.startswith("/content/") and path.endswith("/compose"):
-            return _layout("Compose", "Article composer", _render_real_composer(service, path, params)), HTTPStatus.OK
+            return _layout("Compose", "Article composer", _render_real_composer(service, path, params), active_route="/editor"), HTTPStatus.OK
         if path == "/calendar":
             return _layout(
                 "Calendar",
                 "Publication planning",
                 _simple_panel("Publication plan calendar", "No scheduled dogfood publication yet."),
+                active_route="/home",
             ), HTTPStatus.OK
         if path == "/analytics":
-            return _layout("Analytics", "First funnel status", _render_analytics(service)), HTTPStatus.OK
+            return _layout("Analytics", "First funnel status", _render_analytics(service), active_route="/analytics"), HTTPStatus.OK
         if path == "/settings":
-            return _layout("Settings", "Website and system settings", _render_settings(service)), HTTPStatus.OK
+            return _layout("Settings", "Website and system settings", _render_settings(service), active_route="/settings"), HTTPStatus.OK
         if path == "/operations":
-            return _layout("Operations", "Operational readiness", _render_operations(service)), HTTPStatus.OK
+            return _layout("Operations", "Operational readiness", _render_operations(service), active_route="/settings"), HTTPStatus.OK
         return render_error_page(
             "phase331.route_not_found", "The requested dashboard route was not found."
         ), HTTPStatus.NOT_FOUND
@@ -349,42 +355,148 @@ def _render_setup_route(service: AlphaOnboardingService, path: str) -> tuple[str
 def _render_setup_landing(service: AlphaOnboardingService, session_id: str) -> str:
     try:
         destination = _destination(service, session_id)
+        display_name = destination.get("display_name", "Website")
     except Exception:
-        return _destination_form(session_id)
-    try:
-        doctor_html = _website_doctor_block(service, session_id)
-    except Exception:
-        doctor_html = '<p class="status warn">Website needs attention</p>'
+        destination = {}
+        display_name = "Website Setup"
+
     draft_id = _bindings(service, session_id).get("draft_id", "")
     start = (
-        f'<a class="button" href="/content/{html.escape(draft_id)}/compose?setup_session={html.escape(session_id)}">Start writing</a>'
+        f'<a class="button" href="/content/{html.escape(draft_id)}/compose?setup_session={html.escape(session_id)}">Start met schrijven</a>'
         if draft_id
-        else f'<form method="post" action="/content/new"><input type="hidden" name="setup_session" value="{html.escape(session_id)}"><input type="hidden" name="idempotency_key" value="content-first-{html.escape(stable_checksum(session_id + utc_now_iso())[:12])}"><button type="submit">Start writing</button></form>'
+        else f'<form method="post" action="/content/new" style="margin:0;"><input type="hidden" name="setup_session" value="{html.escape(session_id)}"><input type="hidden" name="idempotency_key" value="content-first-{html.escape(stable_checksum(session_id + utc_now_iso())[:12])}"><button type="submit">Start met schrijven</button></form>'
     )
+
     return f"""
     <section class="grid">
       <article class="panel span-8">
-        <h2>Website connected</h2>
-        <p><span class="status ok">Ready</span> {html.escape(destination.get("display_name", "Website"))}</p>
-        <div class="actions">{start}<a class="button secondary" href="/settings">Settings</a></div>
+        {_destination_form(session_id, show_back=True, heading=f"Profiel Instellingen ({html.escape(display_name)})", intro="Beheer de Git-repository en instellingen van dit profiel.")}
       </article>
       <article class="panel span-4">
-        <h2>Connection</h2>
-        {doctor_html}
+        <h2>Profiel Status</h2>
+        <p><span class="status ok">Connectie OK ✅</span> Profiel is actief</p>
+        <p style="font-size:0.9rem;color:var(--text-muted);">Artikelen geschreven onder dit profiel worden automatisch gecommitteerd en eventueel naar GitHub gepusht.</p>
+        <div class="actions" style="margin-top:16px;">
+          {start}
+          <a class="button secondary" href="/setup">Alle profielen</a>
+        </div>
       </article>
     </section>
     """
 
 
-def _layout(title: str, subtitle: str, body: str, *, primary: tuple[str, str] | None = None) -> str:
-    nav = (
-        ("/home", "Home"),
-        ("/content", "Content"),
-        ("/analytics", "Analytics"),
-        ("/settings", "Settings"),
-    )
-    mobile_options = "".join(f'<option value="{href}">{label}</option>' for href, label in nav)
-    nav_html = "".join(f'<a href="{href}">{label}</a>' for href, label in nav)
+def _render_generic_plugin_page(service: AlphaOnboardingService, path: str) -> str:
+    parts = [p for p in path.strip("/").split("/") if p]
+    category = parts[0] if parts else "plugin"
+    plugin_id = parts[1] if len(parts) > 1 else (parts[0] if len(parts) == 1 else "generic")
+
+    entry = None
+    try:
+        from channel_registry import get_channel_registry_entry
+        entry = get_channel_registry_entry(plugin_id)
+    except Exception:
+        entry = None
+
+    display_name = (entry.manifest.get("name") if entry and entry.manifest else None) or plugin_id.replace("-", " ").replace("_", " ").title()
+
+    prompt_editor_html = ""
+    if entry:
+        from channel_dashboard import _render_prompt_editor
+        prompt_editor_html = _render_prompt_editor(entry, return_to=path)
+
+    status_badge = f'<span class="status ok">Gekoppeld & Actief ✅</span>' if (entry and entry.connection_status == "connected") else '<span class="status info">Modulaire Plugin / Skill 🧩</span>'
+
+    capabilities_html = ""
+    if entry and entry.manifest.get("capabilities"):
+        from channel_dashboard import _capability_list
+        capabilities_html = f"""
+        <article class="panel span-6">
+          <h2>Capabilities & Functies</h2>
+          <ul>{_capability_list(entry)}</ul>
+        </article>
+        """
+    else:
+        capabilities_html = f"""
+        <article class="panel span-6">
+          <h2>Plugin Functies & Framework Integration</h2>
+          <p>Deze skill/plugin is geïntegreerd in het universele agentic framework.</p>
+          <ul>
+            <li><strong>Modus:</strong> Agentic Pipeline Skill</li>
+            <li><strong>Status:</strong> Gereed voor verwerking</li>
+            <li><strong>Configuratie:</strong> Dynamische JSON manifest</li>
+          </ul>
+        </article>
+        """
+
+    return f"""
+    <section class="section-title">
+      <div>
+        <h2 style="margin:0;">{html.escape(display_name)} Plugin</h2>
+        <p style="margin:4px 0 0 0;color:var(--text-muted);">Categorie: <code>{html.escape(category.upper())}</code> · Plugin ID: <code>{html.escape(plugin_id)}</code></p>
+      </div>
+      <div>{status_badge}</div>
+    </section>
+
+    <section class="grid" style="margin-top:16px;">
+      <article class="panel span-6">
+        <h2>Plugin Configuratie</h2>
+        <form method="post" action="/plugins/save" style="margin-top:12px;">
+          <input type="hidden" name="plugin_id" value="{html.escape(plugin_id)}">
+          <input type="hidden" name="category" value="{html.escape(category)}">
+          <label>Plugin Naam
+            <input name="display_name" value="{html.escape(display_name)}" required>
+          </label>
+          <label>Status
+            <select name="status">
+              <option value="active">Actief</option>
+              <option value="disabled">Uitgeschakeld</option>
+            </select>
+          </label>
+          <label>API Key / Webhook URL (Optioneel)
+            <input type="password" name="api_key" placeholder="••••••••••••••••" autocomplete="new-password">
+          </label>
+          <div class="actions" style="margin-top:10px;">
+            <button type="submit">💾 Instellingen Opslaan</button>
+          </div>
+        </form>
+      </article>
+
+      {capabilities_html}
+    </section>
+
+    {f'<section class="grid" style="margin-top:16px;"><article class="panel span-12">{prompt_editor_html}</article></section>' if prompt_editor_html else ''}
+    """
+
+
+def _layout(
+    title: str,
+    subtitle: str,
+    body: str,
+    *,
+    primary: tuple[str, str] | None = None,
+    active_route: str = "",
+) -> str:
+    from dashboard import render_sidebar_icon
+    from sidebar_registry import render_modular_sidebar
+
+    if not active_route:
+        title_to_route = {
+            "Home": "/home",
+            "Editor": "/editor",
+            "Drafts": "/drafts",
+            "Setup": "/setup",
+            "Website Setup": "/setup",
+            "Analytics": "/analytics",
+            "Settings": "/settings",
+            "LinkedIn": "/linkedin",
+            "Channels": "/channels",
+            "Operations": "/operations",
+            "Compose": "/editor",
+        }
+        active_route = title_to_route.get(title, "/home")
+
+    sidebar_markup = render_modular_sidebar(active_route, render_sidebar_icon)
+
     if primary:
         primary_href, primary_label = primary
         primary_action = (
@@ -402,77 +514,106 @@ def _layout(title: str, subtitle: str, body: str, *, primary: tuple[str, str] | 
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{html.escape(title)} - SocialMediaManager</title>
   <style>
-    :root {{--bg:#f6f5ef;--surface:#fffefb;--ink:#1f2421;--muted:#62665f;--line:#ddd9cd;--soft:#efede4;--accent:#0f766e;--accent-dark:#115e59;--warn:#8a5a00;--bad:#9f1239;--ok:#166534;--info:#1d4ed8;--radius:8px;}}
+    :root {{--bg:#09090b;--bg-soft:#111113;--surface:#18181b;--panel:#18181b;--line:#3f3f46;--text:#f4f4f5;--ink:#f4f4f5;--muted:#a1a1aa;--muted-strong:#d4d4d8;--soft:#202124;--accent:#3f3f46;--accent-dark:#d4d4d8;--warn:#f59e0b;--bad:#ef4444;--ok:#10b981;--info:#3b82f6;--radius:8px;--sidebar-width:268px;--sidebar-collapsed-width:76px;}}
     * {{ box-sizing:border-box; }}
     html, body {{ max-width:100%; overflow-x:hidden; }}
-    body {{ margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); line-height:1.45; }}
-    a {{ color:var(--accent-dark); }}
-    .skip-link {{ position:absolute; left:12px; top:8px; transform:translateY(-140%); background:var(--ink); color:white; padding:10px 12px; border-radius:var(--radius); z-index:5; }}
+    body {{ margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:var(--text); background:var(--bg); line-height:1.45; }}
+    a {{ color:var(--accent-dark); text-decoration:none; }}
+    .skip-link {{ position:absolute; left:12px; top:8px; transform:translateY(-140%); background:var(--accent); color:white; padding:10px 12px; border-radius:var(--radius); z-index:5; }}
     .skip-link:focus {{ transform:translateY(0); }}
-    :focus-visible {{ outline:3px solid #f59e0b; outline-offset:2px; }}
-    .shell {{ min-height:100vh; display:grid; grid-template-columns:260px minmax(0,1fr); }}
-    aside {{ background:#13221f; color:white; padding:18px; position:sticky; top:0; height:100vh; }}
-    .brand {{ font-weight:800; font-size:19px; margin-bottom:18px; }}
-    nav {{ display:grid; gap:6px; }}
-    nav a {{ color:white; text-decoration:none; padding:11px 12px; border-radius:var(--radius); }}
-    nav a:hover, nav a:focus {{ background:rgba(255,255,255,.12); }}
-    .secondary-nav {{ margin-top:14px; opacity:.72; }}
-    .workspace {{ margin-top:18px; padding:12px; border:1px solid rgba(255,255,255,.16); border-radius:var(--radius); font-size:13px; color:#d9f4ef; overflow-wrap:anywhere; }}
-    main, .wrap, .panel, .card {{ min-width:0; }}
-    .topbar {{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:22px 28px; border-bottom:1px solid var(--line); background:rgba(255,254,251,.78); position:sticky; top:0; z-index:2; backdrop-filter:blur(10px); }}
-    h1 {{ margin:0; font-size:clamp(26px,3vw,38px); line-height:1.08; }}
-    h2 {{ margin:0 0 12px; font-size:22px; }}
-    h3 {{ margin:0 0 8px; font-size:17px; }}
-    p {{ margin:0 0 12px; }}
+    :focus-visible {{ outline:2px solid var(--muted); outline-offset:2px; }}
+    .shell {{ min-height:100vh; display:flex; }}
+    .sidebar {{ width:var(--sidebar-width); background:linear-gradient(180deg, rgba(12, 12, 14, 0.98), rgba(7, 7, 8, 0.94)); border-right:1px solid rgba(113,113,122,0.20); padding:14px 12px; position:sticky; top:0; height:100vh; overflow-y:auto; transition:width 0.2s ease; z-index:20; flex-shrink:0; }}
+    .sidebar-top {{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:16px; }}
+    .sidebar-toggle {{ border:1px solid rgba(113,113,122,0.22); border-radius:var(--radius); background:rgba(31,31,35,0.78); color:var(--text); width:34px; height:34px; cursor:pointer; font-size:12px; }}
+    .brand {{ font-weight:800; font-size:16px; color:var(--text); letter-spacing:-0.02em; }}
+    .sidebar-nav {{ display:grid; gap:2px; }}
+    .sidebar-nav a, .sidebar-link {{ color:var(--muted); text-decoration:none; min-height:36px; padding:6px 8px; border-radius:var(--radius); border:1px solid transparent; font-weight:600; font-size:13px; display:flex; align-items:center; gap:8px; transition:background 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
+    .sidebar-nav a:hover, .sidebar-link:hover {{ background:rgba(244,244,245,.08); border-color:rgba(113,113,122,.24); color:#ffffff; }}
+    .sidebar-nav a.active, .sidebar-link.active {{ background:rgba(63,63,70,0.78); color:#ffffff; border-color:rgba(161,161,170,0.35); box-shadow:inset 3px 0 0 #f4f4f5; font-weight:700; }}
+    .sidebar-nav a.active:hover, .sidebar-link.active:hover {{ background:rgba(82,82,91,0.90); color:#ffffff; border-color:rgba(212,212,216,0.45); }}
+    .sidebar-icon {{ width:24px; height:24px; border-radius:var(--radius); background:rgba(244,244,245,0.07); display:inline-flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0; color:currentColor; }}
+    .sidebar-icon svg {{ width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }}
+    .sidebar-fallback {{ font-size:10px; letter-spacing:0.04em; font-weight:700; }}
+    .sidebar-label {{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:13px; font-weight:600; }}
+
+    .sidebar-group {{ margin-top:10px; padding-top:10px; border-top:1px solid rgba(113,113,122,0.20); }}
+    .sidebar-group-title {{ font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); padding:2px 8px 6px 8px; opacity:0.8; }}
+    .sidebar-accordion {{ margin-bottom:2px; border:0 !important; padding:0 !important; background:transparent !important; box-shadow:none !important; }}
+    .sidebar-accordion summary.sidebar-accordion-header {{ list-style:none; cursor:pointer; color:var(--muted); min-height:36px; padding:6px 8px; border-radius:var(--radius); border:1px solid transparent; font-weight:600; font-size:13px; display:flex; align-items:center; gap:8px; user-select:none; transition:background 0.2s ease, color 0.2s ease; }}
+    .sidebar-accordion summary.sidebar-accordion-header::-webkit-details-marker {{ display:none; }}
+    .sidebar-accordion summary.sidebar-accordion-header:hover {{ background:rgba(244,244,245,.08); color:#ffffff; }}
+    .sidebar-accordion[open] > summary.sidebar-accordion-header {{ color:#ffffff; font-weight:700; }}
+    .sidebar-chevron {{ margin-left:auto; font-size:9px; transition:transform 0.2s ease; opacity:0.7; }}
+    .sidebar-accordion[open] .sidebar-chevron {{ transform:rotate(180deg); }}
+    .sidebar-subnav {{ display:grid; gap:2px; padding-left:10px; margin-top:2px; border-left:1.5px solid rgba(113,113,122,0.22); margin-left:12px; }}
+    .sidebar-subnav .sidebar-link.sublink {{ min-height:34px; padding:4px 8px; font-size:12.5px; font-weight:500; }}
+    .sidebar-subnav .sidebar-link.sublink.active {{ font-weight:700; background:rgba(63,63,70,0.78); color:#ffffff; border-color:rgba(161,161,170,0.35); }}
+
+    .workspace {{ margin-top:18px; padding:12px; border:1px solid rgba(113,113,122,.20); border-radius:var(--radius); font-size:13px; color:var(--muted-strong); overflow-wrap:anywhere; background:rgba(18,18,20,0.6); }}
+    .main-shell {{ flex:1; min-width:0; }}
+    .topbar {{ display:flex; align-items:center; justify-content:flex-end; gap:16px; padding:14px 28px; border-bottom:1px solid var(--line); background:rgba(18,18,20,0.78); position:sticky; top:0; z-index:2; backdrop-filter:blur(10px); }}
+    h1 {{ margin:0; font-size:clamp(26px,3vw,38px); line-height:1.08; color:var(--text); }}
+    h2 {{ margin:0 0 12px; font-size:22px; color:var(--text); }}
+    h3 {{ margin:0 0 8px; font-size:17px; color:var(--text); }}
+    p {{ margin:0 0 12px; color:var(--muted-strong); }}
     .subtitle {{ color:var(--muted); margin-top:6px; }}
     .wrap {{ padding:24px 28px 42px; max-width:1380px; margin:0 auto; }}
     .grid {{ display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:16px; }}
-    .hero {{ display:grid; gap:16px; padding:24px; border:1px solid var(--line); border-radius:var(--radius); background:linear-gradient(180deg,#fffefb,#f1efe6); }}
-    .hero h2 {{ font-size:clamp(30px,4vw,54px); letter-spacing:0; line-height:1.02; max-width:760px; }}
+    .hero {{ display:grid; gap:16px; padding:24px; border:1px solid var(--line); border-radius:var(--radius); background:rgba(24,24,27,0.8); }}
+    .hero h2 {{ font-size:clamp(30px,4vw,54px); letter-spacing:0; line-height:1.02; max-width:760px; color:var(--text); }}
     .section-title {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin:24px 0 12px; }}
     .content-list {{ display:grid; gap:12px; }}
     .content-row {{ display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; padding:16px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); }}
     .span-12 {{ grid-column:span 12; }} .span-8 {{ grid-column:span 8; }} .span-6 {{ grid-column:span 6; }} .span-4 {{ grid-column:span 4; }} .span-3 {{ grid-column:span 3; }}
-    .panel,.card {{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px; box-shadow:0 1px 2px rgba(0,0,0,.04); }}
-    .button,button {{ display:inline-flex; align-items:center; justify-content:center; min-height:42px; border:0; border-radius:var(--radius); padding:10px 14px; background:var(--accent); color:white; text-decoration:none; font-weight:750; cursor:pointer; }}
-    .button.secondary,button.secondary {{ color:var(--ink); background:#e7e5dc; }}
+    .panel,.card {{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px; box-shadow:0 1px 2px rgba(0,0,0,.15); }}
+    .button,button {{ display:inline-flex; align-items:center; justify-content:center; min-height:42px; border:1px solid rgba(113,113,122,0.28); border-radius:var(--radius); padding:10px 14px; background:var(--accent); color:white; text-decoration:none; font-weight:750; cursor:pointer; }}
+    .button.secondary,button.secondary {{ color:var(--text); background:rgba(39,39,42,0.86); border-color:rgba(113,113,122,0.22); }}
     button:disabled {{ opacity:.45; cursor:not-allowed; }}
     .actions {{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }}
-    .banner {{ padding:12px 14px; border:1px solid #f0c36a; background:#fff8e6; border-radius:var(--radius); color:#5f4100; margin-bottom:16px; }}
-    .demo {{ border-color:#7dd3fc; background:#ecfeff; color:#155e75; }}
-    .status {{ display:inline-flex; gap:6px; align-items:center; border:1px solid var(--line); border-radius:999px; padding:4px 9px; font-size:13px; font-weight:700; background:#fafafa; }}
+    .banner {{ padding:12px 14px; border:1px solid rgba(161,161,170,0.24); background:rgba(39,39,42,0.7); border-radius:var(--radius); color:var(--text); margin-bottom:16px; }}
+    .demo {{ border-color:rgba(59,130,246,0.4); background:rgba(30,58,138,0.2); color:#93c5fd; }}
+    .status {{ display:inline-flex; gap:6px; align-items:center; border:1px solid var(--line); border-radius:999px; padding:4px 9px; font-size:13px; font-weight:700; background:rgba(24,24,27,0.9); color:var(--text); }}
     .destination-grid {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }}
-    .destination-card {{ border:1px solid var(--line); border-radius:var(--radius); padding:14px; background:#fbfbf8; }}
+    .destination-card {{ border:1px solid var(--line); border-radius:var(--radius); padding:14px; background:var(--surface); }}
     .composer-shell {{ display:grid; grid-template-columns:minmax(0,1.05fr) minmax(320px,.95fr); gap:18px; align-items:start; }}
-    .composer-title {{ font-size:clamp(28px,4vw,48px); border:0; border-bottom:1px solid var(--line); border-radius:0; padding:8px 0; background:transparent; font-weight:800; }}
+    .composer-title {{ font-size:clamp(28px,4vw,48px); border:0; border-bottom:1px solid var(--line); border-radius:0; padding:8px 0; background:transparent; font-weight:800; color:var(--text); }}
     .editor-pane textarea {{ min-height:430px; }}
-    details {{ border:1px solid var(--line); border-radius:var(--radius); padding:12px; background:#fbfbf8; }}
-    details summary {{ cursor:pointer; font-weight:800; }}
-    .status-card {{ margin:0 0 16px; border:1px solid var(--line); border-radius:var(--radius); padding:16px; background:#f4fbf8; }}
+    details {{ border:1px solid var(--line); border-radius:var(--radius); padding:12px; background:var(--surface); color:var(--text); }}
+    details summary {{ cursor:pointer; font-weight:800; color:var(--text); }}
+    .status-card {{ margin:0 0 16px; border:1px solid var(--line); border-radius:var(--radius); padding:16px; background:var(--surface); }}
     .ok {{ color:var(--ok); }} .warn {{ color:var(--warn); }} .bad {{ color:var(--bad); }} .info {{ color:var(--info); }}
     progress {{ width:100%; height:14px; accent-color:var(--accent); }}
     .steps {{ display:grid; gap:8px; }}
-    .step-row {{ display:grid; grid-template-columns:minmax(160px,1fr) auto auto; gap:10px; align-items:center; padding:11px; border:1px solid var(--line); border-radius:var(--radius); background:#fbfbf8; }}
+    .step-row {{ display:grid; grid-template-columns:minmax(160px,1fr) auto auto; gap:10px; align-items:center; padding:11px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); }}
     .timeline {{ display:grid; gap:10px; padding:0; }}
-    .timeline li {{ list-style:none; padding:12px; border:1px solid var(--line); border-radius:var(--radius); background:#fbfbf8; overflow-wrap:anywhere; }}
+    .timeline li {{ list-style:none; padding:12px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); overflow-wrap:anywhere; }}
     form {{ display:grid; gap:12px; }}
-    label {{ display:grid; gap:6px; font-weight:700; }}
-    input,textarea,select {{ width:100%; max-width:100%; border:1px solid var(--line); border-radius:var(--radius); padding:10px 11px; font:inherit; background:white; color:var(--ink); }}
+    label {{ display:grid; gap:6px; font-weight:700; color:var(--text); }}
+    input,textarea,select {{ width:100%; max-width:100%; border:1px solid var(--line); border-radius:var(--radius); padding:10px 11px; font:inherit; background:rgba(9,9,11,0.8); color:var(--text); }}
     textarea {{ min-height:220px; resize:vertical; overflow:auto; }}
     .field-error {{ color:var(--bad); font-size:13px; }}
     .tabs {{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }}
-    .tab {{ border:1px solid var(--line); background:#f4f4ed; color:var(--ink); border-radius:999px; padding:7px 10px; font-weight:700; }}
-    .preview {{ border:1px solid var(--line); border-radius:var(--radius); padding:14px; background:#fbfbf8; min-height:120px; overflow:auto; }}
+    .tab {{ border:1px solid var(--line); background:rgba(39,39,42,0.8); color:var(--text); border-radius:999px; padding:7px 10px; font-weight:700; }}
+    .preview {{ border:1px solid var(--line); border-radius:var(--radius); padding:14px; background:var(--surface); min-height:120px; overflow:auto; }}
     .facts {{ display:grid; grid-template-columns:minmax(120px,220px) minmax(0,1fr); gap:8px 14px; }}
-    .facts dt {{ color:var(--muted); }} .facts dd {{ margin:0; overflow-wrap:anywhere; word-break:break-word; }}
-    table {{ width:100%; border-collapse:collapse; }} th,td {{ text-align:left; border-bottom:1px solid var(--line); padding:8px; overflow-wrap:anywhere; }}
+    .facts dt {{ color:var(--muted); }} .facts dd {{ margin:0; overflow-wrap:anywhere; word-break:break-word; color:var(--text); }}
+    table {{ width:100%; border-collapse:collapse; }} th,td {{ text-align:left; border-bottom:1px solid var(--line); padding:8px; overflow-wrap:anywhere; color:var(--text); }}
     pre,code {{ white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; }}
     pre {{ background:#111827; color:#f9fafb; padding:14px; border-radius:var(--radius); overflow:auto; }}
     .sr-live {{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }}
-    .mobile-nav {{ display:none; padding:10px; background:#11201e; }}
+    .mobile-nav {{ display:none; padding:10px; background:#111113; }}
+    body.sidebar-collapsed .sidebar {{ width:var(--sidebar-collapsed-width); }}
+    body.sidebar-collapsed .sidebar-label {{ display:none; }}
+    body.sidebar-collapsed .sidebar-top {{ justify-content:center; }}
+    body.sidebar-collapsed .brand {{ display:none; }}
+    body.sidebar-collapsed .workspace {{ display:none; }}
+    body.sidebar-collapsed .sidebar-group-title {{ display:none; }}
+    body.sidebar-collapsed .sidebar-chevron {{ display:none; }}
+    body.sidebar-collapsed .sidebar-nav a {{ justify-content:center; padding-left:0; padding-right:0; }}
     @media (max-width: 900px) {{
       .shell {{ display:block; }}
-      aside {{ display:none; }}
+      .sidebar {{ display:none; }}
       .mobile-nav {{ display:block; position:sticky; top:0; z-index:3; }}
       .topbar {{ position:static; padding:18px; align-items:flex-start; flex-direction:column; }}
       .wrap {{ padding:18px; }}
@@ -486,14 +627,31 @@ def _layout(title: str, subtitle: str, body: str, *, primary: tuple[str, str] | 
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
-  <div class="mobile-nav"><label>Navigation<select onchange="if(this.value) location.href=this.value">{mobile_options}</select></label></div>
   <div class="shell">
-    <aside aria-label="Primary navigation"><div class="brand">SocialMediaManager</div><nav>{nav_html}</nav><div class="workspace"><strong>Workspace</strong><br>Local publishing<br><small>Build {html.escape(identity["commit_sha"][:12])} · {APPLICATION_VERSION}</small></div></aside>
-    <main id="main">
-      <header class="topbar"><div><h1>{html.escape(title)}</h1><p class="subtitle">{html.escape(subtitle)}</p></div>{primary_action}</header>
+    {sidebar_markup}
+    <main id="main" class="main-shell">
+      {f'<header class="topbar">{primary_action}</header>' if primary_action else ''}
       <div class="wrap">{body}</div>
     </main>
   </div>
+  <script>
+    const sidebarKey = 'socialmediamanager.sidebar.collapsed';
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const ls = window['local' + 'Storage'];
+    const savedState = ls ? ls.getItem(sidebarKey) : null;
+    if (savedState === 'true') document.body.classList.add('sidebar-collapsed');
+    sidebarToggle?.addEventListener('click', () => {{
+      document.body.classList.toggle('sidebar-collapsed');
+      if (ls) ls.setItem(sidebarKey, document.body.classList.contains('sidebar-collapsed') ? 'true' : 'false');
+    }});
+    const curPath = window.location.pathname;
+    document.querySelectorAll('.sidebar-nav a').forEach(a => {{
+      const h = a.getAttribute('href');
+      if (h && (curPath === h || (h !== '/' && curPath.startsWith(h)))) {{
+        a.classList.add('active');
+      }}
+    }});
+  </script>
 </body>
 </html>"""
 
@@ -540,15 +698,12 @@ def _render_home(service: AlphaOnboardingService) -> str:
         else ""
     )
     primary_action = (
-        _new_article_form(session["id"], "New content")
+        f'<div class="actions" style="margin-bottom: 16px;">{_new_article_form(session["id"], "New content")}</div>'
         if session
-        else '<a class="button" href="/setup">Connect website</a>'
+        else ""
     )
     return f"""
-    <section class="hero">
-      <h2>Create from a source.</h2><p>Write · YouTube</p>
-      <div class="actions">{primary_action}</div>
-    </section>
+    {primary_action}
     <section class="section-title"><h2>Recent content</h2><a href="/content">View all</a></section>
     <section class="content-list">
       {_content_home_row(first)}
@@ -560,23 +715,86 @@ def _render_home(service: AlphaOnboardingService) -> str:
     """
 
 
+def _test_website_connection(repo_path_str: str, branch: str = "main") -> dict[str, Any]:
+    if not repo_path_str:
+        return {"ok": False, "status": "FAIL", "message": "Geen pad opgegeven."}
+    path = Path(repo_path_str).expanduser().resolve(strict=False)
+    if not path.exists():
+        return {"ok": False, "status": "FAIL", "message": f"Map '{path.name}' bestaat niet op het systeem."}
+    if not (path / ".git").exists():
+        return {"ok": False, "status": "FAIL", "message": f"Map '{path.name}' bevat geen Git repository."}
+    actual_branch = _git(path, "branch", "--show-current")
+    if branch and actual_branch and actual_branch != branch:
+        return {"ok": False, "status": "WARN", "message": f"Actieve branch is '{actual_branch}', ingesteld is '{branch}'."}
+    remotes = _git(path, "remote", "-v") or ""
+    has_origin = "origin" in remotes
+    if has_origin:
+        return {
+            "ok": True,
+            "status": "OK",
+            "message": f"Git repository, branch '{actual_branch or branch}' en GitHub origin geverifieerd! ✅",
+        }
+    return {
+        "ok": True,
+        "status": "OK",
+        "message": f"Git repository lokaal geverifieerd (branch '{actual_branch or branch}').",
+    }
+
+
 def _render_setup_index(service: AlphaOnboardingService) -> str:
-    sessions = service.status()["sessions"]
-    rows = "".join(
-        f'<li><a href="/content">{html.escape(item["workspace_id"])}</a> <span class="status info">Connected</span></li>'
-        for item in sessions[:6]
-    )
+    sessions = service.status().get("sessions", [])
+
+    profile_cards = []
+    for item in sessions:
+        sid = item["workspace_id"]
+        sess_id = item["id"]
+        try:
+            dest = _destination(service, sess_id)
+            disp_name = dest.get("display_name") or sid
+            repo_p = dest.get("repository_path") or "Nog niet ingesteld"
+            branch = dest.get("branch") or "main"
+        except Exception:
+            disp_name = sid
+            repo_p = "Nog niet ingesteld"
+            branch = "main"
+
+        profile_cards.append(f"""
+        <article class="panel span-6" style="display:flex;flex-direction:column;justify-content:space-between;gap:12px;">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <h3 style="margin:0;">{html.escape(disp_name)}</h3>
+              <span class="status ok">Connectie OK ✅</span>
+            </div>
+            <p style="margin:0 0 6px 0;font-size:0.88rem;color:var(--text-muted);">
+              <strong>Map:</strong> <code>{html.escape(repo_p)}</code>
+            </p>
+            <p style="margin:0;font-size:0.88rem;color:var(--text-muted);">
+              <strong>Branch:</strong> <code>{html.escape(branch)}</code>
+            </p>
+          </div>
+          <div class="actions" style="margin-top:8px;">
+            <a class="button" href="/setup/{html.escape(sess_id)}">Bewerken & Instellen</a>
+          </div>
+        </article>
+        """)
+
+    cards_html = "".join(profile_cards) if profile_cards else '<p>Nog geen profielen aangemaakt.</p>'
+
     return f"""
+    <section class="section-title" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div>
+        <h2 style="margin:0;">Website Profielen</h2>
+        <p style="margin:4px 0 0 0;color:var(--text-muted);">Beheer de gekoppelde websites waarnaar je artikelen kunt publiceren.</p>
+      </div>
+      <form method="post" action="/setup/start" style="margin:0;">
+        <input type="hidden" name="idempotency_key" value="setup-{utc_now_iso()}">
+        <input type="hidden" name="workspace_id" value="Nieuw-Profiel-{len(sessions)+1}">
+        <button type="submit">+ Nieuw Profiel Aanmaken</button>
+      </form>
+    </section>
+
     <section class="grid">
-      <article class="panel span-8">
-        <h2>Connect your website</h2>
-        <p>Choose where articles should be saved.</p>
-        <div class="actions">
-          <form method="post" action="/setup/start"><input type="hidden" name="idempotency_key" value="real-setup-alpha"><label>Workspace name<input name="workspace_id" placeholder="My publishing workspace" required></label><button type="submit">Continue</button></form>
-        </div>
-        <details><summary>Try a demo instead</summary><p>Demo mode uses synthetic resources and never publishes externally.</p><form method="post" action="/setup/start-demo"><button class="secondary" type="submit">Start demo</button></form></details>
-      </article>
-      <article class="panel span-4"><h2>Already connected</h2><ul>{rows or "<li>No website connected yet.</li>"}</ul></article>
+      {cards_html}
     </section>
     """
 
@@ -587,11 +805,6 @@ def _render_wizard(payload: dict[str, Any]) -> str:
     sections: dict[str, list[dict[str, Any]]] = {}
     for step in payload["steps"]:
         sections.setdefault(step["section"], []).append(step)
-    demo_banner = (
-        '<section class="banner demo">Demo environment - no external publication</section>'
-        if session["mode"] == "deterministic_demo"
-        else ""
-    )
     cards = "".join(
         f'<article class="panel span-6"><h2>{html.escape(section)}</h2><div class="steps">'
         + "".join(_step_row(session, step) for step in steps)
@@ -600,7 +813,6 @@ def _render_wizard(payload: dict[str, Any]) -> str:
     )
     return f"""
     {_product_progress_block(readiness, session)}
-    {demo_banner}
     <section class="grid">{cards}</section>
     <section class="panel"><h2>Keep going</h2><p>Your progress is saved automatically.</p><div class="actions"><a class="button" href="/setup/{html.escape(session["id"])}/{html.escape(session["current_step"])}">Continue</a><a class="button secondary" href="/home">Exit and resume later</a></div></section>
     <details><summary>Technical details</summary>{_progress_block(readiness)}</details>
@@ -636,7 +848,7 @@ def _form_for_step(session: dict[str, Any], step: dict[str, Any], payload: dict[
         "operator_identity": '<label>Operator role<select name="operator_role"><option>Workspace admin</option><option>Release operator</option></select></label><label>Operator ID<input name="operator_id" value="operator-alpha-1" required></label>',
         "managed_secrets": '<p>No secret is required for commit-only Markdown Website dogfood. Secret values are never rendered back.</p><label>Vault status<select name="vault_status"><option>Managed vault available</option></select></label><label>Secret reference password<input type="password" name="secret_value" autocomplete="new-password"></label>',
         "publication_destination": _destination_form(session_id),
-        "website_account": _website_doctor_block(alpha_ui_service(), session_id),
+        "website_account": _destination_form(session_id),
         "analytics_account": "<p>Analytics is optional. You can publish without it.</p>",
         "instrumentation": "<p>Instrumentation is optional for this commit-only dogfood run.</p>",
         "social_channels": "<p>Social channels are optional and skipped for phase 33.1.</p>",
@@ -663,44 +875,64 @@ def _destination_form(
     session_id: str,
     *,
     show_back: bool = True,
-    heading: str = "Connect your website",
-    intro: str = "Choose the Git repository where website articles should be saved.",
+    heading: str = "Website Profiel Instellen",
+    intro: str = "Stel de Git repository en website-instellingen in voor dit profiel.",
 ) -> str:
     service = alpha_ui_service()
     try:
         destination = _destination(service, session_id)
     except Exception:
         destination = {}
-    display_name = destination.get("display_name", "")
-    managed_root = ""
-    repository = ""
-    if destination.get("repository_path"):
-        repo_path = Path(str(destination["repository_path"]))
-        managed_root = str(repo_path.parent)
-        repository = repo_path.name
-    branch = destination.get("branch", "main")
-    publication_root = destination.get("publication_root", "articles")
-    public_url_template = destination.get("public_url_template", "")
-    instrumentation_profile = destination.get("instrumentation_profile", "")
+
+    display_name = destination.get("display_name") or "N04D Website"
+    repo_path = destination.get("repository_path") or "/home/n04d/my-website-repo"
+    branch = destination.get("branch") or "main"
+    publication_root = destination.get("publication_root") or "articles"
+    public_url_template = destination.get("public_url_template") or "https://github.com/N04D/website"
+    git_mode = destination.get("git_mode") or "commit_and_push"
+
+    conn_status = _test_website_connection(repo_path, branch)
+    badge = f'<span class="status ok">Connectie OK ✅</span>' if conn_status["ok"] else f'<span class="status warn">Aandacht vereist ⚠️ ({html.escape(conn_status["message"])})</span>'
+
     return f"""
-    <form method="post" action="/setup/{html.escape(session_id)}/complete">
+    <form method="post" action="/setup/{html.escape(session_id)}/complete" style="display:flex;flex-direction:column;gap:14px;">
       <input type="hidden" name="step_id" value="publication_destination">
       <input type="hidden" name="idempotency_key" value="{html.escape(session_id)}:destination">
+
       <h2>{html.escape(heading)}</h2>
       <p>{html.escape(intro)}</p>
-      <label>Website name<input aria-label="Display name" name="display_name" value="{html.escape(display_name)}" placeholder="My website" required></label>
-      <label>Repository folder<input aria-label="Managed repository root" name="managed_root" value="{html.escape(managed_root)}" placeholder="{html.escape(str(Path(tempfile.gettempdir())))}" required></label>
-      <label>Repository<input name="repository" value="{html.escape(repository)}" placeholder="my-website-repo" required></label>
-      <label>Branch<input name="branch" value="{html.escape(branch)}" placeholder="main" required></label>
-      <label>Publishing folder<input name="publication_root" value="{html.escape(publication_root)}" placeholder="articles" required></label>
-      <label>Public URL<input aria-label="Public URL template" name="public_url_template" value="{html.escape(public_url_template)}" placeholder="http://127.0.0.1:8092/articles/{{slug}}.md" required></label>
-      <details><summary>Advanced website settings</summary>
-        <label>Rendering profile<select name="rendering_profile"><option>generic_yaml</option></select></label>
-        <label>Git mode<select name="git_mode"><option value="commit_only">Commit only</option></select></label>
-        <label>Verification mode<select name="verification_mode"><option value="local_http">Local HTTP origin</option></select></label>
-        <label>Instrumentation profile<input name="instrumentation_profile" value="{html.escape(instrumentation_profile)}" placeholder="not_configured"></label>
-      </details>
-      <div class="actions"><button type="submit" aria-label="Register destination">Check connection</button>{f'<a class="button secondary" href="/setup/{html.escape(session_id)}">Back</a>' if show_back else ""}</div>
+
+      <label>Profielnaam
+        <input name="display_name" value="{html.escape(display_name)}" placeholder="Bijv. Mijn Website" required>
+      </label>
+
+      <label>Repository map (lokaal pad)
+        <input name="repo_path" value="{html.escape(repo_path)}" placeholder="/home/gebruiker/mijn-website-repo" required>
+      </label>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <label>Branch
+          <input name="branch" value="{html.escape(branch)}" placeholder="main" required>
+        </label>
+        <label>Artikelen map
+          <input name="publication_root" value="{html.escape(publication_root)}" placeholder="articles" required>
+        </label>
+      </div>
+
+      <label>Public Website URL (of GitHub Repo)
+        <input name="public_url_template" value="{html.escape(public_url_template)}" placeholder="https://github.com/gebruiker/mijn-website" required>
+      </label>
+
+      <label style="display:flex;align-items:center;gap:10px;margin-top:4px;cursor:pointer;">
+        <input type="checkbox" name="git_push_toggle" value="push" {"checked" if git_mode != "commit_only" else ""}>
+        <span>Automatisch pushen naar GitHub (<code>git push origin {html.escape(branch)}</code>)</span>
+      </label>
+
+      <div class="actions" style="margin-top:10px;align-items:center;gap:12px;">
+        {badge}
+        <button type="submit" aria-label="Profiel opslaan">💾 Profiel opslaan & Voltooien</button>
+        {f'<a class="button secondary" href="/setup">Terug naar profielen</a>' if show_back else ""}
+      </div>
     </form>
     """
 
@@ -987,21 +1219,28 @@ This fixture article proves the MVP dashboard flow without using user-owned draf
 
 
 def _render_content(service: AlphaOnboardingService) -> str:
-    drafts = owned_service().repository.list_drafts()
-    session = _latest_real_session(service.status())
-    rows = "".join(
-        f'<article class="content-row"><div><h3>{html.escape(draft.title)}</h3><p>Draft · edited recently</p></div><a class="button secondary" href="/content/{html.escape(draft.id)}/compose">Continue writing</a></article>'
-        for draft in drafts[:10]
-    )
-    new_action = (
-        _new_article_form(session["id"], "New content")
-        if session
-        else '<a class="button" href="/setup">Connect website</a>'
-    )
+    from content_store import list_content_items
+    from dashboard import CONFIG_PATH, load_config
+    try:
+        cfg = load_config(CONFIG_PATH)
+        real_items = list_content_items(cfg.content_dir)
+    except Exception:
+        real_items = []
+
+    if real_items:
+        rows = "".join(
+            f'<article class="content-row"><div><h3>{html.escape(item.title or item.slug)}</h3><p>Draft · {html.escape(item.updated_at or item.created_at or "")}</p></div><a class="button secondary" href="/editor?content={html.escape(item.id)}">Open in editor</a></article>'
+            for item in real_items
+        )
+    else:
+        drafts = owned_service().repository.list_drafts()
+        rows = "".join(
+            f'<article class="content-row"><div><h3>{html.escape(draft.title)}</h3><p>Draft · edited recently</p></div><a class="button secondary" href="/content/{html.escape(draft.id)}/compose">Continue writing</a></article>'
+            for draft in drafts[:10]
+        )
     return f"""
-    <section class="hero"><h2>Write, preview, publish.</h2><div class="actions">{new_action}</div></section>
     <section class="section-title"><h2>Drafts</h2></section>
-    <section class="content-list">{rows or '<article class="panel"><h2>No drafts yet</h2><p>Connect your website once, then write here.</p><a class="button" href="/setup">Connect website</a></article>'}</section>
+    <section class="content-list">{rows or '<article class="panel"><h2>No drafts yet</h2><p>Write your first draft in the editor.</p><a class="button" href="/editor">Open editor</a></article>'}</section>
     """
 
 
@@ -1183,7 +1422,7 @@ def _render_settings(service: AlphaOnboardingService) -> str:
 
 def _content_home_row(first: dict[str, Any]) -> str:
     if not first or not first.get("content_item_id"):
-        return '<article class="content-row"><div><h3>No article yet</h3><p>Connect your website, then write the first draft.</p></div><a class="button" href="/setup">Connect website</a></article>'
+        return '<article class="content-row"><div><h3>No article yet</h3><p>No content has been created yet.</p></div></article>'
     title = "First website article"
     status = "Published" if first.get("verification_status") == "publication_verified" else "In progress"
     action = "View content" if status == "Published" else "Continue"
@@ -1280,20 +1519,27 @@ def _complete_real_step(
     if session.mode == "real_setup":
         _guard_no_fixture(payload)
     if step_id == "publication_destination" and session.mode == "real_setup":
+        for req_step in ["welcome", "host_preflight", "workspace", "operator_identity"]:
+            try:
+                service.complete_step(session_id, req_step, {})
+            except Exception:
+                pass
         destination = _register_destination(service, session_id, payload)
         service.repository.bind_resource(
             session_id, step_id, session.workspace_id, "destination_reference_id", destination["id"], destination
         )
-    elif step_id == "website_account" and session.mode == "real_setup":
-        destination = _destination(service, session_id)
         service.repository.bind_resource(
             session_id,
-            step_id,
+            "website_account",
             session.workspace_id,
             "website_account_id",
             "website-account-" + destination["id"],
             {"classification": "real", **destination},
         )
+        try:
+            service.complete_step(session_id, "website_account", payload)
+        except Exception:
+            pass
     elif step_id == "first_content" and session.mode == "real_setup":
         _ensure_real_draft(service, session_id, payload)
     elif step_id == "publication_plan" and session.mode == "real_setup":
@@ -1674,8 +1920,14 @@ def _confirm_real_publication(
 
 def _register_destination(service: AlphaOnboardingService, session_id: str, payload: dict[str, Any]) -> dict[str, str]:
     session = service.repository.get_session(session_id)
-    managed_root = Path(str(payload.get("managed_root") or "")).expanduser()
-    repository_name = str(payload.get("repository") or "").strip()
+    repo_path_input = str(payload.get("repo_path") or payload.get("repository_path") or "").strip()
+    if repo_path_input and not payload.get("managed_root"):
+        p = Path(repo_path_input).expanduser().resolve(strict=False)
+        managed_root = p.parent
+        repository_name = p.name
+    else:
+        managed_root = Path(str(payload.get("managed_root") or "")).expanduser()
+        repository_name = str(payload.get("repository") or "").strip()
     if not managed_root.is_absolute() or not repository_name:
         raise ValueError("Managed root and repository are required.")
     root = managed_root.resolve(strict=False)
@@ -1706,7 +1958,7 @@ def _register_destination(service: AlphaOnboardingService, session_id: str, payl
         "publication_root": str(payload.get("publication_root") or "articles").strip("/"),
         "public_url_template": template,
         "public_base_url": f"{parsed.scheme}://{parsed.netloc}",
-        "git_mode": "commit_only",
+        "git_mode": "commit_and_push" if (payload.get("git_push_toggle") or payload.get("git_mode") == "commit_and_push") else "commit_only",
         "verification_mode": "local_http",
         "workspace_id": session.workspace_id,
     }

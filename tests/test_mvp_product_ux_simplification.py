@@ -8,7 +8,6 @@ from tests.phase334_support import Phase334TestCase
 class MVPProductUXSimplificationTests(Phase334TestCase):
     def test_primary_navigation_is_collapsed_to_four_product_areas(self) -> None:
         home = self.page("/home")
-        self.assertIn("Connect website", home)
         self.assertIn("Recent content", home)
         self.assertIn("Performance", home)
         self.assertIn('href="/home"', home)
