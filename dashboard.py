@@ -3968,74 +3968,7 @@ def render_page(
     }}
     .skip-link:focus {{ transform: translateY(0); }}
     .app-shell {{ display: flex; min-height: 100vh; }}
-    .sidebar {{
-      width: var(--sidebar-width);
-      background: linear-gradient(180deg, rgba(12, 12, 14, 0.98), rgba(7, 7, 8, 0.94));
-      border-right: 1px solid rgba(113, 113, 122, 0.20);
-      padding: 14px 12px;
-      position: sticky;
-      top: 0;
-      height: 100vh;
-      transition: width 0.2s ease, transform 0.2s ease;
-      z-index: 20;
-    }}
-    .sidebar-top {{ display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 16px; }}
-    .sidebar-toggle {{
-      border: 1px solid rgba(113, 113, 122, 0.22); border-radius: var(--radius);
-      background: rgba(31, 31, 35, 0.78); color: var(--text);
-      width: 34px; height: 34px; cursor: pointer; font-size: 12px;
-      transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
-    }}
-    .sidebar-toggle:hover {{
-      background: rgba(39, 39, 42, 0.92);
-      border-color: rgba(161, 161, 170, 0.24);
-      transform: translateY(-1px);
-    }}
-    .sidebar-nav {{ display: grid; gap: 2px; }}
-    .sidebar-section {{ display: grid; gap: 2px; }}
-    .sidebar-section-summary {{
-      display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 8px;
-      border: 1px solid transparent; border-radius: var(--radius); color: var(--muted);
-      cursor: pointer; list-style: none; user-select: none;
-      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-    }}
-    .sidebar-section-summary::-webkit-details-marker {{ display: none; }}
-    .sidebar-section-summary:hover {{ background: rgba(244, 244, 245, 0.06); border-color: rgba(113, 113, 122, 0.20); color: var(--text); }}
-    .sidebar-section-summary.active {{ background: rgba(63, 63, 70, 0.70); color: var(--text); border-color: rgba(161, 161, 170, 0.26); box-shadow: inset 3px 0 0 var(--accent); }}
-    .sidebar-section-chevron {{
-      width: 8px; height: 8px; margin-left: auto; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
-      transform: rotate(45deg); transition: transform 0.2s ease; opacity: 0.72; flex-shrink: 0;
-    }}
-    .sidebar-section[open] .sidebar-section-chevron {{ transform: rotate(225deg); }}
-    .sidebar-subnav {{ display: grid; gap: 2px; padding-left: 10px; margin-top: 2px; border-left: 1.5px solid rgba(113, 113, 122, 0.22); margin-left: 12px; }}
-    .sidebar-subnav .sidebar-link {{ min-height: 34px; padding: 4px 8px; font-size: 12.5px; font-weight: 500; }}
-    .sidebar-nav a, .sidebar-link {{
-      display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 8px;
-      border: 1px solid transparent; border-radius: var(--radius); text-decoration: none;
-      color: var(--muted); font-weight: 600; font-size: 13px; transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-    }}
-    .sidebar-link:hover {{ background: rgba(244, 244, 245, 0.08); border-color: rgba(113, 113, 122, 0.24); color: #ffffff; }}
-    .sidebar-link.active {{
-      background: rgba(63, 63, 70, 0.78);
-      color: #ffffff; border-color: rgba(161, 161, 170, 0.35);
-      box-shadow: inset 3px 0 0 #f4f4f5;
-      font-weight: 700;
-    }}
-    .sidebar-link.active:hover {{
-      background: rgba(82, 82, 91, 0.90);
-      color: #ffffff; border-color: rgba(212, 212, 216, 0.45);
-    }}
-    .sidebar-icon {{
-      width: 24px; height: 24px; border-radius: var(--radius); background: rgba(244, 244, 245, 0.07);
-      display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;
-      color: currentColor;
-    }}
-    .sidebar-icon svg {{
-      width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8;
-      stroke-linecap: round; stroke-linejoin: round;
-    }}
-    .sidebar-fallback {{ font-size: 10px; letter-spacing: 0.04em; font-weight: 700; }}
-    .sidebar-label {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 600; }}
+    {__import__('sidebar_registry').get_sidebar_css()}
     .main-shell {{ flex: 1; min-width: 0; transition: margin 0.2s ease, width 0.2s ease; }}
     .wrap {{ max-width: 1360px; margin: 0 auto; padding: 28px 24px 40px; }}
     .page-header {{ display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; margin-bottom: 24px; padding-bottom: 18px; border-bottom: 1px solid rgba(113, 113, 122, 0.18); }}

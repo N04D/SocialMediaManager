@@ -93,6 +93,47 @@ def get_plugin_menu_categories() -> list[PluginMenuCategory]:
     ]
 
 
+def get_sidebar_css() -> str:
+    return """
+    .sidebar { width: var(--sidebar-width, 268px); background: linear-gradient(180deg, rgba(12, 12, 14, 0.98), rgba(7, 7, 8, 0.94)); border-right: 1px solid rgba(113, 113, 122, 0.20); padding: 14px 12px; position: sticky; top: 0; height: 100vh; overflow-y: auto; transition: width 0.2s ease; z-index: 20; flex-shrink: 0; }
+    .sidebar-top { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .sidebar-toggle { border: 1px solid rgba(113, 113, 122, 0.22); border-radius: var(--radius, 8px); background: rgba(31, 31, 35, 0.78); color: var(--text, #f4f4f5); width: 34px; height: 34px; cursor: pointer; font-size: 12px; transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease; }
+    .sidebar-toggle:hover { background: rgba(39, 39, 42, 0.92); border-color: rgba(161, 161, 170, 0.24); transform: translateY(-1px); }
+    .sidebar-nav { display: grid; gap: 2px; }
+    .sidebar-nav a, .sidebar-link { color: var(--muted, #a1a1aa); text-decoration: none; min-height: 36px; padding: 6px 8px; border-radius: var(--radius, 8px); border: 1px solid transparent; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease; }
+    .sidebar-nav a:hover, .sidebar-link:hover { background: rgba(244, 244, 245, .08); border-color: rgba(113, 113, 122, .24); color: #ffffff; }
+    .sidebar-nav a.active, .sidebar-link.active { background: rgba(63, 63, 70, 0.78); color: #ffffff; border-color: rgba(161, 161, 170, 0.35); box-shadow: inset 3px 0 0 #f4f4f5; font-weight: 700; }
+    .sidebar-nav a.active:hover, .sidebar-link.active:hover { background: rgba(82, 82, 91, 0.90); color: #ffffff; border-color: rgba(212, 212, 216, 0.45); }
+    .sidebar-icon { width: 24px; height: 24px; border-radius: var(--radius, 8px); background: rgba(244, 244, 245, 0.07); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; color: currentColor; }
+    .sidebar-icon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .sidebar-fallback { font-size: 10px; letter-spacing: 0.04em; font-weight: 700; }
+    .sidebar-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 600; }
+
+    .sidebar-group { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(113, 113, 122, 0.20); }
+    .sidebar-group-title { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted, #a1a1aa); padding: 2px 8px 6px 8px; opacity: 0.8; }
+    .sidebar-accordion { margin-bottom: 2px; border: 0 !important; padding: 0 !important; background: transparent !important; box-shadow: none !important; }
+    .sidebar-accordion summary.sidebar-accordion-header { list-style: none; cursor: pointer; color: var(--muted, #a1a1aa); min-height: 36px; padding: 6px 8px; border-radius: var(--radius, 8px); border: 1px solid transparent; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; user-select: none; transition: background 0.2s ease, color 0.2s ease; }
+    .sidebar-accordion summary.sidebar-accordion-header::-webkit-details-marker { display: none; }
+    .sidebar-accordion summary.sidebar-accordion-header:hover { background: rgba(244, 244, 245, .08); color: #ffffff; }
+    .sidebar-accordion[open] > summary.sidebar-accordion-header { color: #ffffff; font-weight: 700; }
+    .sidebar-chevron { margin-left: auto; font-size: 9px; transition: transform 0.2s ease; opacity: 0.7; }
+    .sidebar-accordion[open] .sidebar-chevron { transform: rotate(180deg); }
+    .sidebar-subnav { display: grid; gap: 2px; padding-left: 10px; margin-top: 2px; border-left: 1.5px solid rgba(113, 113, 122, 0.22); margin-left: 12px; }
+    .sidebar-subnav .sidebar-link.sublink { min-height: 34px; padding: 4px 8px; font-size: 12.5px; font-weight: 500; }
+    .sidebar-subnav .sidebar-link.sublink.active { font-weight: 700; background: rgba(63, 63, 70, 0.78); color: #ffffff; border-color: rgba(161, 161, 170, 0.35); }
+
+    body.sidebar-collapsed .sidebar { width: var(--sidebar-collapsed-width, 76px); }
+    body.sidebar-collapsed .sidebar-label { display: none; }
+    body.sidebar-collapsed .sidebar-top { justify-content: center; }
+    body.sidebar-collapsed .brand { display: none; }
+    body.sidebar-collapsed .workspace { display: none; }
+    body.sidebar-collapsed .sidebar-group-title { display: none; }
+    body.sidebar-collapsed .sidebar-chevron { display: none; }
+    body.sidebar-collapsed .sidebar-nav a { justify-content: center; padding-left: 0; padding-right: 0; }
+    body.sidebar-collapsed .sidebar-accordion summary.sidebar-accordion-header { justify-content: center; padding-left: 0; padding-right: 0; }
+    """
+
+
 def render_modular_sidebar(active_route: str, render_icon_func: Callable[[str, str], str]) -> str:
     top_nav = [
         ("/home", "home", "Home", "HM"),
@@ -153,7 +194,6 @@ def render_modular_sidebar(active_route: str, render_icon_func: Callable[[str, s
     return f"""
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-top">
-          <div class="brand">SocialMediaManager</div>
           <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Toggle navigation"><span aria-hidden="true">|||</span></button>
         </div>
         <nav class="sidebar-nav" aria-label="Primary navigation">
