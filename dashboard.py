@@ -174,6 +174,7 @@ ROUTE_HOME = "/home"
 ROUTE_SETUP = "/setup"
 ROUTE_MVP_OPERATIONS = "/operations"
 ROUTE_CALENDAR = "/calendar"
+ROUTE_CHANNELS = "/channels"
 VALID_ROUTES = {
     ROUTE_EDITOR,
     ROUTE_DRAFTS,
@@ -195,6 +196,7 @@ VALID_ROUTES = {
     ROUTE_SETUP,
     ROUTE_MVP_OPERATIONS,
     ROUTE_CALENDAR,
+    ROUTE_CHANNELS,
 }
 
 SIDEBAR_ITEMS = [
@@ -341,6 +343,8 @@ def normalize_route(path: str) -> str:
     if path in {"", "/"}:
         return ROUTE_EDITOR
     cleaned = path.rstrip("/") or "/"
+    if cleaned in {"/channels", "/plugins"}:
+        return ROUTE_PLUGINS
     if cleaned.startswith("/content/"):
         return ROUTE_CONTENT
     if cleaned.startswith("/publications/"):
