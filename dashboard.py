@@ -3852,10 +3852,11 @@ def render_main_content(
             render_content_planning_page(config),
         )
     if route == ROUTE_CONTENT_CALENDAR:
+        from calendar_view import render_calendar_page
         return (
-            "Execution Calendar",
-            "Recurring schedules, occurrences, and campaign coordination",
-            render_content_calendar_page(config),
+            "Calendar",
+            "Publicatie Kalender voor geplande posts, artikelen en concepten",
+            render_calendar_page(),
         )
     if route == ROUTE_ANALYTICS:
         return (

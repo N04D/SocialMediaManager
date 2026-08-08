@@ -139,6 +139,7 @@ def render_modular_sidebar(active_route: str, render_icon_func: Callable[[str, s
         ("/home", "home", "Home", "HM"),
         ("/editor", "editor", "Editor", "ED"),
         ("/drafts", "drafts", "Drafts", "DR"),
+        ("/calendar", "media", "Calendar", "CA"),
         ("/setup", "config", "Website Setup", "SU"),
         ("/analytics", "stats", "Analytics", "AN"),
     ]

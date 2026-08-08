@@ -43,6 +43,7 @@ MVP_UI_ROUTES = {
     "/",
     "/home",
     "/setup",
+    "/calendar",
     "/content",
     "/analytics",
     "/settings",
@@ -105,6 +106,7 @@ def alpha_ui_api() -> AlphaOnboardingAPI:
 def is_mvp_get_route(path: str) -> bool:
     return (
         path in MVP_UI_ROUTES
+        or path == "/api/calendar/events"
         or path.startswith("/setup/")
         or path.startswith("/channels/")
         or path.startswith("/plugins/")
@@ -244,12 +246,16 @@ def render_mvp_page(path: str, query: str = "") -> tuple[str, HTTPStatus]:
             return _layout("Content", "Owned publication content", _render_content(service), active_route="/editor"), HTTPStatus.OK
         if path.startswith("/content/") and path.endswith("/compose"):
             return _layout("Compose", "Article composer", _render_real_composer(service, path, params), active_route="/editor"), HTTPStatus.OK
+        if path == "/api/calendar/events":
+            from calendar_view import get_calendar_events
+            return json.dumps(get_calendar_events()), HTTPStatus.OK
         if path == "/calendar":
+            from calendar_view import render_calendar_page
             return _layout(
                 "Calendar",
-                "Publication planning",
-                _simple_panel("Publication plan calendar", "No scheduled dogfood publication yet."),
-                active_route="/home",
+                "Publicatie Kalender",
+                render_calendar_page(),
+                active_route="/calendar",
             ), HTTPStatus.OK
         if path == "/analytics":
             return _layout("Analytics", "First funnel status", _render_analytics(service), active_route="/analytics"), HTTPStatus.OK
