@@ -8,7 +8,7 @@ channels: []
 tags: []
 categories: []
 created_at: '2026-06-17T16:22:35+02:00'
-updated_at: '2026-06-17T16:32:35+02:00'
+updated_at: '2026-06-20T23:22:59+02:00'
 published_at: ''
 cover_image_path: ''
 linkedin_post_urn: ''
@@ -45,7 +45,7 @@ Een diamant ontstaat onder druk, en een ziel onder frictie. Ibn Arabī zegt: *�
 
 Rabb al-ʿālamīn is de erkenning dat jij nog onderweg bent, nog in wording, nog in groei. En Allah die jou leidt, heeft geen half werk. Hij brengt geen ziel tot dit punt om haar daar achter te laten. Hij heeft jou niet zo ver gebracht om je nu los te laten.
 
-**Ar-Raḥmān & Ar-Raḥīm: De Barmhartigheid vóór alles**
+## **Ar-Raḥmān & Ar-Raḥīm: De Barmhartigheid vóór alles**
 
 **Ar-Raḥmān en Ar-Raḥīm** komen vóór *iyyāka naʿbudu* omdat Allah wil dat jij begrijpt: Zijn barmhartigheid gaat altijd vooraf aan jouw daden. Voordat jij kiest, voordat jij verandert, voordat jij terugkeert - staat Zijn genade al klaar.
 

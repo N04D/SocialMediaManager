@@ -8,3 +8,16 @@ linkedin_remote_browser/
 studio_data/
 outbox/
 node_modules/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.env
+.env.*
+!.env.example
+*.log
+*.sqlite
+*.sqlite3
+*.db
+github_pages_session/
+managed-content/
+imports/substack/

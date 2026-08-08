@@ -1,0 +1,384 @@
+{
+  "editor_json": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Het tijdperk van de snelle SaaS-wrapper loopt op z’n laatste benen. Wie de afgelopen twee jaar een willekeurige feed opende, zag een wildgroei aan no-code ontwikkelaars en verse AI-agencies. Met wat slimme prompts, drie Zapier-pijpleidingen en een OpenAI API-sleutel knutselden ze binnen een middag een 'revolutionair' product in elkaar. Een maandelijks abonnementje erop, en klaar."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Maar onder die motorkap blijkt het verrassend vaak om duurbetaalde lijm te gaan. Bedrijven worden opgescheept met een kaartenhuis van losse cloud-licenties, onvoorspelbare token-facturen en een versnipperde datastroom. Zodra er één API-sleutel verloopt of een platform zijn voorwaarden aanpast, ligt de complete automatisering plat. We hebben massaal de illusie van innovatie gekocht, maar kregen er een nieuw digitaal moeras voor terug."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Het echte breekpunt zit 'm echter niet in de kosten, maar in de veiligheid. Zonder dat men er erg in heeft, vliegen vertrouwelijke klantgegevens, interne strategieën en intellectueel eigendom via omwegen over Amerikaanse cloud-servers."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Terwijl de markt overspoeld raakt met dit soort no-code AI-wrappers, trekken ervaren software-engineers en security-specialisten zoals "
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ],
+            "text": "Rein Velt"
+          },
+          {
+            "type": "text",
+            "text": " al langer aan de noodrem. Als je privacy, gegevensbescherming en AVG-compliance serieus neemt, kun je een bedrijfsproces simpelweg niet toevertrouwen aan een wankel netwerk van externe API-koppelingen. Echte innovatie vraagt niet om nóg een snel SaaS-abonnement, maar om geharde, doordachte software-architectuur en onvoorwaardelijke data-soevereiniteit."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "De oplossing voor dit probleem vraagt om een radicale omslag: we moeten af van het idee dat alles per se in de cloud hoeft te draaien. De toekomst van robuuste AI-automatisering ligt niet in nóg een extern platform, maar in de terugkeer naar lokale, fysieke infrastructuur. "
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ],
+            "text": "Data-soevereiniteit"
+          },
+          {
+            "type": "text",
+            "text": " wordt het nieuwe sleutelwoord."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "In plaats van gevoelige bedrijfsprocessen over een dozijn Amerikaanse servers te verspreiden, verschuift de regie naar compacte, geharde "
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "italic"
+              }
+            ],
+            "text": "Edge Nodes"
+          },
+          {
+            "type": "text",
+            "text": " — denk aan een dedicated Raspberry Pi 5 of een lokale GPU-server in de meterkast van het pand."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Plaintext"
+          }
+        ]
+      },
+      {
+        "type": "codeBlock",
+        "attrs": {
+          "language": null
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "  Cloud SaaS Model (Het Kaartenhuis)\n  Bedrijfsdata ──► Zapier ──► OpenAI API ──► Make ──► Derde SaaS\n  (Onvoorspelbare kosten, AVG-risico's, afhankelijk van uptime)\n\n  Local Edge Model (Soevereine Infrastructuur)\n  Bedrijfsdata ──► Lokale Edge Node (Pi 5 / Local LLM) ──► Lokale Opslag\n  (Vaste hardwarekosten, 100% Air-Gapped, absolute privacy)\n"
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 3
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Waarom de Local Edge Node de Cloud Wint"
+          }
+        ]
+      },
+      {
+        "type": "bulletList",
+        "content": [
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "marks": [
+                      {
+                        "type": "bold"
+                      }
+                    ],
+                    "text": "Zero Data Leakage:"
+                  },
+                  {
+                    "type": "text",
+                    "text": " Omdat het brein (het lokale LLM), de opslag en de verwerking volledig binnen het eigen netwerk draaien, verlaat er geen byte de organisatie. Het is "
+                  },
+                  {
+                    "type": "text",
+                    "marks": [
+                      {
+                        "type": "italic"
+                      }
+                    ],
+                    "text": "privacy-by-design"
+                  },
+                  {
+                    "type": "text",
+                    "text": " in de meest zuivere vorm: de IT-security officer kan met een gerust hart 'ja' zeggen."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "marks": [
+                      {
+                        "type": "bold"
+                      }
+                    ],
+                    "text": "Geen 'SaaS-Tax' meer:"
+                  },
+                  {
+                    "type": "text",
+                    "text": " Geen variabele token-facturen op het einde van de maand, geen Zapier-credits die opraken als je volume groeit. Eén keer investeren in de hardware, en de operationele kosten blijven voorspelbaar en laag."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "marks": [
+                      {
+                        "type": "bold"
+                      }
+                    ],
+                    "text": "Ononderbroken Continuïteit:"
+                  },
+                  {
+                    "type": "text",
+                    "text": " Valt de internetverbinding uit of verandert een cloud-gigant zijn API-voorwaarden? Jouw lokale infrastructuur draait op de achtergrond gewoon 24/7 door."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Met modulaire "
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "italic"
+              }
+            ],
+            "text": "Playbooks"
+          },
+          {
+            "type": "text",
+            "text": " en visuele workflow-editors bouwen bedrijven zo hun eigen, unieke 'Private Agent' op hun eigen hardware. Hun intellectuele eigendom, unieke prompts en proceskennis blijven precies waar ze horen: "
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ],
+            "text": "in eigen huis"
+          },
+          {
+            "type": "text",
+            "text": "."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Het tijdperk van gebakken lucht en wankele no-code wrappers is voorbij. We bewegen richting een markt waarin echte, geharde infrastructuur weer de norm wordt — en waar de controle over data eindelijk weer teruggaat naar de eigenaar."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Het tijdperk van de snelle AI-goudkoorts loopt ten einde. De frictie tussen de belofte van automatisering en de rauwe werkelijkheid van datalekken, stijgende SaaS-kosten en wankele API-koppelingen wordt elke dag voelbaarder. Bedrijven die hun toekomst serieus nemen, nemen geen genoegen meer met een digitaal kaartenhuis."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "De pendel slaat om. We bewegen van een markt die gedomineerd werd door vluchtige wrappers, naar een tijdperk waarin echte, geharde infrastructuur weer de norm is. AI is geen losse gimmick of een extra knop op een dashboard; het wordt het centrale zenuwstelsel van je organisatie. En een zenuwstelsel hoort in eigen huis te staan — veilig, soeverein en onder jouw directe controle."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 3
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Tijd voor Echte Data-Soevereiniteit"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Blijf je maandelijks betalen voor de illusie van gemak, of neem je de controle over je eigen data, processen en intellectuele eigendom weer volledig in eigen hand?"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ],
+            "text": "Sluit je aan bij de tegenbeweging:"
+          }
+        ]
+      },
+      {
+        "type": "bulletList",
+        "content": [
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "marks": [
+                      {
+                        "type": "bold"
+                      }
+                    ],
+                    "text": "Bouw je mee aan de nieuwe standaard?"
+                  },
+                  {
+                    "type": "text",
+                    "text": " Sluit je aan bij de community van ontwikkelaars, security-architecten en denkers die bouwen aan open, lokale agentic-systemen."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "marks": [
+                      {
+                        "type": "bold"
+                      }
+                    ],
+                    "text": "Klaar met de SaaS-moeras binnen jouw organisatie?"
+                  },
+                  {
+                    "type": "text",
+                    "text": " Laat in de reacties weten tegen welke muren jij oploopt met cloud-AI, of stuur een bericht om te sparren over de overstap naar soevereine, lokale infrastructuur."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "italic"
+              }
+            ],
+            "text": "Het is tijd om de stekker uit het kaartenhuis te trekken. Bouw aan infrastructuur die blijft staan."
+          }
+        ]
+      }
+    ]
+  },
+  "markdown_body": "Het tijdperk van de snelle SaaS-wrapper loopt op z’n laatste benen. Wie de afgelopen twee jaar een willekeurige feed opende, zag een wildgroei aan no-code ontwikkelaars en verse AI-agencies. Met wat slimme prompts, drie Zapier-pijpleidingen en een OpenAI API-sleutel knutselden ze binnen een middag een 'revolutionair' product in elkaar. Een maandelijks abonnementje erop, en klaar.\r\n\r\nMaar onder die motorkap blijkt het verrassend vaak om duurbetaalde lijm te gaan. Bedrijven worden opgescheept met een kaartenhuis van losse cloud-licenties, onvoorspelbare token-facturen en een versnipperde datastroom. Zodra er één API-sleutel verloopt of een platform zijn voorwaarden aanpast, ligt de complete automatisering plat. We hebben massaal de illusie van innovatie gekocht, maar kregen er een nieuw digitaal moeras voor terug.\r\n\r\nHet echte breekpunt zit 'm echter niet in de kosten, maar in de veiligheid. Zonder dat men er erg in heeft, vliegen vertrouwelijke klantgegevens, interne strategieën en intellectueel eigendom via omwegen over Amerikaanse cloud-servers.\r\n\r\nTerwijl de markt overspoeld raakt met dit soort no-code AI-wrappers, trekken ervaren software-engineers en security-specialisten zoals **Rein Velt** al langer aan de noodrem. Als je privacy, gegevensbescherming en AVG-compliance serieus neemt, kun je een bedrijfsproces simpelweg niet toevertrouwen aan een wankel netwerk van externe API-koppelingen. Echte innovatie vraagt niet om nóg een snel SaaS-abonnement, maar om geharde, doordachte software-architectuur en onvoorwaardelijke data-soevereiniteit.\r\n\r\nDe oplossing voor dit probleem vraagt om een radicale omslag: we moeten af van het idee dat alles per se in de cloud hoeft te draaien. De toekomst van robuuste AI-automatisering ligt niet in nóg een extern platform, maar in de terugkeer naar lokale, fysieke infrastructuur. **Data-soevereiniteit** wordt het nieuwe sleutelwoord.\r\n\r\nIn plaats van gevoelige bedrijfsprocessen over een dozijn Amerikaanse servers te verspreiden, verschuift de regie naar compacte, geharde *Edge Nodes* — denk aan een dedicated Raspberry Pi 5 of een lokale GPU-server in de meterkast van het pand.\r\n\r\nPlaintext\r\n\r\n```\r\n  Cloud SaaS Model (Het Kaartenhuis)\r\n  Bedrijfsdata ──► Zapier ──► OpenAI API ──► Make ──► Derde SaaS\r\n  (Onvoorspelbare kosten, AVG-risico's, afhankelijk van uptime)\r\n\r\n  Local Edge Model (Soevereine Infrastructuur)\r\n  Bedrijfsdata ──► Lokale Edge Node (Pi 5 / Local LLM) ──► Lokale Opslag\r\n  (Vaste hardwarekosten, 100% Air-Gapped, absolute privacy)\r\n```\r\n\r\n### Waarom de Local Edge Node de Cloud Wint\r\n\r\n-   **Zero Data Leakage:** Omdat het brein (het lokale LLM), de opslag en de verwerking volledig binnen het eigen netwerk draaien, verlaat er geen byte de organisatie. Het is *privacy-by-design* in de meest zuivere vorm: de IT-security officer kan met een gerust hart 'ja' zeggen.\r\n    \r\n-   **Geen 'SaaS-Tax' meer:** Geen variabele token-facturen op het einde van de maand, geen Zapier-credits die opraken als je volume groeit. Eén keer investeren in de hardware, en de operationele kosten blijven voorspelbaar en laag.\r\n    \r\n-   **Ononderbroken Continuïteit:** Valt de internetverbinding uit of verandert een cloud-gigant zijn API-voorwaarden? Jouw lokale infrastructuur draait op de achtergrond gewoon 24/7 door.\r\n    \r\n\r\nMet modulaire *Playbooks* en visuele workflow-editors bouwen bedrijven zo hun eigen, unieke 'Private Agent' op hun eigen hardware. Hun intellectuele eigendom, unieke prompts en proceskennis blijven precies waar ze horen: **in eigen huis**.\r\n\r\nHet tijdperk van gebakken lucht en wankele no-code wrappers is voorbij. We bewegen richting een markt waarin echte, geharde infrastructuur weer de norm wordt — en waar de controle over data eindelijk weer teruggaat naar de eigenaar.\r\n\r\nHet tijdperk van de snelle AI-goudkoorts loopt ten einde. De frictie tussen de belofte van automatisering en de rauwe werkelijkheid van datalekken, stijgende SaaS-kosten en wankele API-koppelingen wordt elke dag voelbaarder. Bedrijven die hun toekomst serieus nemen, nemen geen genoegen meer met een digitaal kaartenhuis.\r\n\r\nDe pendel slaat om. We bewegen van een markt die gedomineerd werd door vluchtige wrappers, naar een tijdperk waarin echte, geharde infrastructuur weer de norm is. AI is geen losse gimmick of een extra knop op een dashboard; het wordt het centrale zenuwstelsel van je organisatie. En een zenuwstelsel hoort in eigen huis te staan — veilig, soeverein en onder jouw directe controle.\r\n\r\n### Tijd voor Echte Data-Soevereiniteit\r\n\r\nBlijf je maandelijks betalen voor de illusie van gemak, of neem je de controle over je eigen data, processen en intellectuele eigendom weer volledig in eigen hand?\r\n\r\n**Sluit je aan bij de tegenbeweging:**\r\n\r\n-   **Bouw je mee aan de nieuwe standaard?** Sluit je aan bij de community van ontwikkelaars, security-architecten en denkers die bouwen aan open, lokale agentic-systemen.\r\n    \r\n-   **Klaar met de SaaS-moeras binnen jouw organisatie?** Laat in de reacties weten tegen welke muren jij oploopt met cloud-AI, of stuur een bericht om te sparren over de overstap naar soevereine, lokale infrastructuur.\r\n    \r\n\r\n*Het is tijd om de stekker uit het kaartenhuis te trekken. Bouw aan infrastructuur die blijft staan.*",
+  "html_body": "<p>Het tijdperk van de snelle SaaS-wrapper loopt op z’n laatste benen. Wie de afgelopen twee jaar een willekeurige feed opende, zag een wildgroei aan no-code ontwikkelaars en verse AI-agencies. Met wat slimme prompts, drie Zapier-pijpleidingen en een OpenAI API-sleutel knutselden ze binnen een middag een 'revolutionair' product in elkaar. Een maandelijks abonnementje erop, en klaar.</p><p>Maar onder die motorkap blijkt het verrassend vaak om duurbetaalde lijm te gaan. Bedrijven worden opgescheept met een kaartenhuis van losse cloud-licenties, onvoorspelbare token-facturen en een versnipperde datastroom. Zodra er één API-sleutel verloopt of een platform zijn voorwaarden aanpast, ligt de complete automatisering plat. We hebben massaal de illusie van innovatie gekocht, maar kregen er een nieuw digitaal moeras voor terug.</p><p>Het echte breekpunt zit 'm echter niet in de kosten, maar in de veiligheid. Zonder dat men er erg in heeft, vliegen vertrouwelijke klantgegevens, interne strategieën en intellectueel eigendom via omwegen over Amerikaanse cloud-servers.</p><p>Terwijl de markt overspoeld raakt met dit soort no-code AI-wrappers, trekken ervaren software-engineers en security-specialisten zoals <strong>Rein Velt</strong> al langer aan de noodrem. Als je privacy, gegevensbescherming en AVG-compliance serieus neemt, kun je een bedrijfsproces simpelweg niet toevertrouwen aan een wankel netwerk van externe API-koppelingen. Echte innovatie vraagt niet om nóg een snel SaaS-abonnement, maar om geharde, doordachte software-architectuur en onvoorwaardelijke data-soevereiniteit.</p><p>De oplossing voor dit probleem vraagt om een radicale omslag: we moeten af van het idee dat alles per se in de cloud hoeft te draaien. De toekomst van robuuste AI-automatisering ligt niet in nóg een extern platform, maar in de terugkeer naar lokale, fysieke infrastructuur. <strong>Data-soevereiniteit</strong> wordt het nieuwe sleutelwoord.</p><p>In plaats van gevoelige bedrijfsprocessen over een dozijn Amerikaanse servers te verspreiden, verschuift de regie naar compacte, geharde <em>Edge Nodes</em> — denk aan een dedicated Raspberry Pi 5 of een lokale GPU-server in de meterkast van het pand.</p><p>Plaintext</p><pre><code>  Cloud SaaS Model (Het Kaartenhuis)\r\n  Bedrijfsdata ──► Zapier ──► OpenAI API ──► Make ──► Derde SaaS\r\n  (Onvoorspelbare kosten, AVG-risico's, afhankelijk van uptime)\r\n\r\n  Local Edge Model (Soevereine Infrastructuur)\r\n  Bedrijfsdata ──► Lokale Edge Node (Pi 5 / Local LLM) ──► Lokale Opslag\r\n  (Vaste hardwarekosten, 100% Air-Gapped, absolute privacy)\r\n</code></pre><h3>Waarom de Local Edge Node de Cloud Wint</h3><ul><li><p><strong>Zero Data Leakage:</strong> Omdat het brein (het lokale LLM), de opslag en de verwerking volledig binnen het eigen netwerk draaien, verlaat er geen byte de organisatie. Het is <em>privacy-by-design</em> in de meest zuivere vorm: de IT-security officer kan met een gerust hart 'ja' zeggen.</p></li><li><p><strong>Geen 'SaaS-Tax' meer:</strong> Geen variabele token-facturen op het einde van de maand, geen Zapier-credits die opraken als je volume groeit. Eén keer investeren in de hardware, en de operationele kosten blijven voorspelbaar en laag.</p></li><li><p><strong>Ononderbroken Continuïteit:</strong> Valt de internetverbinding uit of verandert een cloud-gigant zijn API-voorwaarden? Jouw lokale infrastructuur draait op de achtergrond gewoon 24/7 door.</p></li></ul><p>Met modulaire <em>Playbooks</em> en visuele workflow-editors bouwen bedrijven zo hun eigen, unieke 'Private Agent' op hun eigen hardware. Hun intellectuele eigendom, unieke prompts en proceskennis blijven precies waar ze horen: <strong>in eigen huis</strong>.</p><p>Het tijdperk van gebakken lucht en wankele no-code wrappers is voorbij. We bewegen richting een markt waarin echte, geharde infrastructuur weer de norm wordt — en waar de controle over data eindelijk weer teruggaat naar de eigenaar.</p><p>Het tijdperk van de snelle AI-goudkoorts loopt ten einde. De frictie tussen de belofte van automatisering en de rauwe werkelijkheid van datalekken, stijgende SaaS-kosten en wankele API-koppelingen wordt elke dag voelbaarder. Bedrijven die hun toekomst serieus nemen, nemen geen genoegen meer met een digitaal kaartenhuis.</p><p>De pendel slaat om. We bewegen van een markt die gedomineerd werd door vluchtige wrappers, naar een tijdperk waarin echte, geharde infrastructuur weer de norm is. AI is geen losse gimmick of een extra knop op een dashboard; het wordt het centrale zenuwstelsel van je organisatie. En een zenuwstelsel hoort in eigen huis te staan — veilig, soeverein en onder jouw directe controle.</p><h3>Tijd voor Echte Data-Soevereiniteit</h3><p>Blijf je maandelijks betalen voor de illusie van gemak, of neem je de controle over je eigen data, processen en intellectuele eigendom weer volledig in eigen hand?</p><p><strong>Sluit je aan bij de tegenbeweging:</strong></p><ul><li><p><strong>Bouw je mee aan de nieuwe standaard?</strong> Sluit je aan bij de community van ontwikkelaars, security-architecten en denkers die bouwen aan open, lokale agentic-systemen.</p></li><li><p><strong>Klaar met de SaaS-moeras binnen jouw organisatie?</strong> Laat in de reacties weten tegen welke muren jij oploopt met cloud-AI, of stuur een bericht om te sparren over de overstap naar soevereine, lokale infrastructuur.</p></li></ul><p><em>Het is tijd om de stekker uit het kaartenhuis te trekken. Bouw aan infrastructuur die blijft staan.</em></p>"
+}

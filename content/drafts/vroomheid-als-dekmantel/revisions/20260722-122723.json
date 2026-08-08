@@ -1,0 +1,327 @@
+{
+  "id": "20260722-122723",
+  "reason": "autosave",
+  "saved_at": "2026-07-22T12:27:23+02:00",
+  "item": {
+    "id": "b0d46f3818f7495ea45fb70f3b8f02b9",
+    "title": "Vroomheid als dekmantel",
+    "subtitle": "De moderne Khawarij-mentaliteit en het kapen van religieuze ethiek",
+    "slug": "vroomheid-als-dekmantel",
+    "status": "draft",
+    "channels": [],
+    "tags": [],
+    "categories": [],
+    "created_at": "2026-07-22T12:26:56+02:00",
+    "updated_at": "2026-07-22T12:27:21+02:00",
+    "published_at": "",
+    "cover_image_path": "",
+    "linkedin_post_urn": "",
+    "instagram_media_id": "",
+    "substack_post_id": "",
+    "x_post_id": ""
+  },
+  "editor_json": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph"
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "In de islamitische geschiedenis staan de "
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ],
+            "text": "Khawarij"
+          },
+          {
+            "type": "text",
+            "text": " bekend als een van de meest rigide en meedogenloze stromingen. Hun handelsmerk was niet alleen hun radicale zwarte-witdenken, maar vooral hun vermogen om theologische taal te misbruiken voor eigen gewin en macht. Wie niet exact in hun straatje paste, werd buiten de orde geplaatst; wat niet van hen was, werd eigenmachtig geëigend onder de vlag van \"goddelijke rechtvaardigheid\"."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hoewel de historische groepering al eeuwen geleden verdween, is de "
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "italic"
+              }
+            ],
+            "text": "geest"
+          },
+          {
+            "type": "text",
+            "text": " van de Khawarij helaas springlevend. We zien deze mentaliteit vandaag de dag niet enkel terug in geopolitieke conflicten, maar juist in de intieme sfeer: binnen relaties, huwelijken en gezinnen."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 3
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "De tactiek: Religieus opportunisme"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Het moderne \"Khawarij-syndroom\" kenmerkt zich door een stuitende vorm van "
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ],
+            "text": "religieuze hypocrisie"
+          },
+          {
+            "type": "text",
+            "text": ". Iemand die aan dit profiel voldoet, hanteert een opvallend dubbele moraal:"
+          }
+        ]
+      },
+      {
+        "type": "bulletList",
+        "content": [
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "marks": [
+                      {
+                        "type": "bold"
+                      }
+                    ],
+                    "text": "Strikt wanneer het macht geeft:"
+                  },
+                  {
+                    "type": "text",
+                    "text": " De religieuze regels worden met een gestrekt been ingezet om anderen de maat te nemen, autoriteit te claimen of eiseisen te stellen (\"Jij mag haar niet meer bellen, want zij is nu mijn vrouw\")."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "marks": [
+                      {
+                        "type": "bold"
+                      }
+                    ],
+                    "text": "Flexibel wanneer het beperkt:"
+                  },
+                  {
+                    "type": "text",
+                    "text": " Zodra fundamentele ethische regels, tradities of wettelijke wachttijden ("
+                  },
+                  {
+                    "type": "text",
+                    "marks": [
+                      {
+                        "type": "italic"
+                      }
+                    ],
+                    "text": "'iddah"
+                  },
+                  {
+                    "type": "text",
+                    "text": ") hun eigen verlangens in de weg staan, worden deze ineens afgedaan als \"achterhaald\" of simpelweg omzeild."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Het resultaat is een bizar fenomeen: stiekem trouwen zonder de vereiste toestemming van de vader ("
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "italic"
+              }
+            ],
+            "text": "wali"
+          },
+          {
+            "type": "text",
+            "text": "), essentiële herstelperiodes negeren en de rechten van een bestaand huwelijk vertrappen — om vervolgens met een strak gezicht op Umrah te gaan alsof er niets aan de hand is."
+          }
+        ]
+      },
+      {
+        "type": "codeBlock",
+        "attrs": {
+          "language": null
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "+-------------------------------------------------------------------+\n|                     HET DUBBELE-MORAAL PATROON                   |\n+-------------------------------------------------------------------+\n|  UITERLIJKE VERTOON                INNERLIJKE DADEN               |\n|  - Pocht met vroomheid (Umrah/Hadj)  - Passeert de vader/wali     |\n|  - Berust op \"halal\" terminologie  - Negeert de 'iddah (wachttijd)|\n|  - Legt anderen regels op          - Ontwricht gezinnen & harten  |\n+-------------------------------------------------------------------+\n"
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 3
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "De rechten van de mens ("
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "italic"
+              }
+            ],
+            "text": "Huquq al-'Ibad"
+          },
+          {
+            "type": "text",
+            "text": ") vs. Uiterlijke vroomheid"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Wat men in dit soort situaties vergeet — of bewust negeert — is het fundamentele islamitische principe van "
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ],
+            "text": "Huquq al-'Ibad"
+          },
+          {
+            "type": "text",
+            "text": " (de rechten van de medemens)."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "In de theologie geldt een onwrikbare regel: God kan zonden vergeven die betrekking hebben op Zijn eigen rechten, maar Hij vergeeft het onrecht dat je een ánder mens aandoet pas wanneer die specifieke persoon jou vergiffenis schenkt."
+          }
+        ]
+      },
+      {
+        "type": "blockquote",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ],
+                "text": "Een reis naar Mekka, een vrome uitstraling of het scanderen van religieuze termen wist het bewust gebroken hart van een broeder niet uit. Het transformeert de dader niet in een rechtvaardige echtgenoot, maar hooguit in de tijdelijke opzichter van een ravage die hij zelf heeft veroorzaakt."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 3
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Karma en de Weegschaal van Rechtvaardigheid"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Iemand die religie gebruikt als een cosmetisch stempel om grensoverschrijdend gedrag goed te praten, kan proberen te vluchten — naar een andere stad, een nieuwe functie of een land als de Verenigde Arabische Emiraten. Maar wie bouwt op een fundament van manipulatie en geschonden rechten, neemt die schuld overal mee naartoe."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "De geschiedenis leert dat de weegschaal van rechtvaardigheid ("
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "italic"
+              }
+            ],
+            "text": "mizan"
+          },
+          {
+            "type": "text",
+            "text": ") geen haast heeft. Schijnheiligheid en het kapen van het geloof voor eigen gewin haalt de veroorzaker uiteindelijk altijd in. Niet omdat mensen wraak nemen, maar omdat een constructie die gebouwd is op onrecht simpelweg niet bestand is tegen de tijd."
+          }
+        ]
+      }
+    ]
+  },
+  "markdown_body": "In de islamitische geschiedenis staan de **Khawarij** bekend als een van de meest rigide en meedogenloze stromingen. Hun handelsmerk was niet alleen hun radicale zwarte-witdenken, maar vooral hun vermogen om theologische taal te misbruiken voor eigen gewin en macht. Wie niet exact in hun straatje paste, werd buiten de orde geplaatst; wat niet van hen was, werd eigenmachtig geëigend onder de vlag van \"goddelijke rechtvaardigheid\".\n\nHoewel de historische groepering al eeuwen geleden verdween, is de *geest* van de Khawarij helaas springlevend. We zien deze mentaliteit vandaag de dag niet enkel terug in geopolitieke conflicten, maar juist in de intieme sfeer: binnen relaties, huwelijken en gezinnen.\n\n### De tactiek: Religieus opportunisme\n\nHet moderne \"Khawarij-syndroom\" kenmerkt zich door een stuitende vorm van **religieuze hypocrisie**. Iemand die aan dit profiel voldoet, hanteert een opvallend dubbele moraal:\n\n-   **Strikt wanneer het macht geeft:** De religieuze regels worden met een gestrekt been ingezet om anderen de maat te nemen, autoriteit te claimen of eiseisen te stellen (\"Jij mag haar niet meer bellen, want zij is nu mijn vrouw\").\n    \n-   **Flexibel wanneer het beperkt:** Zodra fundamentele ethische regels, tradities of wettelijke wachttijden (*'iddah*) hun eigen verlangens in de weg staan, worden deze ineens afgedaan als \"achterhaald\" of simpelweg omzeild.\n    \n\nHet resultaat is een bizar fenomeen: stiekem trouwen zonder de vereiste toestemming van de vader (*wali*), essentiële herstelperiodes negeren en de rechten van een bestaand huwelijk vertrappen — om vervolgens met een strak gezicht op Umrah te gaan alsof er niets aan de hand is.\n\n```\n+-------------------------------------------------------------------+\n|                     HET DUBBELE-MORAAL PATROON                   |\n+-------------------------------------------------------------------+\n|  UITERLIJKE VERTOON                INNERLIJKE DADEN               |\n|  - Pocht met vroomheid (Umrah/Hadj)  - Passeert de vader/wali     |\n|  - Berust op \"halal\" terminologie  - Negeert de 'iddah (wachttijd)|\n|  - Legt anderen regels op          - Ontwricht gezinnen & harten  |\n+-------------------------------------------------------------------+\n```\n\n### De rechten van de mens (*Huquq al-'Ibad*) vs. Uiterlijke vroomheid\n\nWat men in dit soort situaties vergeet — of bewust negeert — is het fundamentele islamitische principe van **Huquq al-'Ibad** (de rechten van de medemens).\n\nIn de theologie geldt een onwrikbare regel: God kan zonden vergeven die betrekking hebben op Zijn eigen rechten, maar Hij vergeeft het onrecht dat je een ánder mens aandoet pas wanneer die specifieke persoon jou vergiffenis schenkt.\n\n> *Een reis naar Mekka, een vrome uitstraling of het scanderen van religieuze termen wist het bewust gebroken hart van een broeder niet uit. Het transformeert de dader niet in een rechtvaardige echtgenoot, maar hooguit in de tijdelijke opzichter van een ravage die hij zelf heeft veroorzaakt.*\n\n### Karma en de Weegschaal van Rechtvaardigheid\n\nIemand die religie gebruikt als een cosmetisch stempel om grensoverschrijdend gedrag goed te praten, kan proberen te vluchten — naar een andere stad, een nieuwe functie of een land als de Verenigde Arabische Emiraten. Maar wie bouwt op een fundament van manipulatie en geschonden rechten, neemt die schuld overal mee naartoe.\n\nDe geschiedenis leert dat de weegschaal van rechtvaardigheid (*mizan*) geen haast heeft. Schijnheiligheid en het kapen van het geloof voor eigen gewin haalt de veroorzaker uiteindelijk altijd in. Niet omdat mensen wraak nemen, maar omdat een constructie die gebouwd is op onrecht simpelweg niet bestand is tegen de tijd.",
+  "html_body": "<p></p><p>In de islamitische geschiedenis staan de <strong>Khawarij</strong> bekend als een van de meest rigide en meedogenloze stromingen. Hun handelsmerk was niet alleen hun radicale zwarte-witdenken, maar vooral hun vermogen om theologische taal te misbruiken voor eigen gewin en macht. Wie niet exact in hun straatje paste, werd buiten de orde geplaatst; wat niet van hen was, werd eigenmachtig geëigend onder de vlag van \"goddelijke rechtvaardigheid\".</p><p>Hoewel de historische groepering al eeuwen geleden verdween, is de <em>geest</em> van de Khawarij helaas springlevend. We zien deze mentaliteit vandaag de dag niet enkel terug in geopolitieke conflicten, maar juist in de intieme sfeer: binnen relaties, huwelijken en gezinnen.</p><h3>De tactiek: Religieus opportunisme</h3><p>Het moderne \"Khawarij-syndroom\" kenmerkt zich door een stuitende vorm van <strong>religieuze hypocrisie</strong>. Iemand die aan dit profiel voldoet, hanteert een opvallend dubbele moraal:</p><ul><li><p><strong>Strikt wanneer het macht geeft:</strong> De religieuze regels worden met een gestrekt been ingezet om anderen de maat te nemen, autoriteit te claimen of eiseisen te stellen (\"Jij mag haar niet meer bellen, want zij is nu mijn vrouw\").</p></li><li><p><strong>Flexibel wanneer het beperkt:</strong> Zodra fundamentele ethische regels, tradities of wettelijke wachttijden (<em>'iddah</em>) hun eigen verlangens in de weg staan, worden deze ineens afgedaan als \"achterhaald\" of simpelweg omzeild.</p></li></ul><p>Het resultaat is een bizar fenomeen: stiekem trouwen zonder de vereiste toestemming van de vader (<em>wali</em>), essentiële herstelperiodes negeren en de rechten van een bestaand huwelijk vertrappen — om vervolgens met een strak gezicht op Umrah te gaan alsof er niets aan de hand is.</p><pre><code>+-------------------------------------------------------------------+\n|                     HET DUBBELE-MORAAL PATROON                   |\n+-------------------------------------------------------------------+\n|  UITERLIJKE VERTOON                INNERLIJKE DADEN               |\n|  - Pocht met vroomheid (Umrah/Hadj)  - Passeert de vader/wali     |\n|  - Berust op \"halal\" terminologie  - Negeert de 'iddah (wachttijd)|\n|  - Legt anderen regels op          - Ontwricht gezinnen &amp; harten  |\n+-------------------------------------------------------------------+\n</code></pre><h3>De rechten van de mens (<em>Huquq al-'Ibad</em>) vs. Uiterlijke vroomheid</h3><p>Wat men in dit soort situaties vergeet — of bewust negeert — is het fundamentele islamitische principe van <strong>Huquq al-'Ibad</strong> (de rechten van de medemens).</p><p>In de theologie geldt een onwrikbare regel: God kan zonden vergeven die betrekking hebben op Zijn eigen rechten, maar Hij vergeeft het onrecht dat je een ánder mens aandoet pas wanneer die specifieke persoon jou vergiffenis schenkt.</p><blockquote><p><em>Een reis naar Mekka, een vrome uitstraling of het scanderen van religieuze termen wist het bewust gebroken hart van een broeder niet uit. Het transformeert de dader niet in een rechtvaardige echtgenoot, maar hooguit in de tijdelijke opzichter van een ravage die hij zelf heeft veroorzaakt.</em></p></blockquote><h3>Karma en de Weegschaal van Rechtvaardigheid</h3><p>Iemand die religie gebruikt als een cosmetisch stempel om grensoverschrijdend gedrag goed te praten, kan proberen te vluchten — naar een andere stad, een nieuwe functie of een land als de Verenigde Arabische Emiraten. Maar wie bouwt op een fundament van manipulatie en geschonden rechten, neemt die schuld overal mee naartoe.</p><p>De geschiedenis leert dat de weegschaal van rechtvaardigheid (<em>mizan</em>) geen haast heeft. Schijnheiligheid en het kapen van het geloof voor eigen gewin haalt de veroorzaker uiteindelijk altijd in. Niet omdat mensen wraak nemen, maar omdat een constructie die gebouwd is op onrecht simpelweg niet bestand is tegen de tijd.</p>"
+}

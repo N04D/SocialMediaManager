@@ -50,3 +50,137 @@ SocialMediaManager turns long-form content into channel-specific publication tar
 ## Alpha onboarding
 
 Phase 32 adds `plugin-sdk onboarding start` and `plugin-sdk onboarding demo-start` for a resumable alpha first-publication setup. Alpha-ready is not production-ready; analytics and social channels are optional, publication requires explicit confirmation, and deterministic demo mode uses only synthetic temporary resources.
+
+## Current Snapshot Guide
+
+For a concise description of the current implementation, read:
+
+- `docs/CURRENT_SYSTEM_STATE.md`
+- `docs/ARCHITECTURE_CURRENT.md`
+- `docs/REPOSITORY_MAP.md`
+
+## Requirements
+
+- Python 3.12+
+- Node.js and npm for the editor bundle
+- Chromium/Playwright browser dependencies for browser-backed flows
+- Git for Markdown Website publishing
+- Optional local tools for specific plugins, such as ffmpeg/media tooling and local transcription model files
+
+## Install
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+npm install
+playwright install chromium
+```
+
+## Configure
+
+Runtime configuration is primarily in `config.json`. Keep machine-local credentials and browser/session state out of Git.
+
+Use `.env.example` as a list of optional local environment variables. The application also contains a managed-secret framework; production-like credentials should be stored as secret references rather than committed values.
+
+Important local-only paths are ignored by Git:
+
+- `linkedin_session/`
+- `linkedin_remote_browser/`
+- `github_pages_session/`
+- `studio_data/`
+- `outbox/`
+- `tmp_media/`
+- virtualenvs, caches, logs, and local databases
+
+## Run
+
+Dashboard:
+
+```bash
+python dashboard.py --host 127.0.0.1 --port 8080
+```
+
+RSS/Substack to LinkedIn dry run:
+
+```bash
+python pipeline.py --dry-run
+```
+
+Full pipeline/staging flow:
+
+```bash
+python pipeline.py
+```
+
+Queue worker once:
+
+```bash
+python worker.py --once
+```
+
+Continuous queue worker:
+
+```bash
+python worker.py
+```
+
+Publication execution dispatcher:
+
+```bash
+python publication_dispatcher.py health
+python publication_dispatcher.py due --dry-run
+python publication_dispatcher.py run-once --dry-run
+```
+
+Publication scheduler:
+
+```bash
+python publication_scheduler.py health
+python publication_scheduler.py preview --starts-at-local 2026-08-10T09:00:00 --timezone Europe/Amsterdam
+python publication_scheduler.py materialize --dry-run
+```
+
+Plugin SDK CLI examples:
+
+```bash
+python -m src.plugin_sdk.cli --help
+python -m src.plugin_sdk.cli markdown-website profiles
+python -m src.plugin_sdk.cli secrets list
+```
+
+Frontend bundle:
+
+```bash
+npm run build
+```
+
+## Development
+
+- Keep local state in ignored runtime directories.
+- Prefer small, focused changes.
+- Do not commit browser profiles, session cookies, logs, local SQLite databases, `node_modules/`, virtualenvs, or provider tokens.
+- Use managed secret references for provider credentials where supported.
+
+## Tests and Checks
+
+Typical local checks:
+
+```bash
+python -m compileall .
+python -m pytest -q
+ruff check .
+ruff format --check .
+npm run build
+```
+
+The full suite is large and includes browser-dependent tests. If Playwright-managed Chromium or local browser binaries are missing, browser tests may skip or fail depending on the test.
+
+For a narrower smoke check:
+
+```bash
+python -m py_compile pipeline.py dashboard.py worker.py channel_actions.py channel_store.py channel_dashboard.py channel_models.py
+python worker.py --once
+npm run build
+```

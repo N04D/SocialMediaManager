@@ -1,0 +1,371 @@
+{
+  "id": "20260622-194520",
+  "reason": "autosave",
+  "saved_at": "2026-06-22T19:45:20+02:00",
+  "item": {
+    "id": "6cfa1d670d174ca6a241bd11d8f5326e",
+    "title": "Eén bron. Elk kanaal. Gebouwd door de mensen die het gebruiken.",
+    "subtitle": "",
+    "slug": "e-n-bron-elk-kanaal-gebouwd-door-de-mensen-die-het-gebruiken",
+    "status": "draft",
+    "channels": [],
+    "tags": [],
+    "categories": [],
+    "created_at": "2026-06-22T12:53:27+02:00",
+    "updated_at": "2026-06-22T19:45:15+02:00",
+    "published_at": "",
+    "cover_image_path": "",
+    "linkedin_post_urn": "",
+    "instagram_media_id": "",
+    "substack_post_id": "",
+    "x_post_id": ""
+  },
+  "editor_json": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Sociale media zijn versplinterd geraakt."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Wie vandaag serieus publiceert, schrijft niet alleen een artikel. Diezelfde inhoud moet worden aangepast voor LinkedIn, Instagram, Substack, een eigen blog, X, YouTube Shorts en nieuwe platforms die morgen verschijnen. Elk kanaal heeft zijn eigen formaat, technische beperkingen, API’s, publicatieregels en voortdurend veranderende distributielogica."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "De meeste bestaande oplossingen proberen al die platformen vanuit één gesloten SaaS-product te ondersteunen. Dat maakt gebruikers afhankelijk van één bedrijf, één abonnement en één ontwikkelteam dat onmogelijk ieder platform even goed kan blijven volgen."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Dit project kiest een andere richting."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Het wordt een open-source, local-first publicatiesysteem waarin één lang brondocument centraal staat. Vanuit dat document kunnen met behulp van AI verschillende afgeleiden worden gemaakt: een LinkedIn-post, een Instagram-carousel, een Reel-script, een nieuwsbriefintro, een korte video, een X-thread of een volledige blogpublicatie."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "De gebruiker blijft altijd aan het stuur. AI mag schrijven, aanpassen, samenvatten en voorstellen doen, maar niets wordt gepubliceerd zonder menselijke goedkeuring."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Elk platform wordt toegevoegd als een losse channel-plugin. Een map met een manifest, eigen regels, prompts, verbinding, publicatielogica en metrics. Plaats de plugin in de channel-map en het systeem ontdekt hem automatisch. De plugin verschijnt direct in de interface en kan zelfstandig worden onderhouden zonder dat de kern van het systeem steeds opnieuw moet worden aangepast."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Dat modulaire model is noodzakelijk om het voor de gebruiker kinderlijk eenvoudig te maken om er tegen aan te bouwen zonder de kernfunctionaliteit te slopen. "
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Ik kan in mijn eentje niet alle sociale platformen blijvend ondersteunen. Niemand kan dat. LinkedIn verandert zijn interface. Instagram wijzigt formaten en bereikmechanismen. API’s verdwijnen, authenticatie verandert en nieuwe typen content worden belangrijk. Een centraal team loopt daar altijd achteraan. Ik heb geen verstand van sociale media maar ik weet wel "
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Daarom moet ieder kanaal worden onderhouden door mensen die het zelf gebruiken en begrijpen."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Een LinkedIn-specialist onderhoudt de LinkedIn-plugin. Een maker die dagelijks met Instagram Reels werkt, verbetert de Instagram-plugin. Substack-schrijvers bewaken de nieuwsbriefworkflow. Ontwikkelaars, ontwerpers, marketeers en makers brengen hun eigen praktijkkennis samen in één open ecosysteem."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Niet omdat zij gratis voor een ander bedrijf werken, maar omdat zij zelf directe waarde uit het gereedschap halen."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Wanneer een platform verandert, heeft degene die de verandering als eerste merkt er zelf belang bij om de plugin te herstellen. Die verbetering wordt vervolgens gedeeld met iedereen. Zo wordt onderhoud geen centraal probleem, maar een gedeelde verantwoordelijkheid van de mensen die het systeem werkelijk gebruiken."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "De kern blijft klein en stabiel:"
+          }
+        ]
+      },
+      {
+        "type": "bulletList",
+        "content": [
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "één canonical document;"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "een eigen contentarchief;"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "AI-gestuurde afgeleiden;"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "menselijke goedkeuring;"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "losse channel-plugins;"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "publicatiejobs;"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "metrics en feedback;"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "lokale controle over accounts en data."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Daaromheen kan een open gemeenschap ontstaan van gespecialiseerde pluginbeheerders en gebruikers."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Het doel is niet om nóg een social-media-dashboard te bouwen."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Het doel is een vrije infrastructuur voor makers: schrijven op één plek, publiceren naar ieder kanaal, resultaten terughalen en eigenaar blijven van je eigen werk, workflow en data. Al kan zo een multi channel analyse maken en dus channel afhankelijk de strategie aanpassen op basis van data. "
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Geen gesloten black box."
+          },
+          {
+            "type": "hardBreak"
+          },
+          {
+            "type": "text",
+            "text": "Geen afhankelijkheid van één leverancier."
+          },
+          {
+            "type": "hardBreak"
+          },
+          {
+            "type": "text",
+            "text": "Geen abonnement om toegang te houden tot je eigen publicatieproces."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Eén document."
+          },
+          {
+            "type": "hardBreak"
+          },
+          {
+            "type": "text",
+            "text": "Elk kanaal."
+          },
+          {
+            "type": "hardBreak"
+          },
+          {
+            "type": "text",
+            "text": "Menselijke controle."
+          },
+          {
+            "type": "hardBreak"
+          },
+          {
+            "type": "text",
+            "text": "Open-source onderhouden door de mensen die er zelf waarde uit halen. "
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Wanneer een platform verandert, heeft degene die de verandering als eerste merkt er zelf belang bij om de plugin te herstellen. Die verbetering wordt vervolgens gedeeld met iedereen. Zo wordt onderhoud geen centraal probleem, maar een gedeelde verantwoordelijkheid van de mensen die het systeem werkelijk gebruiken."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Verder ontstaat er een een ecosysteem van mensen die channel pluggings gaan bouwen"
+          }
+        ]
+      }
+    ]
+  },
+  "markdown_body": "Sociale media zijn versplinterd geraakt.\n\nWie vandaag serieus publiceert, schrijft niet alleen een artikel. Diezelfde inhoud moet worden aangepast voor LinkedIn, Instagram, Substack, een eigen blog, X, YouTube Shorts en nieuwe platforms die morgen verschijnen. Elk kanaal heeft zijn eigen formaat, technische beperkingen, API’s, publicatieregels en voortdurend veranderende distributielogica.\n\nDe meeste bestaande oplossingen proberen al die platformen vanuit één gesloten SaaS-product te ondersteunen. Dat maakt gebruikers afhankelijk van één bedrijf, één abonnement en één ontwikkelteam dat onmogelijk ieder platform even goed kan blijven volgen.\n\nDit project kiest een andere richting.\n\nHet wordt een open-source, local-first publicatiesysteem waarin één lang brondocument centraal staat. Vanuit dat document kunnen met behulp van AI verschillende afgeleiden worden gemaakt: een LinkedIn-post, een Instagram-carousel, een Reel-script, een nieuwsbriefintro, een korte video, een X-thread of een volledige blogpublicatie.\n\nDe gebruiker blijft altijd aan het stuur. AI mag schrijven, aanpassen, samenvatten en voorstellen doen, maar niets wordt gepubliceerd zonder menselijke goedkeuring.\n\nElk platform wordt toegevoegd als een losse channel-plugin. Een map met een manifest, eigen regels, prompts, verbinding, publicatielogica en metrics. Plaats de plugin in de channel-map en het systeem ontdekt hem automatisch. De plugin verschijnt direct in de interface en kan zelfstandig worden onderhouden zonder dat de kern van het systeem steeds opnieuw moet worden aangepast.\n\nDat modulaire model is noodzakelijk om het voor de gebruiker kinderlijk eenvoudig te maken om er tegen aan te bouwen zonder de kernfunctionaliteit te slopen.\n\nIk kan in mijn eentje niet alle sociale platformen blijvend ondersteunen. Niemand kan dat. LinkedIn verandert zijn interface. Instagram wijzigt formaten en bereikmechanismen. API’s verdwijnen, authenticatie verandert en nieuwe typen content worden belangrijk. Een centraal team loopt daar altijd achteraan. Ik heb geen verstand van sociale media maar ik weet wel\n\nDaarom moet ieder kanaal worden onderhouden door mensen die het zelf gebruiken en begrijpen.\n\nEen LinkedIn-specialist onderhoudt de LinkedIn-plugin. Een maker die dagelijks met Instagram Reels werkt, verbetert de Instagram-plugin. Substack-schrijvers bewaken de nieuwsbriefworkflow. Ontwikkelaars, ontwerpers, marketeers en makers brengen hun eigen praktijkkennis samen in één open ecosysteem.\n\nNiet omdat zij gratis voor een ander bedrijf werken, maar omdat zij zelf directe waarde uit het gereedschap halen.\n\nWanneer een platform verandert, heeft degene die de verandering als eerste merkt er zelf belang bij om de plugin te herstellen. Die verbetering wordt vervolgens gedeeld met iedereen. Zo wordt onderhoud geen centraal probleem, maar een gedeelde verantwoordelijkheid van de mensen die het systeem werkelijk gebruiken.\n\nDe kern blijft klein en stabiel:\n\n-   één canonical document;\n    \n-   een eigen contentarchief;\n    \n-   AI-gestuurde afgeleiden;\n    \n-   menselijke goedkeuring;\n    \n-   losse channel-plugins;\n    \n-   publicatiejobs;\n    \n-   metrics en feedback;\n    \n-   lokale controle over accounts en data.\n    \n\nDaaromheen kan een open gemeenschap ontstaan van gespecialiseerde pluginbeheerders en gebruikers.\n\nHet doel is niet om nóg een social-media-dashboard te bouwen.\n\nHet doel is een vrije infrastructuur voor makers: schrijven op één plek, publiceren naar ieder kanaal, resultaten terughalen en eigenaar blijven van je eigen werk, workflow en data. Al kan zo een multi channel analyse maken en dus channel afhankelijk de strategie aanpassen op basis van data.\n\nGeen gesloten black box.  \nGeen afhankelijkheid van één leverancier.  \nGeen abonnement om toegang te houden tot je eigen publicatieproces.\n\nEén document.  \nElk kanaal.  \nMenselijke controle.  \nOpen-source onderhouden door de mensen die er zelf waarde uit halen.\n\nWanneer een platform verandert, heeft degene die de verandering als eerste merkt er zelf belang bij om de plugin te herstellen. Die verbetering wordt vervolgens gedeeld met iedereen. Zo wordt onderhoud geen centraal probleem, maar een gedeelde verantwoordelijkheid van de mensen die het systeem werkelijk gebruiken.\n\nVerder ontstaat er een een ecosysteem van mensen die channel pluggings gaan bouwen",
+  "html_body": "<p>Sociale media zijn versplinterd geraakt.</p><p>Wie vandaag serieus publiceert, schrijft niet alleen een artikel. Diezelfde inhoud moet worden aangepast voor LinkedIn, Instagram, Substack, een eigen blog, X, YouTube Shorts en nieuwe platforms die morgen verschijnen. Elk kanaal heeft zijn eigen formaat, technische beperkingen, API’s, publicatieregels en voortdurend veranderende distributielogica.</p><p>De meeste bestaande oplossingen proberen al die platformen vanuit één gesloten SaaS-product te ondersteunen. Dat maakt gebruikers afhankelijk van één bedrijf, één abonnement en één ontwikkelteam dat onmogelijk ieder platform even goed kan blijven volgen.</p><p>Dit project kiest een andere richting.</p><p>Het wordt een open-source, local-first publicatiesysteem waarin één lang brondocument centraal staat. Vanuit dat document kunnen met behulp van AI verschillende afgeleiden worden gemaakt: een LinkedIn-post, een Instagram-carousel, een Reel-script, een nieuwsbriefintro, een korte video, een X-thread of een volledige blogpublicatie.</p><p>De gebruiker blijft altijd aan het stuur. AI mag schrijven, aanpassen, samenvatten en voorstellen doen, maar niets wordt gepubliceerd zonder menselijke goedkeuring.</p><p>Elk platform wordt toegevoegd als een losse channel-plugin. Een map met een manifest, eigen regels, prompts, verbinding, publicatielogica en metrics. Plaats de plugin in de channel-map en het systeem ontdekt hem automatisch. De plugin verschijnt direct in de interface en kan zelfstandig worden onderhouden zonder dat de kern van het systeem steeds opnieuw moet worden aangepast.</p><p>Dat modulaire model is noodzakelijk om het voor de gebruiker kinderlijk eenvoudig te maken om er tegen aan te bouwen zonder de kernfunctionaliteit te slopen. </p><p>Ik kan in mijn eentje niet alle sociale platformen blijvend ondersteunen. Niemand kan dat. LinkedIn verandert zijn interface. Instagram wijzigt formaten en bereikmechanismen. API’s verdwijnen, authenticatie verandert en nieuwe typen content worden belangrijk. Een centraal team loopt daar altijd achteraan. Ik heb geen verstand van sociale media maar ik weet wel </p><p>Daarom moet ieder kanaal worden onderhouden door mensen die het zelf gebruiken en begrijpen.</p><p>Een LinkedIn-specialist onderhoudt de LinkedIn-plugin. Een maker die dagelijks met Instagram Reels werkt, verbetert de Instagram-plugin. Substack-schrijvers bewaken de nieuwsbriefworkflow. Ontwikkelaars, ontwerpers, marketeers en makers brengen hun eigen praktijkkennis samen in één open ecosysteem.</p><p>Niet omdat zij gratis voor een ander bedrijf werken, maar omdat zij zelf directe waarde uit het gereedschap halen.</p><p>Wanneer een platform verandert, heeft degene die de verandering als eerste merkt er zelf belang bij om de plugin te herstellen. Die verbetering wordt vervolgens gedeeld met iedereen. Zo wordt onderhoud geen centraal probleem, maar een gedeelde verantwoordelijkheid van de mensen die het systeem werkelijk gebruiken.</p><p>De kern blijft klein en stabiel:</p><ul><li><p>één canonical document;</p></li><li><p>een eigen contentarchief;</p></li><li><p>AI-gestuurde afgeleiden;</p></li><li><p>menselijke goedkeuring;</p></li><li><p>losse channel-plugins;</p></li><li><p>publicatiejobs;</p></li><li><p>metrics en feedback;</p></li><li><p>lokale controle over accounts en data.</p></li></ul><p>Daaromheen kan een open gemeenschap ontstaan van gespecialiseerde pluginbeheerders en gebruikers.</p><p>Het doel is niet om nóg een social-media-dashboard te bouwen.</p><p>Het doel is een vrije infrastructuur voor makers: schrijven op één plek, publiceren naar ieder kanaal, resultaten terughalen en eigenaar blijven van je eigen werk, workflow en data. Al kan zo een multi channel analyse maken en dus channel afhankelijk de strategie aanpassen op basis van data. </p><p>Geen gesloten black box.<br>Geen afhankelijkheid van één leverancier.<br>Geen abonnement om toegang te houden tot je eigen publicatieproces.</p><p>Eén document.<br>Elk kanaal.<br>Menselijke controle.<br>Open-source onderhouden door de mensen die er zelf waarde uit halen. </p><p>Wanneer een platform verandert, heeft degene die de verandering als eerste merkt er zelf belang bij om de plugin te herstellen. Die verbetering wordt vervolgens gedeeld met iedereen. Zo wordt onderhoud geen centraal probleem, maar een gedeelde verantwoordelijkheid van de mensen die het systeem werkelijk gebruiken.</p><p>Verder ontstaat er een een ecosysteem van mensen die channel pluggings gaan bouwen</p>"
+}

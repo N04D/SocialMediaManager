@@ -20744,25 +20744,22 @@ if (!seed) {
   const publishedAtInput = document.getElementById("editor-published-at");
   const coverImagePathInput = document.getElementById("editor-cover-image-path");
   const coverPreviewNode = document.getElementById("editor-cover-preview");
+  const coverUploadButton = document.getElementById("editor-upload-cover");
   const hiddenCoverImagePathInput = document.getElementById("editor-cover-image-input");
   const hiddenEditorJsonInput = document.getElementById("editor-json-input");
   const hiddenMarkdownInput = document.getElementById("editor-markdown-input");
   const hiddenHtmlInput = document.getElementById("editor-html-input");
   const editorImageUploadInput = document.getElementById("editor-image-upload");
+  const editorCoverUploadInput = document.getElementById("editor-cover-upload");
   const previewNode = document.getElementById("editor-preview");
   const frontmatterNode = document.getElementById("frontmatter-preview");
   const autosaveState = document.getElementById("editor-autosave-state");
   const lastSavedNode = document.getElementById("editor-last-saved");
   const previewToggle = document.getElementById("editor-toggle-preview");
-  const previewBackButton = document.getElementById("editor-preview-back");
   const focusToggle = document.getElementById("editor-toggle-focus");
   const writerShell = document.querySelector(".writer-shell");
   const exportMarkdownButton = document.getElementById("editor-export-markdown");
   const exportHtmlButton = document.getElementById("editor-export-html");
-  const aiPromptInput = document.getElementById("editor-ai-prompt");
-  const aiApplyButton = document.getElementById("editor-ai-apply");
-  const aiFeedbackNode = document.getElementById("editor-ai-feedback");
-  const aiPanel = aiPromptInput?.closest("details");
   const toolbar = document.getElementById("editor-toolbar");
   const editorColumn = document.querySelector(".editor-column");
   const channelInputs = Array.from(document.querySelectorAll('input[name="channels"]'));
@@ -20802,14 +20799,6 @@ if (!seed) {
     if (lastSavedNode) {
       lastSavedNode.innerHTML = `Last saved: <code>${lastSavedAt || "Not saved yet"}</code>`;
     }
-  };
-  const setAiFeedback = (message, tone = "idle") => {
-    if (!aiFeedbackNode) return;
-    aiFeedbackNode.textContent = message;
-    aiFeedbackNode.classList.remove("status-ok", "status-warn", "status-bad");
-    if (tone === "ok") aiFeedbackNode.classList.add("status-ok");
-    if (tone === "warn") aiFeedbackNode.classList.add("status-warn");
-    if (tone === "bad") aiFeedbackNode.classList.add("status-bad");
   };
   const updateFrontmatterPreview = () => {
     if (!frontmatterNode) return;
@@ -20863,15 +20852,6 @@ if (!seed) {
     }
     coverPreviewNode.innerHTML = `<img src="${url}" alt="${label}" class="cover-preview-image" />`;
   };
-  const maybeAssignCoverImage = (data) => {
-    if (!coverImagePathInput || !hiddenCoverImagePathInput) return;
-    if ((coverImagePathInput.value || "").trim()) return;
-    const coverAsset = data.content_asset || data.public_url;
-    coverImagePathInput.value = coverAsset;
-    hiddenCoverImagePathInput.value = coverAsset;
-    setCoverPreview(data.public_url, "Cover image");
-    updateFrontmatterPreview();
-  };
   const updateHiddenFields = () => {
     const html = editor.getHTML();
     const markdown = turndown.turndown(html).trim();
@@ -20883,16 +20863,9 @@ if (!seed) {
     updateFrontmatterPreview();
     return { html, markdown };
   };
-  const setActionButtonLabel = (button, label) => {
-    if (!button) return;
-    button.setAttribute("aria-label", label);
-    button.setAttribute("title", label);
-    const labelNode = button.querySelector(".action-label");
-    if (labelNode) labelNode.textContent = label;
-  };
   const updateFocusButtonLabel = () => {
     if (!focusToggle) return;
-    setActionButtonLabel(focusToggle, document.body.classList.contains("editor-focus-mode") ? "Exit focus" : "Focus mode");
+    focusToggle.textContent = document.body.classList.contains("editor-focus-mode") ? "Exit focus" : "Focus mode";
   };
   const downloadBlob = (filename, content, type) => {
     const blob = new Blob([content], { type });
@@ -20955,39 +20928,6 @@ if (!seed) {
       setAutosaveState("Autosave failed. Your draft is still in the browser.", "bad");
     }
   };
-  const applyAiEdit = async () => {
-    const prompt = aiPromptInput?.value?.trim() || "";
-    if (!prompt) {
-      setAiFeedback("Add an edit instruction first.", "bad");
-      return;
-    }
-    updateHiddenFields();
-    setAutosaveState("Applying AI edit...", "warn");
-    setAiFeedback("AI is rewriting the draft body...", "warn");
-    aiApplyButton?.setAttribute("disabled", "disabled");
-    try {
-      const payload = collectAutosaveForm();
-      payload.set("ai_prompt", prompt);
-      const response = await fetch("/editor/ai-edit", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-        body: payload.toString()
-      });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || `AI edit failed: ${response.status}`);
-      editor.commands.setContent(data.html_body || "<p></p>");
-      updateHiddenFields();
-      setAiFeedback("AI edit applied. Review and keep editing.", "ok");
-      setAutosaveState("AI edit applied", "ok");
-      queueAutosave();
-    } catch (error) {
-      console.error(error);
-      setAiFeedback(error.message || "AI edit failed.", "bad");
-      setAutosaveState("AI edit failed", "bad");
-    } finally {
-      aiApplyButton?.removeAttribute("disabled");
-    }
-  };
   const uploadImageFile = async (file) => {
     const payload = new FormData();
     payload.set("slug", currentSlug());
@@ -21003,7 +20943,6 @@ if (!seed) {
   const insertUploadedImage = async (file) => {
     setAutosaveState("Uploading image...", "warn");
     const data = await uploadImageFile(file);
-    maybeAssignCoverImage(data);
     editor.chain().focus().setImage({ src: data.public_url }).run();
     setAutosaveState("Image uploaded into draft", "ok");
     queueAutosave();
@@ -21125,13 +21064,15 @@ if (!seed) {
     updateFrontmatterPreview();
     queueAutosave();
   }));
+  coverUploadButton?.addEventListener("click", () => {
+    editorCoverUploadInput?.click();
+  });
   editorImageUploadInput?.addEventListener("change", async () => {
     const file = editorImageUploadInput.files?.[0];
     if (!file) return;
     setAutosaveState("Uploading image...", "warn");
     try {
       const data = await uploadImageFile(file);
-      maybeAssignCoverImage(data);
       editor.chain().focus().setImage({ src: data.public_url }).run();
       setAutosaveState("Image uploaded into draft", "ok");
       queueAutosave();
@@ -21142,14 +21083,29 @@ if (!seed) {
       editorImageUploadInput.value = "";
     }
   });
+  editorCoverUploadInput?.addEventListener("change", async () => {
+    const file = editorCoverUploadInput.files?.[0];
+    if (!file) return;
+    setAutosaveState("Uploading cover image...", "warn");
+    try {
+      const data = await uploadImageFile(file);
+      const coverAsset = data.content_asset || data.public_url;
+      coverImagePathInput.value = coverAsset;
+      hiddenCoverImagePathInput.value = coverAsset;
+      setCoverPreview(data.public_url, "Cover image");
+      updateFrontmatterPreview();
+      setAutosaveState("Cover image uploaded", "ok");
+      queueAutosave();
+    } catch (error) {
+      console.error(error);
+      setAutosaveState("Cover upload failed.", "bad");
+    } finally {
+      editorCoverUploadInput.value = "";
+    }
+  });
   previewToggle?.addEventListener("click", () => {
     writerShell?.classList.toggle("preview-mode");
-    setActionButtonLabel(previewToggle, writerShell?.classList.contains("preview-mode") ? "Back to editor" : "Preview mode");
-  });
-  previewBackButton?.addEventListener("click", () => {
-    if (!writerShell?.classList.contains("preview-mode")) return;
-    writerShell.classList.remove("preview-mode");
-    setActionButtonLabel(previewToggle, "Preview mode");
+    previewToggle.textContent = writerShell?.classList.contains("preview-mode") ? "Back to editor" : "Preview mode";
   });
   focusToggle?.addEventListener("click", () => {
     document.body.classList.toggle("editor-focus-mode");
@@ -21163,19 +21119,6 @@ if (!seed) {
   exportHtmlButton?.addEventListener("click", () => {
     const { html } = updateHiddenFields();
     downloadBlob(`${currentSlug() || "draft"}.html`, html, "text/html;charset=utf-8");
-  });
-  aiApplyButton?.addEventListener("click", () => {
-    applyAiEdit();
-  });
-  aiPromptInput?.addEventListener("keydown", (event) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-      event.preventDefault();
-      applyAiEdit();
-    }
-  });
-  aiPanel?.addEventListener("toggle", () => {
-    if (!aiPanel.open) return;
-    window.requestAnimationFrame(() => aiPromptInput?.focus());
   });
   form?.addEventListener("submit", () => {
     updateHiddenFields();

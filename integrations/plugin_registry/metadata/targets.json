@@ -1,5 +1,5 @@
 {
-  "expires": "2036-07-21T21:45:21.004638+00:00",
+  "expires": "2036-08-04T17:28:48.032649+00:00",
   "role": "targets",
   "targets": [
     {
@@ -14,8 +14,8 @@
       "description": "Fixture community channel plugin.",
       "distribution_status": "experimental",
       "hashes": {
-        "compatibility_report_sha256": "b789575da8fe464c3a92e20b04e5995673c55f2d3f088224af0196da7c46ee05",
-        "release_metadata_sha256": "5621e0763dc38390ffa3e23756dd821f0ab4b8ecd7b89eccbe2110bba310e5d4",
+        "compatibility_report_sha256": "5100246eff7945abc7b9cea4d9546e98d281d5097362d49944f8dfa7b371a4b6",
+        "release_metadata_sha256": "2502ca01a370b32e9a29f83a2716a92afcc0d95183a48c7b0f63f77e7328fc9d",
         "sbom_sha256": "dda661e96219fcf93918b0762708f20a3e1f9d58b3d3b7540ea8962a15d17153",
         "sigstore_sha256": "73994311e606daa8261d7d11c48af95c1ed0eec1b29a0194de1fb44f6e27fc27"
       },
@@ -40,7 +40,7 @@
       ],
       "plugin_id": "channel.example",
       "plugin_version": "0.1.0",
-      "published_at": "2026-07-24T21:45:20.990179+00:00",
+      "published_at": "2026-08-07T17:28:48.019982+00:00",
       "release_channel": "experimental",
       "release_id": "channel.example-0.1.0",
       "revoked": false,

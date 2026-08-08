@@ -1,0 +1,66 @@
+{
+  "editor_json": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Oke we gaan nu wat aan de sidebar doen."
+          }
+        ]
+      },
+      {
+        "type": "orderedList",
+        "attrs": {
+          "start": 1,
+          "type": null
+        },
+        "content": [
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Ik wil channels & AI terug naar plugins onder config plaatsen."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Er moet een uitklapbaar menu komen (channels) met daarin alle channel plugins. Er staan nu linkedin, maar dan moet ook voor elke andere pluggin zo automatisch gebeuren. Het idee is dat er ook een inklaapbaar menu komt voor Media plugins en ecommerce. Het idee is dat dit agentic framework zo te configuren is dat je alles in 1 model hebt en modulaire. Soor skills maar dan anders"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "paragraph"
+      }
+    ]
+  },
+  "markdown_body": "Oke we gaan nu wat aan de sidebar doen.\n\n1.  Ik wil channels & AI terug naar plugins onder config plaatsen.\n    \n2.  Er moet een uitklapbaar menu komen (channels) met daarin alle channel plugins. Er staan nu linkedin, maar dan moet ook voor elke andere pluggin zo automatisch gebeuren. Het idee is dat er ook een inklaapbaar menu komt voor Media plugins en ecommerce. Het idee is dat dit agentic framework zo te configuren is dat je alles in 1 model hebt en modulaire. Soor skills maar dan anders",
+  "html_body": "<p>Oke we gaan nu wat aan de sidebar doen.</p><ol><li><p>Ik wil channels &amp; AI terug naar plugins onder config plaatsen.</p></li><li><p>Er moet een uitklapbaar menu komen (channels) met daarin alle channel plugins. Er staan nu linkedin, maar dan moet ook voor elke andere pluggin zo automatisch gebeuren. Het idee is dat er ook een inklaapbaar menu komt voor Media plugins en ecommerce. Het idee is dat dit agentic framework zo te configuren is dat je alles in 1 model hebt en modulaire. Soor skills maar dan anders</p></li><li><p></p></li></ol><p></p>"
+}

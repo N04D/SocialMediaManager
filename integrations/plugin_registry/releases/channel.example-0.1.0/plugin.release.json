@@ -6,7 +6,7 @@
     "channel.publish.image",
     "channel.metrics.collect"
   ],
-  "compatibility_report_sha256": "2f66383970798f77e31587bdbd6301cf18e5a6f1af08dccd14cea13bb92e6bc8",
+  "compatibility_report_sha256": "fcf5581c8365cfdad1ec18d0668612002235ec85112f773f8641303afb502ee3",
   "distribution_name": "channel_example",
   "distribution_status": "experimental",
   "distribution_version": "0.1.0",
@@ -42,7 +42,7 @@
   "plugin_id": "channel.example",
   "plugin_sdk_version": "1.0.0",
   "plugin_version": "0.1.0",
-  "published_at": "2026-07-24T21:45:20.990179+00:00",
+  "published_at": "2026-08-07T17:28:48.019982+00:00",
   "python_requires": ">=3.12",
   "release_channel": "experimental",
   "release_id": "channel.example-0.1.0",
