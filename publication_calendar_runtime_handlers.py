@@ -5,11 +5,21 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from publication_scheduling import ExecutionCalendarService, ScheduleOccurrenceRepository
+from publication_scheduling import (
+    ExecutionCalendarService,
+    ScheduleOccurrenceRepository,
+    SchedulingValidationError,
+    _occurrence_state_fingerprint,
+)
 from src.core.runtime.errors import PlaybookExecutionError
 from src.core.runtime.execution_context import ExecutionContext, _assert_no_secret_values
 from src.core.runtime.handlers import CapabilityHandlerRegistry
-from src.core.runtime.mutations import MutationReceipt, mutation_input_fingerprint
+from src.core.runtime.mutations import (
+    CompensationIntent,
+    CompensationReceipt,
+    MutationReceipt,
+    mutation_input_fingerprint,
+)
 from src.core.runtime.plans import ExecutionPlanNode
 from src.core.runtime.playbooks import PlaybookNode
 from src.core.runtime.results import NodeResult
@@ -102,7 +112,7 @@ class CalendarEventReadHandler:
         resolved_node: ExecutionPlanNode,
         input_data: dict[str, Any],
     ) -> NodeResult:
-        del node, resolved_node
+        del node
         try:
             _assert_no_secret_values(input_data, code="calendar.input_secret_value")
             query = _read_query(input_data, context)
@@ -139,7 +149,7 @@ class CalendarEventCreateHandler:
         resolved_node: ExecutionPlanNode,
         input_data: dict[str, Any],
     ) -> NodeResult:
-        del node, resolved_node
+        del node
         try:
             _assert_no_secret_values(input_data, code="calendar.create_input_secret_value")
             command = _create_command(input_data, context)
@@ -149,11 +159,22 @@ class CalendarEventCreateHandler:
         runtime = dict(input_data.get("_runtime") or {})
         mutation_id = str(runtime.get("mutation_id") or command["occurrence_id"])
         idempotency_key = str(runtime.get("idempotency_key") or command["occurrence_key"])
+        input_fingerprint = str(runtime.get("input_fingerprint") or "")
         try:
             occurrence = self.occurrence_repository.find_by_key(command["occurrence_key"])
             if occurrence is None:
-                occurrence = self.occurrence_repository.create(_occurrence_from_command(command))
+                occurrence = self.occurrence_repository.create(
+                    _occurrence_from_command(
+                        command,
+                        mutation_id=mutation_id,
+                        input_fingerprint=input_fingerprint,
+                        idempotency_key=idempotency_key,
+                    )
+                )
+            else:
+                _assert_owned_created_occurrence(occurrence, mutation_id=mutation_id)
             event = _readback_created_event(self.calendar_service, occurrence, timezone=command["timezone"])
+            state_fingerprint = str((occurrence.metadata or {}).get("created_state_fingerprint") or "")
             receipt = MutationReceipt(
                 mutation_id=mutation_id,
                 capability_id=CALENDAR_EVENT_CREATE_CAPABILITY,
@@ -162,7 +183,14 @@ class CalendarEventCreateHandler:
                 applied_at=datetime.now(UTC).isoformat(timespec="seconds"),
                 idempotency_key=idempotency_key,
                 result_fingerprint=mutation_input_fingerprint(event),
-                metadata={"readback_verified": True, "resource_type": "calendar_occurrence"},
+                install_id=resolved_node.install_id,
+                metadata={
+                    "created_resource": {"resource_id": occurrence.id, "resource_type": "schedule_occurrence"},
+                    "created_state_fingerprint": state_fingerprint,
+                    "occurrence_key": occurrence.occurrence_key,
+                    "readback_verified": True,
+                    "resource_type": "calendar_occurrence",
+                },
             )
         except Exception as exc:
             return NodeResult.failure(
@@ -180,6 +208,63 @@ class CalendarEventCreateHandler:
                 "source": CALENDAR_COMPONENT_ID,
             },
             {"applied_at": receipt.applied_at, "readback_verified": True},
+        )
+
+    def compensate(
+        self,
+        *,
+        receipt: MutationReceipt,
+        context: ExecutionContext,
+        compensation: CompensationIntent,
+    ) -> CompensationReceipt:
+        if receipt.capability_id != CALENDAR_EVENT_CREATE_CAPABILITY:
+            raise PlaybookExecutionError(
+                "COMPENSATION_BLOCKED",
+                "Calendar create compensator only accepts calendar.event.create receipts.",
+            )
+        if (
+            compensation.original_mutation_id != receipt.mutation_id
+            or compensation.resource_ref != receipt.resource_ref
+        ):
+            raise PlaybookExecutionError(
+                "COMPENSATION_BLOCKED_OWNERSHIP_MISMATCH",
+                "Compensation intent does not match the original mutation receipt.",
+            )
+        occurrence_id = _receipt_occurrence_id(receipt)
+        state_fingerprint = str(receipt.metadata.get("created_state_fingerprint") or "")
+        if not occurrence_id or not state_fingerprint:
+            raise PlaybookExecutionError(
+                "COMPENSATION_BLOCKED",
+                "Calendar compensation requires occurrence id and state fingerprint provenance.",
+            )
+        try:
+            self.occurrence_repository.remove_created_occurrence(
+                occurrence_id=occurrence_id,
+                mutation_id=receipt.mutation_id,
+                expected_state_fingerprint=state_fingerprint,
+            )
+            already_absent = False
+        except SchedulingValidationError as exc:
+            if exc.code != "calendar.compensation_resource_missing":
+                raise PlaybookExecutionError(
+                    _compensation_error_code(exc.code),
+                    "Calendar compensation was blocked by resource provenance checks.",
+                    {"safe_error_code": exc.code},
+                ) from exc
+            already_absent = True
+        _verify_occurrence_absent(self.calendar_service, context, occurrence_id)
+        return CompensationReceipt(
+            compensation_id=compensation.compensation_id,
+            original_mutation_id=receipt.mutation_id,
+            resource_ref=receipt.resource_ref,
+            compensated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+            idempotency_key=compensation.idempotency_key,
+            verified=True,
+            metadata={
+                "already_absent": already_absent,
+                "readback_verified": True,
+                "resource_type": "calendar_occurrence",
+            },
         )
 
 
@@ -330,8 +415,14 @@ def _create_command(input_data: dict[str, Any], context: ExecutionContext) -> di
     }
 
 
-def _occurrence_from_command(command: dict[str, Any]) -> ScheduleOccurrence:
-    return ScheduleOccurrence(
+def _occurrence_from_command(
+    command: dict[str, Any],
+    *,
+    mutation_id: str,
+    input_fingerprint: str,
+    idempotency_key: str,
+) -> ScheduleOccurrence:
+    occurrence = ScheduleOccurrence(
         id=str(command["occurrence_id"]),
         workspace_id=str(command["workspace_id"]),
         schedule_id=str(command["schedule_id"]),
@@ -343,8 +434,15 @@ def _occurrence_from_command(command: dict[str, Any]) -> ScheduleOccurrence:
         timezone=str(command["timezone"]),
         scheduled_at_utc=str(command["scheduled_at_utc"]),
         status=str(command["status"]),
-        metadata={"created_by": "generic-runtime"},
+        metadata={
+            "created_by": "generic-runtime",
+            "created_by_mutation_id": mutation_id,
+            "mutation_idempotency_key": idempotency_key,
+            "mutation_input_fingerprint": input_fingerprint,
+        },
     )
+    occurrence.metadata["created_state_fingerprint"] = _occurrence_state_fingerprint(occurrence)
+    return occurrence
 
 
 def _readback_created_event(
@@ -375,3 +473,58 @@ def _readback_created_event(
 def _stable_suffix(value: dict[str, Any]) -> str:
     encoded = repr(sorted((str(key), str(child)) for key, child in value.items())).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:16]
+
+
+def _assert_owned_created_occurrence(occurrence: ScheduleOccurrence, *, mutation_id: str) -> None:
+    metadata = dict(occurrence.metadata or {})
+    if metadata.get("created_by") != "generic-runtime" or metadata.get("created_by_mutation_id") != mutation_id:
+        raise PlaybookExecutionError(
+            "CALENDAR_CREATE_OWNERSHIP_CONFLICT",
+            "Existing occurrence key belongs to a different resource and cannot be treated as idempotent replay.",
+        )
+    expected = str(metadata.get("created_state_fingerprint") or "")
+    if not expected or _occurrence_state_fingerprint(occurrence) != expected:
+        raise PlaybookExecutionError(
+            "CALENDAR_CREATE_RESOURCE_CHANGED",
+            "Existing runtime-created occurrence changed after creation.",
+        )
+
+
+def _receipt_occurrence_id(receipt: MutationReceipt) -> str:
+    created = dict(receipt.metadata.get("created_resource") or {})
+    occurrence_id = str(created.get("resource_id") or "")
+    if occurrence_id:
+        return occurrence_id
+    prefix = "calendar-occurrence:"
+    return receipt.resource_ref[len(prefix) :] if receipt.resource_ref.startswith(prefix) else ""
+
+
+def _verify_occurrence_absent(
+    calendar_service: ExecutionCalendarService,
+    context: ExecutionContext,
+    occurrence_id: str,
+) -> None:
+    entries = calendar_service.list_calendar_entries(
+        workspace_id=context.trigger_event.workspace_id,
+        start="1970-01-01T00:00:00+00:00",
+        end="9999-12-31T23:59:59+00:00",
+        timezone="UTC",
+        limit=500,
+    )
+    expected = f"calendar_occurrence_{occurrence_id}"
+    if any(_normalize_calendar_entry(entry)["id"] == expected for entry in entries):
+        raise PlaybookExecutionError(
+            "COMPENSATION_READBACK_FAILED",
+            "Calendar compensation readback still found the occurrence.",
+            {"resource_ref": f"calendar-occurrence:{occurrence_id}"},
+        )
+
+
+def _compensation_error_code(code: str) -> str:
+    if code == "calendar.compensation_resource_changed":
+        return "COMPENSATION_BLOCKED_RESOURCE_CHANGED"
+    if code in {"calendar.compensation_ownership_mismatch", "calendar.compensation_not_runtime_created"}:
+        return "COMPENSATION_BLOCKED_OWNERSHIP_MISMATCH"
+    if code == "calendar.compensation_receipt_mismatch":
+        return "COMPENSATION_BLOCKED_RECEIPT_MISMATCH"
+    return "COMPENSATION_BLOCKED"

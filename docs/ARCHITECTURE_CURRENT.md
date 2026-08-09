@@ -664,6 +664,50 @@ Mutation Journal
 
 `SqliteMutationJournal` uses unique idempotency keys and transactionally claims `APPLYING` before handler invocation. Duplicate workers can observe an existing in-progress or applied intent, but they cannot both claim and apply the same mutation. Recovery is explicit through `recover_mutation(...)`, which uses side-effect readback before deciding whether an `APPLYING` mutation should become `APPLIED` or return to `APPROVED` for retry.
 
+### Phase 50 private calendar compensation
+
+Phase 50 keeps the production write count at one:
+
+```text
+calendar.event.create
+```
+
+It adds a private, implementation-owned inverse for that create handler only. This inverse is reachable through the compensation path for the original mutation receipt, not through public capability resolution.
+
+```text
+BUSINESS CAPABILITY
+calendar.event.create
+
+PRIVATE TECHNICAL INVERSE
+compensate(calendar.event.create receipt)
+```
+
+No `calendar.event.delete` capability is registered. Playbooks cannot request a generic calendar delete, and the generic runtime contains no calendar-specific delete branch.
+
+```mermaid
+flowchart TD
+    Approved[Approved Mutation]
+    Create[calendar.event.create]
+    Occurrence[Created Occurrence]
+    Receipt[Mutation Receipt]
+    Failure[downstream fails]
+    Compensating[COMPENSATING]
+    Inverse[Private Calendar Inverse]
+    Readback[Readback Verification]
+    Compensated[COMPENSATED]
+
+    Approved --> Create
+    Create --> Occurrence
+    Occurrence --> Receipt
+    Receipt --> Failure
+    Failure --> Compensating
+    Compensating --> Inverse
+    Inverse --> Readback
+    Readback --> Compensated
+```
+
+`ScheduleOccurrenceRepository.remove_created_occurrence(...)` verifies exact resource identity, runtime mutation ownership, receipt provenance, and unchanged created-state fingerprint before removing an occurrence. Changed resources and wrong-resource receipts are blocked. SQLite compensation claims keep duplicate workers from applying the same private inverse twice, and `recover_compensation(...)` lets stale `COMPENSATING` records converge after readback proves the inverse already happened.
+
 ## Storage Boundaries
 
 - Source code, manifests, docs, schemas, templates, and tests are repository content.

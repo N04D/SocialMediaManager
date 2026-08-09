@@ -311,12 +311,61 @@ class ScheduleOccurrenceRepository(JsonRepository):
 
         return _mutate_records(self.path, self.cls, mutate)
 
+    def remove_created_occurrence(
+        self,
+        *,
+        occurrence_id: str,
+        mutation_id: str,
+        expected_state_fingerprint: str,
+    ) -> ScheduleOccurrence:
+        def mutate(records: list[ScheduleOccurrence]):
+            for index, occurrence in enumerate(records):
+                if occurrence.id != occurrence_id:
+                    continue
+                metadata = dict(occurrence.metadata or {})
+                if metadata.get("created_by") != "generic-runtime":
+                    raise SchedulingValidationError(
+                        "calendar.compensation_not_runtime_created",
+                        "Only runtime-created occurrences can be compensated.",
+                    )
+                if metadata.get("created_by_mutation_id") != mutation_id:
+                    raise SchedulingValidationError(
+                        "calendar.compensation_ownership_mismatch",
+                        "Occurrence was not created by the requested mutation.",
+                    )
+                if metadata.get("created_state_fingerprint") != expected_state_fingerprint:
+                    raise SchedulingValidationError(
+                        "calendar.compensation_receipt_mismatch",
+                        "Mutation receipt does not match occurrence provenance.",
+                    )
+                if _occurrence_state_fingerprint(occurrence) != expected_state_fingerprint:
+                    raise SchedulingValidationError(
+                        "calendar.compensation_resource_changed",
+                        "Occurrence changed after creation and cannot be safely compensated.",
+                    )
+                removed = records.pop(index)
+                return True, removed
+            raise SchedulingValidationError(
+                "calendar.compensation_resource_missing",
+                "Occurrence is already absent or does not exist.",
+            )
+
+        return _mutate_records(self.path, self.cls, mutate)
+
     def find_by_key(self, key: str) -> ScheduleOccurrence | None:
         return next((item for item in self.list_all() if item.occurrence_key == key), None)
 
     def list_by_schedule(self, schedule_id: str) -> list[ScheduleOccurrence]:
         records = [item for item in self.list_all() if item.schedule_id == schedule_id]
         return sorted(records, key=lambda item: (item.scheduled_at_utc, item.sequence_number, item.id))
+
+
+def _occurrence_state_fingerprint(occurrence: ScheduleOccurrence) -> str:
+    payload = asdict(occurrence)
+    metadata = dict(payload.get("metadata") or {})
+    metadata.pop("created_state_fingerprint", None)
+    payload["metadata"] = metadata
+    return _checksum(payload)
 
 
 class ScheduleExclusionRepository(JsonRepository):

@@ -11,11 +11,16 @@ from .handlers import CapabilityHandlerRegistry
 from .input_resolution import resolve_node_input
 from .ledger import TERMINAL_STATES, ExecutionLedger, ExecutionRecord, ExecutionState, InMemoryExecutionLedger
 from .mutations import (
+    CompensatableMutationHandler,
+    CompensationIntent,
+    CompensationState,
     InMemoryMutationJournal,
     MutationIntent,
     MutationJournal,
     MutationReceipt,
     MutationState,
+    build_compensation_id,
+    build_compensation_idempotency_key,
     build_mutation_id,
     build_mutation_idempotency_key,
     canonical_mutation_input,
@@ -265,6 +270,7 @@ class PlaybookExecutor:
             if current.state != ExecutionState.WAITING.value:
                 self.ledger.record_transition(execution_id, ExecutionState.WAITING.value, actor="playbook_executor")
         elif failed:
+            self._compensate_downstream_failure(plan=plan, execution_id=execution_id, failed_nodes=failed)
             self.ledger.record_transition(execution_id, ExecutionState.FAILED.value, actor="playbook_executor")
         elif all(node.node_id in completed or node.node_id in skipped for node in plan.nodes):
             self.ledger.record_transition(execution_id, ExecutionState.SUCCEEDED.value, actor="playbook_executor")
@@ -504,6 +510,119 @@ class PlaybookExecutor:
             record.node_execution_id, ExecutionState.SKIPPED.value, actor="playbook_executor"
         )
 
+    def _compensate_downstream_failure(self, *, plan: ExecutionPlan, execution_id: str, failed_nodes: set[str]) -> None:
+        context = self._contexts[execution_id]
+        failed_index = min((index for index, node in enumerate(plan.nodes) if node.node_id in failed_nodes), default=-1)
+        if failed_index <= 0:
+            return
+        for plan_node in reversed(plan.nodes[:failed_index]):
+            if plan_node.kind != PlaybookNodeKind.CAPABILITY.value:
+                continue
+            if str((plan_node.config.get("compensation") or {}).get("mode") or "none") != "on_downstream_failure":
+                continue
+            output = context.node_outputs.get(plan_node.node_id) or {}
+            receipt_payload = output.get("mutation_receipt")
+            if not isinstance(receipt_payload, dict) or not receipt_payload:
+                continue
+            self._compensate_mutation_node(
+                context=context,
+                plan_node=plan_node,
+                receipt=MutationReceipt.from_dict(receipt_payload),
+            )
+
+    def _compensate_mutation_node(
+        self, *, context: ExecutionContext, plan_node: ExecutionPlanNode, receipt: MutationReceipt
+    ) -> None:
+        metadata: dict[str, Any] = {
+            **_node_provenance(plan_node),
+            "mutation_id": receipt.mutation_id,
+            "resource_ref": receipt.resource_ref,
+        }
+        node_execution = self.ledger.create_node_execution(
+            context.execution_id,
+            f"{plan_node.node_id}.compensation",
+            metadata=metadata,
+        )
+        self.ledger.record_node_transition(
+            node_execution.node_execution_id,
+            ExecutionState.RUNNING.value,
+            actor="playbook_executor.compensate",
+        )
+        compensation: CompensationIntent | None = None
+        try:
+            approval = self.approval_store.get(context.execution_id, plan_node.node_id)
+            if self.policy_engine is not None:
+                decision = self.policy_engine.evaluate(
+                    execution_context=context,
+                    plan_node=plan_node,
+                    approval=approval,
+                )
+                if not decision.allowed or decision.required_approval:
+                    raise PlaybookExecutionError(
+                        "COMPENSATION_BLOCKED_BY_POLICY",
+                        "Runtime policy blocked compensation.",
+                        decision.metadata,
+                    )
+                metadata.update(decision.metadata)
+            compensation = _build_compensation_intent(context=context, plan_node=plan_node, receipt=receipt)
+            self.mutation_journal.prepare_compensation(compensation)
+            claim, claimed = self.mutation_journal.claim_compensating(
+                compensation.compensation_id, owner=context.execution_id
+            )
+            if not claimed:
+                if claim.state == CompensationState.COMPENSATED.value and claim.receipt:
+                    self.ledger.record_node_transition(
+                        node_execution.node_execution_id,
+                        ExecutionState.SUCCEEDED.value,
+                        actor="playbook_executor.compensate",
+                        metadata={
+                            **metadata,
+                            "compensation_id": compensation.compensation_id,
+                            "compensation_replayed": True,
+                            "compensation_state": claim.state,
+                        },
+                    )
+                    return
+                raise PlaybookExecutionError(
+                    "COMPENSATION_ALREADY_RUNNING",
+                    "Compensation is already being applied.",
+                    {"compensation_id": compensation.compensation_id, "compensation_state": claim.state},
+                )
+            handler = self.handler_registry.resolve(plan_node.component_id, plan_node.capability)
+            if not isinstance(handler, CompensatableMutationHandler):
+                raise PlaybookExecutionError(
+                    "COMPENSATION_NOT_SUPPORTED",
+                    "Mutation handler does not support private compensation.",
+                )
+            compensation_receipt = handler.compensate(receipt=receipt, context=context, compensation=compensation)
+            self.mutation_journal.record_compensated(compensation_receipt)
+            self.ledger.record_node_transition(
+                node_execution.node_execution_id,
+                ExecutionState.SUCCEEDED.value,
+                actor="playbook_executor.compensate",
+                metadata={
+                    **metadata,
+                    "compensation_id": compensation.compensation_id,
+                    "compensation_state": CompensationState.COMPENSATED.value,
+                    "resource_ref": compensation_receipt.resource_ref,
+                    "verified": compensation_receipt.verified,
+                },
+            )
+        except PlaybookExecutionError as exc:
+            compensation_id = str(exc.details.get("compensation_id") or "")
+            if not compensation_id and compensation is not None:
+                compensation_id = compensation.compensation_id
+            if compensation_id:
+                self.mutation_journal.record_compensation_failed(compensation_id, error_code=exc.code)
+            self.ledger.record_node_transition(
+                node_execution.node_execution_id,
+                ExecutionState.FAILED.value,
+                actor="playbook_executor.compensate",
+                error_code=exc.code,
+                error_message=exc.user_message,
+                metadata={**metadata, **exc.details, "compensation_state": CompensationState.FAILED.value},
+            )
+
 
 def _new_context(record: ExecutionRecord, trigger_event: EventEnvelope) -> ExecutionContext:
     return ExecutionContext(
@@ -599,6 +718,38 @@ def _with_runtime_mutation(input_data: dict[str, Any], intent: MutationIntent) -
     }
 
 
+def _build_compensation_intent(
+    *, context: ExecutionContext, plan_node: ExecutionPlanNode, receipt: MutationReceipt
+) -> CompensationIntent:
+    fingerprint_payload = {
+        "mode": str((plan_node.config.get("compensation") or {}).get("mode") or "none"),
+        "mutation_id": receipt.mutation_id,
+        "resource_ref": receipt.resource_ref,
+        "result_fingerprint": receipt.result_fingerprint,
+    }
+    compensation_fingerprint = mutation_input_fingerprint(fingerprint_payload)
+    compensation_id = build_compensation_id(
+        original_mutation_id=receipt.mutation_id,
+        resource_ref=receipt.resource_ref,
+        compensation_fingerprint=compensation_fingerprint,
+    )
+    return CompensationIntent(
+        compensation_id=compensation_id,
+        original_mutation_id=receipt.mutation_id,
+        execution_id=context.execution_id,
+        node_id=plan_node.node_id,
+        capability_id=plan_node.capability,
+        component_id=plan_node.component_id,
+        install_id=plan_node.install_id,
+        resource_ref=receipt.resource_ref,
+        compensation_fingerprint=compensation_fingerprint,
+        idempotency_key=build_compensation_idempotency_key(
+            original_mutation_id=receipt.mutation_id,
+            resource_ref=receipt.resource_ref,
+        ),
+    )
+
+
 def _mutation_receipt_from_result(result: NodeResult, intent: MutationIntent) -> MutationReceipt:
     receipt_payload = result.output.get("mutation_receipt")
     if isinstance(receipt_payload, dict) and receipt_payload:
@@ -612,6 +763,7 @@ def _mutation_receipt_from_result(result: NodeResult, intent: MutationIntent) ->
         applied_at=str(result.metadata.get("applied_at") or ""),
         idempotency_key=intent.idempotency_key,
         result_fingerprint=mutation_input_fingerprint(result_payload),
+        install_id=intent.install_id,
         metadata={},
     )
 

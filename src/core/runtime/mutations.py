@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from .errors import PlaybookExecutionError
 from .events import utc_now_iso
@@ -67,6 +67,16 @@ def build_mutation_idempotency_key(
     trigger_key = trigger_idempotency_key or "missing-trigger-key"
     seed = ":".join((deployment_id, node_id, trigger_key, input_fingerprint))
     return f"mutation:{hashlib.sha256(seed.encode('utf-8')).hexdigest()}"
+
+
+def build_compensation_id(*, original_mutation_id: str, resource_ref: str, compensation_fingerprint: str) -> str:
+    seed = ":".join((original_mutation_id, resource_ref, compensation_fingerprint))
+    return f"compensation_{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:32]}"
+
+
+def build_compensation_idempotency_key(*, original_mutation_id: str, resource_ref: str) -> str:
+    seed = ":".join((original_mutation_id, resource_ref))
+    return f"compensation:{hashlib.sha256(seed.encode('utf-8')).hexdigest()}"
 
 
 @dataclass(frozen=True)
@@ -132,6 +142,7 @@ class MutationReceipt:
     applied_at: str
     idempotency_key: str
     result_fingerprint: str
+    install_id: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -148,6 +159,7 @@ class MutationReceipt:
             "capability_id": self.capability_id,
             "component_id": self.component_id,
             "idempotency_key": self.idempotency_key,
+            "install_id": self.install_id,
             "metadata": json.loads(json.dumps(self.metadata, sort_keys=True, ensure_ascii=True)),
             "mutation_id": self.mutation_id,
             "resource_ref": self.resource_ref,
@@ -164,6 +176,7 @@ class MutationReceipt:
             applied_at=str(payload.get("applied_at") or ""),
             idempotency_key=str(payload.get("idempotency_key") or ""),
             result_fingerprint=str(payload.get("result_fingerprint") or ""),
+            install_id=str(payload.get("install_id") or ""),
             metadata=dict(payload.get("metadata") or {}),
         )
 
@@ -266,6 +279,7 @@ class CompensationReceipt:
         )
 
 
+@runtime_checkable
 class CompensatableMutationHandler(Protocol):
     def compensate(
         self,
@@ -937,6 +951,14 @@ class MutationRecoveryResult:
     action: str
 
 
+@dataclass(frozen=True)
+class CompensationRecoveryResult:
+    compensation_id: str
+    state: str
+    recovered: bool
+    action: str
+
+
 def recover_mutation(
     journal: MutationJournal,
     mutation_id: str,
@@ -954,6 +976,28 @@ def recover_mutation(
         updated = journal.mark_approved(mutation_id, approval_id=record.approval_id)
         return MutationRecoveryResult(mutation_id, updated.state, True, "returned_to_approved")
     return MutationRecoveryResult(mutation_id, record.state, False, "unchanged")
+
+
+def recover_compensation(
+    journal: MutationJournal,
+    compensation_id: str,
+    *,
+    verify_compensated: Callable[[CompensationIntent], CompensationReceipt | None],
+) -> CompensationRecoveryResult:
+    record = journal.get_compensation(compensation_id)
+    if record is None:
+        raise PlaybookExecutionError(
+            "COMPENSATION_INTENT_NOT_FOUND",
+            "Compensation intent was not prepared.",
+            {"compensation_id": compensation_id},
+        )
+    if record.state == CompensationState.COMPENSATING.value:
+        receipt = verify_compensated(record.intent)
+        if receipt is not None:
+            updated = journal.record_compensated(receipt)
+            return CompensationRecoveryResult(compensation_id, updated.state, True, "marked_compensated")
+        return CompensationRecoveryResult(compensation_id, record.state, False, "requires_reapply")
+    return CompensationRecoveryResult(compensation_id, record.state, False, "unchanged")
 
 
 def _mutation_record_from_row(row: sqlite3.Row) -> MutationJournalRecord:

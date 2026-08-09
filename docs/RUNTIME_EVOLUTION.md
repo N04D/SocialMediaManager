@@ -699,6 +699,74 @@ For the selected local calendar mutation, the verifier can use the stable occurr
 
 Because production compensation is blocked, the Phase 49 reference failure flow is not enabled for calendar create. The generic contracts and journal states are present for future compensatable components, but no internal calendar delete is registered and no public delete capability is added.
 
+### Phase 50 private calendar compensation
+
+Phase 50 resolves the Phase 49 calendar compensation blocker without adding a second public production mutation capability.
+
+Inspection findings before the change:
+
+| Question | Result |
+| --- | --- |
+| Current create identity | `CalendarEventCreateHandler` creates a `ScheduleOccurrence` with a stable `id` and caller/business `occurrence_key`. |
+| Current receipt identity | Phase 48/49 receipts carried `resource_ref=calendar-occurrence:<id>` but did not persist enough provenance for a safe inverse. |
+| Available persistence identifiers | `ScheduleOccurrence.id`, `occurrence_key`, `metadata`, and the durable SQLite mutation journal. |
+| Safe inverse feasibility | Feasible only as a private repository operation that verifies mutation provenance and unchanged resource state before delete. |
+| Race risks | Wrong-resource delete, changed-resource delete, duplicate compensation, and crash-after-delete are the key risks; Phase 50 guards them with provenance, state fingerprint, SQLite compensation claims, and readback. |
+
+The public business capability remains:
+
+```text
+calendar.event.create
+```
+
+The private technical inverse is:
+
+```text
+compensate(calendar.event.create receipt)
+```
+
+It is not registered as:
+
+```text
+calendar.event.delete
+```
+
+`ScheduleOccurrenceRepository.remove_created_occurrence(...)` is a private infrastructure primitive. It atomically verifies:
+
+- the exact occurrence ID from the durable mutation receipt;
+- `metadata.created_by == generic-runtime`;
+- `metadata.created_by_mutation_id == MutationReceipt.mutation_id`;
+- the receipt's created-state fingerprint matches stored provenance;
+- the current occurrence fingerprint still matches the originally created state.
+
+If any check fails, compensation is blocked and the occurrence is preserved. The generic runtime still knows only about `CompensatableMutationHandler`, `CompensationIntent`, `CompensationReceipt`, policy recheck, and journal states; it contains no calendar-specific delete branch.
+
+```mermaid
+flowchart TD
+    Approved[Approved Mutation]
+    Create[calendar.event.create]
+    Occurrence[Created Occurrence]
+    Receipt[Mutation Receipt]
+    Failure[downstream fails]
+    Compensating[COMPENSATING]
+    Inverse[Private Calendar Inverse]
+    Readback[Readback Verification]
+    Compensated[COMPENSATED]
+
+    Approved --> Create
+    Create --> Occurrence
+    Occurrence --> Receipt
+    Receipt --> Failure
+    Failure --> Compensating
+    Compensating --> Inverse
+    Inverse --> Readback
+    Readback --> Compensated
+```
+
+Compensation is implementation-owned recovery behavior and is not exposed as a general Playbook capability. A playbook can request compensation policy on the original write node, but it cannot directly resolve or call the private inverse.
+
+Phase 50 also adds `recover_compensation(...)` as a generic recovery helper. Like `recover_mutation(...)`, it is side-effect aware: a component/domain verifier must prove the compensation already happened before the journal converges a stale `COMPENSATING` record to `COMPENSATED`.
+
 ## Current Inventory
 
 | Area | Current abstraction | Future abstraction | Compatibility strategy | Migration candidate | Risk |
@@ -778,6 +846,8 @@ Phase 47 does not add durable policy persistence. `InstallGrants`, `DeploymentPo
 
 Phase 48 adds a minimal durable mutation journal adapter. Tests use `JsonMutationJournal` against temporary storage; production callers can provide a concrete journal path. Rollback is additive: remove the journal file and unregister the mutation handler. Existing scheduling JSON data and legacy routes are not migrated or rewritten.
 
+Phase 50 keeps the Phase 49 SQLite journal as the production-safe mutation and compensation journal. No storage engine is added. Calendar compensation uses the existing schedule occurrence JSON store through a private repository method guarded by mutation provenance and an unchanged-state fingerprint.
+
 ## Compatibility Strategy
 
 - Existing `PluginManifest`, `PluginRegistry`, `PluginRuntime`, `ProviderResolver`, channel runtimes, scheduler, and workers are unchanged.
@@ -792,6 +862,7 @@ Phase 48 adds a minimal durable mutation journal adapter. Tests use `JsonMutatio
 - Phase 46 introduces an explicit production handler registration for external YouTube video metadata reads only. Existing YouTube import, OAuth, upload, status reconciliation, UI, and worker flows are not converted to playbook execution.
 - Phase 47 policy enforcement applies only to the generic `PlaybookExecutor` when configured with a `RuntimePolicyEngine`. Legacy production routes remain unchanged and are not blocked by missing `InstallGrants`.
 - Phase 48 adds an explicit production mutation registration for local publication-calendar occurrence creation only. Existing calendar UI/API/scheduler callers still use the scheduling services directly and are not converted to playbook execution.
+- Phase 50 adds no new public production capability. The calendar private inverse is owned by `CalendarEventCreateHandler.compensate(...)` and is reachable only from the compensation path for an already approved/applied `calendar.event.create` receipt.
 
 ## Phase 42 Validation Decisions
 
@@ -820,3 +891,4 @@ Phase 48 adds a minimal durable mutation journal adapter. Tests use `JsonMutatio
 - Phase 46 `youtube.video.metadata.read` rejects secret-shaped input, accepts only a provider video ID, exposes no caller-controlled URL/endpoint/method, and is covered by upload/OAuth mutation, subprocess, SSRF-style input, credential-leakage, timeout, and structured provider-error tests.
 - Phase 47 enforces capability grants, network, secret scope, filesystem, subprocess, mutation, and approval policy before handler invocation. Policy metadata uses neutral keys such as `access_scope` so secret-shaped trace fields are rejected by existing runtime guards.
 - Phase 48 requires approval for the first production mutation even when install/deployment policy allows writes. `MutationIntent`, `MutationReceipt`, journal records, approval records, ledger metadata, and trace output contain no raw credentials or secret-shaped fields. Duplicate approval, retry, resume, duplicate trigger delivery, and failure-after-apply paths are covered by idempotency tests for the selected local calendar mutation.
+- Phase 50 proves private compensation for the selected local calendar create mutation. Arbitrary deletion is not exposed; wrong-resource and changed-resource compensation are blocked; compensation receipts, journal records, and traces contain no raw credentials.
