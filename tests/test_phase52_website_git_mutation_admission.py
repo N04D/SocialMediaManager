@@ -43,7 +43,8 @@ def test_phase52_admission_is_blocked_with_structured_reasons() -> None:
     assert "BLOCKED_IDEMPOTENCY" not in result.reasons
     assert "BLOCKED_READBACK" not in result.reasons
     assert "BLOCKED_RECOVERY" not in result.reasons
-    assert "BLOCKED_HANDLER_NOT_REGISTERED" in result.reasons
+    assert "BLOCKED_CAPABILITY_NOT_GRANTED" in result.reasons
+    assert "BLOCKED_HANDLER_NOT_REGISTERED" not in result.reasons
 
 
 def test_phase52_candidate_policy_is_conservative_but_not_admitted() -> None:

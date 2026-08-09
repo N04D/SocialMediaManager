@@ -5,6 +5,7 @@ from typing import Any
 
 from publication_git_publish_safety import website_publish_safety_guarantees
 from publication_git_runtime_handlers import GIT_WEBSITE_COMPONENT_ID
+from src.core.runtime.candidates import MutationHandlerCandidate, compute_candidate_evidence_fingerprint
 from src.core.runtime.capabilities import CapabilityMode
 from src.core.runtime.components import ComponentManifest
 from src.core.runtime.installs import Install
@@ -49,12 +50,12 @@ def website_article_publish_admission(
     *,
     component: ComponentManifest,
     install: Install | None = None,
+    candidate: MutationHandlerCandidate | None = None,
 ) -> ProductionMutationAdmissionResult:
-    """Assess the existing Markdown Website publish path for runtime mutation admission.
+    """Assess the Markdown Website publish path for runtime mutation admission.
 
-    This function is intentionally conservative. It reports whether the current
-    production integration already satisfies the Phase 51 safety contracts; it
-    does not register a handler or upgrade permissions.
+    Reports whether the candidate implementation satisfies all Phase 51-54 runtime
+    safety contracts. Admission does NOT require prior active handler registration.
     """
 
     reasons: list[str] = []
@@ -95,7 +96,14 @@ def website_article_publish_admission(
         reasons.append("BLOCKED_RECOVERY")
     if not guarantees.get("exact_target_staging"):
         reasons.append("BLOCKED_UNCONTROLLED_GIT_OPERATION")
-    reasons.append("BLOCKED_HANDLER_NOT_REGISTERED")
+
+    if candidate is not None:
+        if candidate.component_id != component.component_id or candidate.capability_id != WEBSITE_ARTICLE_PUBLISH_CAPABILITY:
+            reasons.append("BLOCKED_CANDIDATE_MISMATCH")
+        if candidate.mutation_policy.requires_approval is False:
+            reasons.append("BLOCKED_POLICY_APPROVAL_REQUIRED")
+        if candidate.mutation_policy.idempotency_required is False:
+            reasons.append("BLOCKED_POLICY_IDEMPOTENCY_REQUIRED")
 
     policy = MutationPolicy(
         requires_approval=True,
@@ -103,8 +111,25 @@ def website_article_publish_admission(
         readback=ReadbackPolicy.REQUIRED.value,
         compensation=CompensationPolicy.UNAVAILABLE.value,
         recovery=RecoveryPolicy.MANUAL.value,
-        metadata={"admission": "blocked_until_runtime_handler_registration"},
+        metadata={"admission": "admitted" if not reasons else "blocked"},
     )
+
+    fingerprint = (
+        candidate.fingerprint()
+        if candidate is not None
+        else compute_candidate_evidence_fingerprint(
+            MutationHandlerCandidate(
+                component_id=component.component_id,
+                capability_id=WEBSITE_ARTICLE_PUBLISH_CAPABILITY,
+                build_handler=lambda: None,  # type: ignore
+                mutation_policy=policy,
+                permission_requirements=requested.to_dict() if hasattr(requested, "to_dict") else {},
+                readback_support=guarantees.get("readback", {}),
+                recovery_support={"recovery": guarantees.get("recovery")},
+            )
+        )
+    )
+
     return ProductionMutationAdmissionResult(
         capability_id=WEBSITE_ARTICLE_PUBLISH_CAPABILITY,
         component_id=component.component_id,
@@ -115,6 +140,7 @@ def website_article_publish_admission(
         metadata={
             "candidate": "Markdown Website article publication",
             "component_expected": GIT_WEBSITE_COMPONENT_ID,
+            "evidence_fingerprint": fingerprint,
             "guarantees": guarantees,
             "handler_registered": False,
         },

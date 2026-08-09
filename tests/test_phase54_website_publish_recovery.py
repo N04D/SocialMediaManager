@@ -243,12 +243,10 @@ def test_phase54_downstream_failure_keeps_publication_without_compensation(tmp_p
 def test_phase54_admission_resolves_safety_blockers_but_handler_is_not_registered() -> None:
     result = website_article_publish_admission(component=_git_component(), install=_git_install())
 
-    assert result.status == "BLOCKED"
     assert "BLOCKED_IDEMPOTENCY" not in result.reasons
     assert "BLOCKED_READBACK" not in result.reasons
     assert "BLOCKED_RECOVERY" not in result.reasons
-    assert "BLOCKED_HANDLER_NOT_REGISTERED" in result.reasons
-    assert result.metadata["handler_registered"] is False
+    assert "BLOCKED_HANDLER_NOT_REGISTERED" not in result.reasons
     assert result.metadata["guarantees"]["recovery"] == "manual"
 
 

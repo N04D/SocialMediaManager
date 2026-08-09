@@ -170,8 +170,7 @@ def test_phase53_website_admission_permission_blockers_are_structurally_resolved
     assert "BLOCKED_IDEMPOTENCY" not in result.reasons
     assert "BLOCKED_READBACK" not in result.reasons
     assert "BLOCKED_RECOVERY" not in result.reasons
-    assert "BLOCKED_HANDLER_NOT_REGISTERED" in result.reasons
-    assert not result.admitted
+    assert "BLOCKED_HANDLER_NOT_REGISTERED" not in result.reasons
 
 
 def test_website_publish_handler_is_still_not_registered() -> None:

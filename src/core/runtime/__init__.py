@@ -1,3 +1,9 @@
+from .candidates import (
+    MutationHandlerCandidate,
+    ProductionMutationActivationResult,
+    admit_and_register_mutation,
+    compute_candidate_evidence_fingerprint,
+)
 from .capabilities import CapabilityDescriptor, CapabilityMode
 from .components import ComponentManifest
 from .deployments import (
@@ -106,6 +112,10 @@ from .results import NodeResult, NodeResultStatus
 from .tracing import ExecutionTrace, trace_execution
 
 __all__ = [
+    "MutationHandlerCandidate",
+    "ProductionMutationActivationResult",
+    "admit_and_register_mutation",
+    "compute_candidate_evidence_fingerprint",
     "CapabilityReportEntry",
     "ApprovalRecord",
     "ApprovalStatus",
