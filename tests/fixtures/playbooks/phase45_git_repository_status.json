@@ -1,0 +1,52 @@
+{
+  "description": "Read-only production bridge fixture for local Git repository status.",
+  "edges": [
+    {
+      "condition": "",
+      "source": "trigger",
+      "source_port": "",
+      "target": "read-repository",
+      "target_port": ""
+    }
+  ],
+  "metadata": {
+    "phase": "45",
+    "side_effects": "read_only"
+  },
+  "name": "Phase 45 Git Repository Status Read",
+  "nodes": [
+    {
+      "config": {
+        "event_type": "git.repository.status.requested"
+      },
+      "kind": "trigger",
+      "node_id": "trigger"
+    },
+    {
+      "config": {
+        "capability": "git.repository.status.read",
+        "input": {
+          "include_changed_paths": {
+            "from_event": "payload",
+            "path": "include_changed_paths"
+          }
+        },
+        "requirement": "repository"
+      },
+      "kind": "capability",
+      "node_id": "read-repository"
+    }
+  ],
+  "playbook_id": "git.phase45.repository-status",
+  "requirements": {
+    "repository": {
+      "capabilities": [
+        "git.repository.status.read"
+      ],
+      "description": "Read local Git repository branch, HEAD, and status.",
+      "metadata": {}
+    }
+  },
+  "schema_version": "1.0",
+  "version": "1.0.0"
+}

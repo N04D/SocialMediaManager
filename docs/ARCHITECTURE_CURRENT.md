@@ -116,11 +116,11 @@ flowchart TD
     ChannelRuntime --> SharedServices
 ```
 
-### Phase 41/42/43 generic runtime foundation
+### Phase 41/42/43/44/45 generic runtime foundation
 
-Phase 41 added a contract layer beside the existing plugin runtime. Phase 42 adds portable playbook definitions, deployment bindings, side-effect-free execution plan compilation, and an in-memory execution ledger. Phase 43 adds deterministic playbook execution for internal/test capabilities only. Phase 44 connects the first read-only production capability bridge for `calendar.event.read`.
+Phase 41 added a contract layer beside the existing plugin runtime. Phase 42 adds portable playbook definitions, deployment bindings, side-effect-free execution plan compilation, and an in-memory execution ledger. Phase 43 adds deterministic playbook execution for internal/test capabilities only. Phase 44 connects the first read-only production capability bridge for `calendar.event.read`. Phase 45 connects the second read-only production bridge for `git.repository.status.read`.
 
-Phase 43 executes only internal/test capabilities. Phase 44 adds one narrow production bridge: local read-only calendar access through the existing `ExecutionCalendarService`. Production platform mutations remain on the legacy path.
+Phase 43 executes only internal/test capabilities. Phase 44 adds one narrow production bridge: local read-only calendar access through the existing `ExecutionCalendarService`. Phase 45 adds local read-only Git repository status access through the existing Markdown Website `GitPublisher`. Production platform mutations remain on the legacy path.
 
 ```mermaid
 flowchart TD
@@ -158,6 +158,7 @@ New generic contracts live in `src/core/runtime/`:
 - `PlaybookExecutor` runs a validated DAG sequentially and deterministically against registered internal handlers.
 - `ExecutionTrace` exposes structured execution, node execution, and transition history.
 - `CalendarEventReadHandler` bridges `calendar.event.read` to the existing local `ExecutionCalendarService` outside the generic runtime core.
+- `GitRepositoryStatusReadHandler` bridges `git.repository.status.read` to the existing Markdown Website `GitPublisher` outside the generic runtime core.
 
 Concrete Phase 41 mappings for LinkedIn, YouTube, Website/GitHub, and the local publication calendar live outside the generic core in `runtime_foundation_mappings.py`.
 
@@ -310,6 +311,62 @@ The new route exists beside that path:
 Generic Runtime
 -> CalendarEventReadHandler
 -> ExecutionCalendarService
+```
+
+### Phase 45 Git/Website read bridge
+
+```mermaid
+flowchart TD
+    Executor[PlaybookExecutor]
+    Registry[CapabilityHandlerRegistry]
+    CalendarHandler[CalendarReadHandler]
+    GitHandler[GitRepositoryStatusReadHandler]
+    CalendarService[Calendar Service]
+    GitService[Git/Website Service]
+    LocalDB[Local DB]
+    LocalRepo[Local Repository]
+
+    Executor --> Registry
+    Registry --> CalendarHandler
+    Registry --> GitHandler
+    CalendarHandler --> CalendarService
+    GitHandler --> GitService
+    CalendarService --> LocalDB
+    GitService --> LocalRepo
+```
+
+The Phase 45 route is:
+
+```text
+Event
+-> Portable Playbook
+-> PlaybookDeployment
+-> ExecutionPlan
+-> PlaybookExecutor
+-> CapabilityHandlerRegistry
+-> GitRepositoryStatusReadHandler
+-> GitPublisher
+-> normalized NodeResult
+-> ExecutionLedger
+```
+
+The chosen capability is `git.repository.status.read`, not `github.file.read`, because the current Markdown Website implementation proves repository branch, HEAD, and status reads but does not expose a general file-content read capability. The component remains `github-markdown-website` because that component represents the local Markdown Website Git worktree transport.
+
+The handler accepts only `include_changed_paths`. It does not accept shell commands or paths. Runtime tests observe only fixed read-only Git commands such as `branch --show-current`, `rev-parse --verify HEAD`, `cat-file -e <commit>^{commit}`, `status --porcelain`, and for unborn repositories `rev-parse --is-inside-work-tree`. Mutating or remote commands are not connected.
+
+Existing Website/Git consumers remain unchanged:
+
+```text
+Current Website flow
+-> GitPublisher.publish
+```
+
+The new route exists beside that path:
+
+```text
+Generic Runtime
+-> GitRepositoryStatusReadHandler
+-> GitPublisher
 ```
 
 ## Storage Boundaries

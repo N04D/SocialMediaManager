@@ -4,6 +4,10 @@ from publication_calendar_runtime_handlers import (
     CALENDAR_EVENT_READ_INPUT_SCHEMA,
     CALENDAR_EVENT_READ_OUTPUT_SCHEMA,
 )
+from publication_git_runtime_handlers import (
+    GIT_REPOSITORY_STATUS_READ_INPUT_SCHEMA,
+    GIT_REPOSITORY_STATUS_READ_OUTPUT_SCHEMA,
+)
 from src.core.runtime.capabilities import CapabilityDescriptor, CapabilityMode
 from src.core.runtime.components import ComponentManifest
 from src.core.runtime.installs import ComponentBinding, Install
@@ -64,6 +68,14 @@ def phase41_component_manifests() -> tuple[ComponentManifest, ...]:
             capabilities=(
                 CapabilityDescriptor("github.file.write", "0.1.0", CapabilityMode.WRITE.value),
                 CapabilityDescriptor("github.file.read", "0.1.0", CapabilityMode.READ.value),
+                CapabilityDescriptor(
+                    "git.repository.status.read",
+                    "0.1.0",
+                    CapabilityMode.READ.value,
+                    input_schema=GIT_REPOSITORY_STATUS_READ_INPUT_SCHEMA,
+                    output_schema=GIT_REPOSITORY_STATUS_READ_OUTPUT_SCHEMA,
+                    description="Read local Git repository branch, HEAD, and worktree status.",
+                ),
                 CapabilityDescriptor("website.article.publish", "0.1.0", CapabilityMode.WRITE.value),
                 CapabilityDescriptor("website.publication.verify", "0.1.0", CapabilityMode.READ.value),
                 CapabilityDescriptor("website.analytics.read", "0.1.0", CapabilityMode.READ.value),
@@ -139,6 +151,7 @@ def phase41_sample_installs() -> tuple[Install, ...]:
             component_bindings={
                 "github.file.write": ComponentBinding("github-markdown-website"),
                 "github.file.read": ComponentBinding("github-markdown-website"),
+                "git.repository.status.read": ComponentBinding("github-markdown-website"),
                 "website.article.publish": ComponentBinding("github-markdown-website"),
                 "website.publication.verify": ComponentBinding("github-markdown-website"),
                 "website.analytics.read": ComponentBinding("github-markdown-website"),

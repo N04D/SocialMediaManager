@@ -4,6 +4,7 @@ Phase 41 introduced contracts for a generic local-first workflow runtime without
 Phase 42 adds portable playbook contracts, deployment bindings, side-effect-free execution plans, and an in-memory execution ledger.
 Phase 43 adds the first deterministic executor for internal/test capabilities only.
 Phase 44 connects the first read-only production capability bridge: `calendar.event.read`.
+Phase 45 connects the second read-only production capability bridge: `git.repository.status.read`.
 
 ## Scope
 
@@ -11,6 +12,7 @@ Phase 44 connects the first read-only production capability bridge: `calendar.ev
 - Existing Python stack, plugins, scheduler/workers, storage, dashboard, LinkedIn, YouTube, Markdown Website/Git, calendar, and analytics behavior remain unchanged.
 - No production platform playbook execution is introduced in this phase.
 - The only production bridge introduced in Phase 44 is local read-only calendar access.
+- Phase 45 adds local read-only repository status access only.
 - No destructive storage migration is introduced in this phase.
 
 ## Future Runtime Shape
@@ -36,6 +38,8 @@ flowchart TD
 The side-effectful production Playbook Runtime is future work. Phase 43 executes only internal/test capabilities. Production platform capabilities remain on the legacy path.
 
 Phase 44 keeps that boundary and adds one narrow exception: `calendar.event.read` can be executed through a production adapter that calls the existing local `ExecutionCalendarService`. This bridge is read-only and does not add calendar create/update/delete, external calendar providers, browser automation, HTTP calls, or production social mutations.
+
+Phase 45 adds a second narrow read-only bridge for local Website/Git repository state. It does not connect file writes, website publication, GitHub APIs, remote fetch/pull, Git push, or arbitrary Git commands.
 
 ## Phase 42 Portable Playbooks
 
@@ -101,6 +105,7 @@ The distinction is explicit:
 | PlaybookExecutor | `src/core/runtime/executor.py` | Deterministic DAG orchestrator that updates the ledger and calls registered internal handlers only. |
 | ExecutionTrace | `src/core/runtime/tracing.py` | Structured helper for execution, node execution, and transition history. |
 | CalendarEventReadHandler | `publication_calendar_runtime_handlers.py` | Read-only production adapter from `calendar.event.read` to the existing `ExecutionCalendarService`. |
+| GitRepositoryStatusReadHandler | `publication_git_runtime_handlers.py` | Read-only production adapter from `git.repository.status.read` to the existing Markdown Website `GitPublisher`. |
 
 ## Phase 43 Deterministic Executor
 
@@ -235,6 +240,88 @@ Production adapter pattern:
 - No hidden import-time global registration is used.
 - Later component packaging can describe `publication-calendar-local` as providing `calendar.event.read` with `CalendarEventReadHandler` as its handler entrypoint, without adding marketplace or dynamic installation in Phase 44.
 
+## Phase 45 Git/Website Read Bridge
+
+Inspection findings:
+
+| Read operation | Existing implementation | Uses filesystem? | Uses subprocess? | Uses network? | Mutation risk? | Currently exposed where? |
+| --- | --- | --- | --- | --- | --- | --- |
+| Repository branch/HEAD state | `GitPublisher.head_state` | Reads Git worktree metadata | `git branch --show-current`, `git rev-parse --verify HEAD`, `git cat-file -e`, and for unborn repos `git rev-parse --is-inside-work-tree` | No | Read-only commands when called directly | Markdown Website publisher preflight/evidence |
+| Worktree status | `GitPublisher.git(..., "status", "--porcelain")` and `changed_paths` | Reads worktree/index state | `git status --porcelain` | No | Read-only command when arguments are fixed | Publication preflight/conflict detection |
+| Commit verification reads | `GitPublisher.verify_commit` | Reads Git object metadata | `git cat-file`, `git rev-parse`, `git show --name-only` | No | Read-only commands when commit ID is known from publish flow | Publication verification |
+| File content read | No general public capability found | N/A | N/A | N/A | Would need path policy and output contract | Not exposed as a generic read capability |
+
+Chosen capability:
+
+- `github.file.read` remains too broad because the existing Markdown Website code does not expose general repository file-content reads.
+- Phase 45 therefore bridges `git.repository.status.read`.
+- The name is semantically accurate: the handler returns local repository state, branch, HEAD commit, clean/dirty status, and optionally changed paths.
+- The capability belongs to the existing `github-markdown-website` component because that component represents the local Markdown Website Git worktree transport.
+- The capability mode is `read`.
+
+```mermaid
+flowchart TD
+    Executor[PlaybookExecutor]
+    Registry[CapabilityHandlerRegistry]
+    CalendarHandler[CalendarReadHandler]
+    GitHandler[GitRepositoryStatusReadHandler]
+    CalendarService[Calendar Service]
+    GitService[Git/Website Service]
+    LocalDB[Local DB]
+    LocalRepo[Local Repository]
+
+    Executor --> Registry
+    Registry --> CalendarHandler
+    Registry --> GitHandler
+    CalendarHandler --> CalendarService
+    GitHandler --> GitService
+    CalendarService --> LocalDB
+    GitService --> LocalRepo
+```
+
+Phase 45 runtime path:
+
+```text
+Event
+-> Portable Playbook
+-> PlaybookDeployment
+-> ExecutionPlan
+-> PlaybookExecutor
+-> CapabilityHandlerRegistry
+-> GitRepositoryStatusReadHandler
+-> GitPublisher
+-> normalized NodeResult
+-> ExecutionLedger
+```
+
+Read-only Git safety:
+
+- The handler does not accept a command string.
+- The input contract only accepts `include_changed_paths`.
+- Invalid fields such as `command`, `path`, `../secret.txt`, or `/etc/passwd` are rejected because this capability is not path-based.
+- `GitRepositoryStatusReadHandler` uses `WebsiteRepositoryReference` and existing repository validation.
+- Runtime tests observe only fixed read-only Git commands: `branch --show-current`, `rev-parse --verify HEAD`, `cat-file -e <commit>^{commit}`, `status --porcelain`, and `rev-parse --is-inside-work-tree` for unborn repositories.
+- Mutating and remote commands such as `add`, `commit`, `push`, `reset`, `checkout`, `clean`, `merge`, `rebase`, `fetch`, `pull`, `tag`, and `ls-remote` are blocked by tripwire tests.
+- Repository integrity tests prove HEAD, tracked files, and tracked contents are preserved across runtime execution.
+
+Legacy isolation:
+
+- Existing `GitPublisher.publish`, Website publication, reconciliation, GitHub Pages/public URL verification, and UI/API flows remain unchanged.
+- The new route is additive:
+
+```text
+Generic Runtime
+-> GitRepositoryStatusReadHandler
+-> GitPublisher
+```
+
+while the current production Website path remains:
+
+```text
+Current Website flow
+-> GitPublisher.publish
+```
+
 ## Current Inventory
 
 | Area | Current abstraction | Future abstraction | Compatibility strategy | Migration candidate | Risk |
@@ -282,7 +369,8 @@ Production adapter pattern:
 | YouTube | `youtube.video.publish` | `YouTubeChannelService.publish` | `youtube-upload-channel` | MAPPED |
 | YouTube | `youtube.short.publish` | `YouTubeChannelService.publish` with short validation | `youtube-upload-channel` | MAPPED |
 | YouTube | `youtube.publication.status.read` | `YouTubeChannelService.reconcile` | `youtube-upload-channel` | MAPPED |
-| Website/GitHub | `github.file.read` | `GitPublisher.head_state`, status, verification reads | `github-markdown-website` | PARTIAL |
+| Website/GitHub | `github.file.read` | No general file-content read capability found; Phase 41 mapping was broader than the current implementation proves | `github-markdown-website` | PARTIAL |
+| Website/GitHub | `git.repository.status.read` | `GitPublisher.head_state` and fixed `git status --porcelain` read | `github-markdown-website` | MAPPED |
 | Website/GitHub | `github.file.write` | `GitPublisher.publish` writes/stages/commits/pushes allowed paths | `github-markdown-website` | MAPPED |
 | Website/GitHub | `website.article.publish` | Markdown Website render/publish flow | `github-markdown-website` | MAPPED |
 | Website/GitHub | `website.publication.verify` | Markdown Website verification/evidence flow | `github-markdown-website` | MAPPED |
@@ -304,6 +392,8 @@ Phase 43 keeps the same persistence boundary. The executor writes only to the pr
 
 Phase 44 does not add persistence. Calendar reads use existing local calendar storage through `ExecutionCalendarService`; execution state still uses the provided ledger implementation.
 
+Phase 45 does not add persistence. Repository reads use the existing local Git worktree and the provided execution ledger only.
+
 ## Compatibility Strategy
 
 - Existing `PluginManifest`, `PluginRegistry`, `PluginRuntime`, `ProviderResolver`, channel runtimes, scheduler, and workers are unchanged.
@@ -314,6 +404,7 @@ Phase 44 does not add persistence. Calendar reads use existing local calendar st
 - Playbook validation and plan compilation do not call channel runtimes, browser providers, HTTP clients, Git, or plugin services.
 - Phase 43 execution does not call legacy channel runtimes, browser providers, HTTP clients, Git, subprocesses, or plugin services. Only explicitly registered internal handlers can execute.
 - Phase 44 introduces an explicit production handler registration for the local calendar read adapter only. Existing calendar UI/API/scheduler callers still use `ExecutionCalendarService` directly and are not converted to playbook execution.
+- Phase 45 introduces an explicit production handler registration for local Git repository status read only. Existing Website/Git production callers are not converted to playbook execution.
 
 ## Phase 42 Validation Decisions
 
@@ -338,3 +429,4 @@ Phase 44 does not add persistence. Calendar reads use existing local calendar st
 - Arbitrary code evaluation is not used for input mapping, conditions, or transforms.
 - External mutations are not possible in the Phase 43 reference flow because only internal/test handlers are registered and side-effect paths are covered by tests.
 - Phase 44 `calendar.event.read` rejects secret-shaped handler input, normalizes output, exposes no mutation handler for `calendar.event.create/update/delete`, and is covered by mutation/network/subprocess tripwire tests.
+- Phase 45 `git.repository.status.read` rejects secret-shaped and arbitrary command/path input, exposes no write handler, uses no caller-controlled shell command, and is covered by Git mutation, remote-network, and repository-integrity tripwire tests.
