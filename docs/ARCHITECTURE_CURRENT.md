@@ -749,6 +749,46 @@ recovery: AUTOMATIC
 
 No new production mutation capability is introduced in Phase 51.
 
+## Phase 52 Website/Git Admission
+
+Phase 52 evaluates the existing Markdown Website/Git publish path for admission as the second production mutation. The selected candidate is `website.article.publish` because the current code publishes a rendered article snapshot with revision bindings and Git evidence; it is not a generic `github.file.write` operation.
+
+Result:
+
+```text
+PHASE 52: BLOCKED
+production mutation count: 1
+second production mutation handler registered: NO
+```
+
+The legacy `GitPublisher.publish` flow already has useful safety properties: exact-path staging, `shell=False`, branch/root/remote-name allowlists, commit verification, and tests proving unrelated dirty files are not committed. It is still not admitted to the generic mutation runtime because the Phase 51 mutation contracts are not fully proven for runtime execution:
+
+- The `github-markdown-website` component is currently permissioned for filesystem `read` and `read-only-git` subprocesses.
+- Article publish requires filesystem write plus Git index/commit/push operations, which need a separate publish-specific permission contract.
+- Remote push/fetch is not represented in generic network/egress policy.
+- Duplicate/crash replay around file write, staging, commit, and push is not yet reconciled through the mutation journal.
+- No generic readback verifier exists that can prove stale `APPLYING` publish records converged to a specific file/commit/remote state.
+
+```mermaid
+flowchart TD
+    Existing[Existing Integration]
+    Inspection[Safety Inspection]
+    Policy[MutationPolicy]
+    Admission[Admission Validation]
+    Blocked[BLOCKED]
+    Admitted[ADMITTED]
+    Runtime[Generic Runtime]
+
+    Existing --> Inspection
+    Inspection --> Policy
+    Policy --> Admission
+    Admission --> Blocked
+    Admission -. requires future proof .-> Admitted
+    Admitted -. future phase .-> Runtime
+```
+
+Existing functionality is not automatically eligible for the generic mutation runtime. A production mutation must prove the safety guarantees declared by its policy before it is admitted.
+
 ## Storage Boundaries
 
 - Source code, manifests, docs, schemas, templates, and tests are repository content.

@@ -823,6 +823,72 @@ recovery: AUTOMATIC
 
 The effective policy and policy fingerprint are included in `MutationIntent.normalized_input`, so approval is bound to the safety policy as well as to the mutation input. If the handler policy changes after approval, the old approval no longer matches the new intent fingerprint and no side effect is performed.
 
+### Phase 52 Website/Git mutation admission
+
+Phase 52 is an admission phase for the existing Markdown Website/Git publish path. It does not admit a second production mutation because the current implementation has not yet proven all Phase 51 safety contracts for generic runtime execution.
+
+The selected candidate is `website.article.publish`, not `github.file.write`, because the existing production implementation renders and publishes a domain article snapshot with revision bindings, frontmatter, path templates, commit evidence, and optional push. It is not a general caller-directed file write API.
+
+Inspection findings:
+
+| Step | Existing implementation | Side effect | Idempotent? | Readback possible? | Crash ambiguity | Admission result |
+| --- | --- | --- | --- | --- | --- | --- |
+| Render Markdown | `MarkdownRenderer.render` | None | Yes | Render checksum | None | OK |
+| Validate repository/path | `validate_repository_reference`, `ensure_under`, allowlisted roots/branches/remotes | None | Yes | Deterministic validation | None | OK |
+| Write target file | `write_atomic(target_path, rendered.markdown_bytes)` | Local filesystem write | Not by itself; requires runtime journal/intent | File checksum | File can exist without commit if process dies | BLOCKED until recovery adapter proves convergence |
+| Stage exact files | `git add -- <relative_paths>` plus staged-set verification | Git index mutation | Requires exact staged-set recovery | `git diff --cached --name-only` | Index can remain staged | BLOCKED for recovery |
+| Commit | `git commit -m ... -- <relative_paths>` | Local Git history mutation | Requires lookup by approved intent/snapshot | `verify_commit` verifies current HEAD and committed paths | Commit can exist before journal receipt | BLOCKED for idempotent recovery |
+| Push | `git push <remote> HEAD:<branch>` after fast-forward check | Remote Git mutation | Requires remote ref readback | Current code records local HEAD after push; reconciliation checks local file checksum | Push can succeed before journal receipt | BLOCKED for recovery/readback |
+
+Existing safety positives:
+
+- The publisher stages exact relative paths and rejects staged-set mismatches; it does not use `git add .`.
+- Git subprocess calls use `shell=False`.
+- Repository roots, content roots, media roots, branches, and remote names are allowlisted.
+- Path traversal, absolute paths, `.git`, common secret directories, and symlink escapes are rejected.
+- Existing tests prove unrelated dirty files are not committed.
+
+Admission blockers:
+
+| Code | Reason |
+| --- | --- |
+| `BLOCKED_COMPONENT_PERMISSION_MISMATCH` | `github-markdown-website` is currently declared with filesystem `read`, but article publishing requires filesystem writes. |
+| `BLOCKED_UNCONTROLLED_GIT_OPERATION` | The component permission policy is `read-only-git`; publish requires a distinct write/publish Git subprocess policy covering add/commit/push/fetch. |
+| `BLOCKED_REMOTE_EGRESS_POLICY` | The current component network policy says network is not required, while the existing publish path can push/fetch a configured remote. Remote host enforcement is not represented in the generic runtime policy. |
+| `BLOCKED_IDEMPOTENCY` | `GitPublisher.publish` does not accept or persist a runtime mutation idempotency key, and duplicate/crash replay convergence is not yet implemented for article publish receipts. |
+| `BLOCKED_READBACK` | Local commit verification exists, but generic mutation readback for file/index/commit/remote state is not available as a handler verifier. |
+| `BLOCKED_RECOVERY` | Crash states around file write, index staging, commit creation, and especially push are not yet reconciled through the mutation journal. |
+
+The conservative candidate policy, if a future phase adds the missing runtime adapter, is:
+
+```text
+requires_approval: true
+idempotency_required: true
+readback: REQUIRED
+compensation: UNAVAILABLE
+recovery: MANUAL
+```
+
+Compensation is classified as `UNAVAILABLE` for admission. Phase 52 does not add a private Git revert, article delete, history rewrite, or public rollback capability. If a downstream node fails after a future website publish mutation, the publication must remain applied and audit must report an applied non-compensated mutation unless a later phase designs a safe private inverse.
+
+```mermaid
+flowchart TD
+    Existing[Existing Integration]
+    Inspection[Safety Inspection]
+    Policy[MutationPolicy]
+    Admission[Admission Validation]
+    Blocked[BLOCKED]
+    Runtime[Generic Runtime]
+
+    Existing --> Inspection
+    Inspection --> Policy
+    Policy --> Admission
+    Admission --> Blocked
+    Admission -. future only .-> Runtime
+```
+
+Existing functionality is not automatically eligible for the generic mutation runtime. A production mutation must prove the safety guarantees declared by its policy before it is admitted.
+
 ## Current Inventory
 
 | Area | Current abstraction | Future abstraction | Compatibility strategy | Migration candidate | Risk |
