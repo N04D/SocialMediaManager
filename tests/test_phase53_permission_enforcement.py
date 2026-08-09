@@ -167,9 +167,10 @@ def test_phase53_website_admission_permission_blockers_are_structurally_resolved
     assert "BLOCKED_COMPONENT_PERMISSION_MISMATCH" not in result.reasons
     assert "BLOCKED_UNCONTROLLED_GIT_OPERATION" not in result.reasons
     assert "BLOCKED_REMOTE_EGRESS_POLICY" not in result.reasons
-    assert "BLOCKED_IDEMPOTENCY" in result.reasons
-    assert "BLOCKED_READBACK" in result.reasons
-    assert "BLOCKED_RECOVERY" in result.reasons
+    assert "BLOCKED_IDEMPOTENCY" not in result.reasons
+    assert "BLOCKED_READBACK" not in result.reasons
+    assert "BLOCKED_RECOVERY" not in result.reasons
+    assert "BLOCKED_HANDLER_NOT_REGISTERED" in result.reasons
     assert not result.admitted
 
 

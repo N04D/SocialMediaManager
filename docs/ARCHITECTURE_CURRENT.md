@@ -841,6 +841,47 @@ With policy enforcement enabled, missing repository read or missing Git operatio
 
 Phase 53 does not admit Website publishing. It only makes the previously missing permission, operation, and egress contracts expressible and enforceable. `website.article.publish` remains blocked on idempotency, readback, and recovery, and production mutation count remains `1`.
 
+Phase 54 adds Website/Git publish safety evidence without registering a production publish handler. `website.article.publish` now has deterministic logical publication identity, approved-state fingerprinting, optional mutation commit trailers, and read-only file/commit/local-bare-remote readback classification.
+
+```mermaid
+flowchart TD
+    Applying[APPLYING]
+    FileOnly[file only]
+    CommitLocal[commit local]
+    CommitRemote[commit remote]
+    Verifier[Readback Verifier]
+    Safe[SAFE STATE]
+    Ambiguous[AMBIGUOUS]
+    Recover[recover or mark applied]
+    Manual[MANUAL RECOVERY]
+
+    Applying --> FileOnly
+    Applying --> CommitLocal
+    Applying --> CommitRemote
+    FileOnly --> Verifier
+    CommitLocal --> Verifier
+    CommitRemote --> Verifier
+    Verifier --> Safe
+    Verifier --> Ambiguous
+    Safe --> Recover
+    Ambiguous --> Manual
+```
+
+Idempotency identifies the logical mutation. Readback determines which side effects actually occurred. Recovery chooses the only safe next action from durable evidence.
+
+The Phase 54 Website/Git safety helpers live in `publication_git_publish_safety.py`, outside `src/core/runtime/`. The generic runtime still has no Git, Website, Markdown, branch, commit, or push branches. `GitPublisher.publish(...)` remains the existing production implementation and only gained optional safe provenance trailers (`mutation_id`, `intent_fingerprint`) for future mutation receipts.
+
+Admission status after Phase 54:
+
+```text
+permission/operation/egress blockers: resolved structurally
+idempotency/readback/recovery blockers: resolved as safety evidence
+final admission: BLOCKED_HANDLER_NOT_REGISTERED
+production mutation count: 1
+```
+
+No `website.article.publish` handler is registered with `PlaybookExecutor` yet, and no second production mutation capability is admitted.
+
 ## Storage Boundaries
 
 - Source code, manifests, docs, schemas, templates, and tests are repository content.

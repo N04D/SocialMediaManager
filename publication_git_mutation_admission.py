@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from publication_git_publish_safety import website_publish_safety_guarantees
 from publication_git_runtime_handlers import GIT_WEBSITE_COMPONENT_ID
 from src.core.runtime.capabilities import CapabilityMode
 from src.core.runtime.components import ComponentManifest
@@ -82,13 +83,19 @@ def website_article_publish_admission(
         if not install.grants.allow_subprocess:
             reasons.append("BLOCKED_SUBPROCESS_NOT_GRANTED")
 
-    reasons.extend(
-        (
-            "BLOCKED_IDEMPOTENCY",
-            "BLOCKED_READBACK",
-            "BLOCKED_RECOVERY",
-        )
-    )
+    guarantees = website_publish_safety_guarantees()
+    if not guarantees.get("idempotency"):
+        reasons.append("BLOCKED_IDEMPOTENCY")
+    readback = dict(guarantees.get("readback") or {})
+    if not (readback.get("file") and readback.get("commit") and readback.get("remote")):
+        reasons.append("BLOCKED_READBACK")
+    if guarantees.get("recovery") not in {"manual", "automatic"}:
+        reasons.append("BLOCKED_RECOVERY")
+    if not guarantees.get("manual_recovery_state"):
+        reasons.append("BLOCKED_RECOVERY")
+    if not guarantees.get("exact_target_staging"):
+        reasons.append("BLOCKED_UNCONTROLLED_GIT_OPERATION")
+    reasons.append("BLOCKED_HANDLER_NOT_REGISTERED")
 
     policy = MutationPolicy(
         requires_approval=True,
@@ -96,7 +103,7 @@ def website_article_publish_admission(
         readback=ReadbackPolicy.REQUIRED.value,
         compensation=CompensationPolicy.UNAVAILABLE.value,
         recovery=RecoveryPolicy.MANUAL.value,
-        metadata={"admission": "blocked_until_runtime_publish_recovery_exists"},
+        metadata={"admission": "blocked_until_runtime_handler_registration"},
     )
     return ProductionMutationAdmissionResult(
         capability_id=WEBSITE_ARTICLE_PUBLISH_CAPABILITY,
@@ -108,6 +115,7 @@ def website_article_publish_admission(
         metadata={
             "candidate": "Markdown Website article publication",
             "component_expected": GIT_WEBSITE_COMPONENT_ID,
+            "guarantees": guarantees,
             "handler_registered": False,
         },
     )

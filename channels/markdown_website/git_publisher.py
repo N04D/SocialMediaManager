@@ -49,6 +49,8 @@ class GitPublisher:
         remote_name: str = "origin",
         media_paths: tuple[str, ...] = (),
         push: bool = False,
+        mutation_id: str = "",
+        intent_fingerprint: str = "",
     ) -> WebsitePublicationEvidence:
         self.validate_preflight(snapshot, repository, remote_name=remote_name, push=push)
         repo_root = repository.managed_checkout_root.resolve()
@@ -87,7 +89,12 @@ class GitPublisher:
             )
         if not staged_files:
             raise MarkdownWebsiteGitError("markdown_website.git.empty_staged_set", "No staged publication changes.")
-        message = commit_message(snapshot.variant.title, snapshot)
+        message = commit_message(
+            snapshot.variant.title,
+            snapshot,
+            mutation_id=mutation_id,
+            intent_fingerprint=intent_fingerprint,
+        )
         self.git(
             repo_root,
             "-c",
@@ -125,6 +132,11 @@ class GitPublisher:
             verification_ready=True,
             evidence_ids=(evidence_id,),
         )
+        binding = revision_binding(snapshot)
+        if mutation_id:
+            binding["mutation_id"] = mutation_id
+        if intent_fingerprint:
+            binding["intent_fingerprint"] = intent_fingerprint
         return WebsitePublicationEvidence(
             repository_reference_id=repository.id,
             branch=snapshot.account_config.branch,
@@ -138,7 +150,7 @@ class GitPublisher:
             media_checksums={},
             public_url=rendered.public_url,
             snapshot_checksum=snapshot.publication_snapshot_checksum,
-            revision_binding=revision_binding(snapshot),
+            revision_binding=binding,
             verification_status=verification_status,
             verification_timestamp="",
             mutation_manifest=manifest,
@@ -254,15 +266,26 @@ def sha256_path(path: Path) -> str:
     return digest.hexdigest()
 
 
-def commit_message(title: str, snapshot: WebsitePublicationSnapshot) -> str:
+def commit_message(
+    title: str,
+    snapshot: WebsitePublicationSnapshot,
+    *,
+    mutation_id: str = "",
+    intent_fingerprint: str = "",
+) -> str:
     safe_title = " ".join(title.split())[:72]
-    return (
+    message = (
         f"publish: {safe_title}\n\n"
         f"Content-Revision: {snapshot.content_revision_id}\n"
         f"Publication-Target: {snapshot.publication_target_id}\n"
         f"Publication-Attempt: {snapshot.publication_attempt_id}\n"
         f"Snapshot-Checksum: {snapshot.publication_snapshot_checksum}"
     )
+    if mutation_id:
+        message += f"\nMutation-ID: {mutation_id}"
+    if intent_fingerprint:
+        message += f"\nIntent-Fingerprint: {intent_fingerprint}"
+    return message
 
 
 def revision_binding(snapshot: WebsitePublicationSnapshot) -> dict[str, str]:

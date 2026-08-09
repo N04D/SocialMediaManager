@@ -990,6 +990,84 @@ BLOCKED_RECOVERY
 
 No `website.article.publish` production handler is registered, and production mutation count remains `1`.
 
+### Phase 54 Website/Git publish idempotency, readback, and recovery
+
+Phase 54 hardens the same `website.article.publish` candidate. It does not add a second Website/Git capability and does not register a production publish handler with `PlaybookExecutor`.
+
+The exact publish lifecycle is now documented as:
+
+| Stage | Side effect | Durable evidence | Safe retry? | Readback possible? |
+| --- | --- | --- | --- | --- |
+| S0 approved intent | none | logical publication identity and approved-state fingerprint | yes | yes |
+| S1 target rendered | none | rendered checksum and target relative path | yes | yes |
+| S2 target file written | filesystem write | target file checksum | not blindly; file-only state is classified | yes |
+| S3 target path staged | Git index mutation | staged set equals exact approved target paths | not blindly; unrelated staged files block | yes |
+| S4 commit created | local Git history mutation | commit SHA, parent SHA, revision trailers, optional mutation trailers | yes, by existing commit evidence | yes |
+| S5 push attempted | Git remote mutation | configured remote ref evidence | no blind retry on unknown state | yes for local bare remote |
+| S6 remote contains expected commit | remote ref updated | read-only remote ref verification | no new logical publication | yes |
+| S7 receipt durable | mutation journal/receipt metadata | target, content fingerprint, commit, remote state | no duplicate logical publication | yes |
+
+```mermaid
+flowchart TD
+    Applying[APPLYING]
+    FileOnly[file only]
+    CommitLocal[commit local]
+    CommitRemote[commit remote]
+    Verifier[Readback Verifier]
+    Safe[SAFE STATE]
+    Ambiguous[AMBIGUOUS]
+    Recover[recover or mark applied]
+    Manual[MANUAL RECOVERY]
+
+    Applying --> FileOnly
+    Applying --> CommitLocal
+    Applying --> CommitRemote
+    FileOnly --> Verifier
+    CommitLocal --> Verifier
+    CommitRemote --> Verifier
+    Verifier --> Safe
+    Verifier --> Ambiguous
+    Safe --> Recover
+    Ambiguous --> Manual
+```
+
+Idempotency identifies the logical mutation. Readback determines which side effects actually occurred. Recovery chooses the only safe next action from durable evidence.
+
+New Website/Git safety helpers are intentionally outside the generic runtime core:
+
+- `publication_git_publish_safety.build_website_publish_identity(...)` derives a deterministic logical publication identity from install, capability, content item, content revision, publication target, target path, branch, repository reference, and push target.
+- `publication_git_publish_safety.approved_publish_fingerprint(...)` binds rendered content checksum, target path, branch/remote settings, effective mutation policy, and effective permissions.
+- `publication_git_publish_safety.verify_website_publish(...)` classifies file, commit, and local-bare-remote readback as `NO_SIDE_EFFECT`, `TARGET_PRESENT_UNCOMMITTED`, `EXPECTED_COMMIT_PRESENT`, `EXPECTED_COMMIT_AT_HEAD`, `EXPECTED_COMMIT_REMOTE`, `STATE_CONFLICT`, `UNKNOWN`, or `MANUAL_RECOVERY_REQUIRED`.
+- `publication_git_publish_safety.inspect_website_publish_recovery(...)` exposes a structured read-only recovery inspection result for future operator/UI use.
+
+`GitPublisher.publish(...)` remains the existing production implementation. It now accepts optional `mutation_id` and `intent_fingerprint` values, writing them as safe Git commit trailers and evidence metadata when supplied. Existing callers that omit these parameters keep the previous behavior.
+
+Repository isolation is still strict:
+
+- target paths are deterministic relative repository paths;
+- publication uses `git add -- <exact-approved-target-path>`;
+- unrelated unstaged files, including `content/drafts/...`, are not committed;
+- unrelated staged files cause `markdown_website.git.staged_set_mismatch`;
+- no `git add .`, force push, reset, clean, rebase, merge automation, revert, or delete is introduced.
+
+Admission now reports the Phase 52/53 safety blockers as structurally resolved:
+
+```text
+BLOCKED_COMPONENT_PERMISSION_MISMATCH: resolved structurally
+BLOCKED_UNCONTROLLED_GIT_OPERATION: resolved structurally
+BLOCKED_REMOTE_EGRESS_POLICY: resolved structurally
+BLOCKED_IDEMPOTENCY: resolved by deterministic logical publication identity
+BLOCKED_READBACK: resolved by file/commit/local-bare-remote verifier
+BLOCKED_RECOVERY: resolved as safe MANUAL recovery with no blind retry on UNKNOWN
+```
+
+The candidate remains blocked only because no `website.article.publish` production mutation handler is registered in Phase 54:
+
+```text
+BLOCKED_HANDLER_NOT_REGISTERED
+production mutation count: 1
+```
+
 ## Current Inventory
 
 | Area | Current abstraction | Future abstraction | Compatibility strategy | Migration candidate | Risk |
