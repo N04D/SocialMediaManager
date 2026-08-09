@@ -12,6 +12,12 @@ from src.core.runtime.capabilities import CapabilityDescriptor, CapabilityMode
 from src.core.runtime.components import ComponentManifest
 from src.core.runtime.installs import ComponentBinding, Install
 from src.core.runtime.resolver import RuntimeRegistry
+from youtube_runtime_handlers import (
+    YOUTUBE_NETWORK_POLICY,
+    YOUTUBE_VIDEO_METADATA_READ_CAPABILITY,
+    YOUTUBE_VIDEO_METADATA_READ_INPUT_SCHEMA,
+    YOUTUBE_VIDEO_METADATA_READ_OUTPUT_SCHEMA,
+)
 
 RUNTIME_SDK_VERSION = "runtime-contracts-0.1"
 
@@ -53,11 +59,20 @@ def phase41_component_manifests() -> tuple[ComponentManifest, ...]:
             capabilities=(
                 CapabilityDescriptor("youtube.connection.start", "0.1.0", CapabilityMode.WRITE.value),
                 CapabilityDescriptor("youtube.connection.read", "0.1.0", CapabilityMode.READ.value),
+                CapabilityDescriptor(
+                    YOUTUBE_VIDEO_METADATA_READ_CAPABILITY,
+                    "0.1.0",
+                    CapabilityMode.READ.value,
+                    input_schema=YOUTUBE_VIDEO_METADATA_READ_INPUT_SCHEMA,
+                    output_schema=YOUTUBE_VIDEO_METADATA_READ_OUTPUT_SCHEMA,
+                    description="Read YouTube video metadata through the existing YouTube Data API transport.",
+                ),
                 CapabilityDescriptor("youtube.video.publish", "0.1.0", CapabilityMode.WRITE.value),
                 CapabilityDescriptor("youtube.short.publish", "0.1.0", CapabilityMode.WRITE.value),
                 CapabilityDescriptor("youtube.publication.status.read", "0.1.0", CapabilityMode.READ.value),
             ),
             required_secrets=("youtube-client-secret-ref", "youtube-refresh-token-ref"),
+            network_policy=YOUTUBE_NETWORK_POLICY,
             metadata={"legacy_plugin_id": "channel.youtube", "transport": "youtube_api"},
         ),
         ComponentManifest(
@@ -129,6 +144,7 @@ def phase41_sample_installs() -> tuple[Install, ...]:
             component_bindings={
                 "youtube.connection.start": ComponentBinding("youtube-upload-channel"),
                 "youtube.connection.read": ComponentBinding("youtube-upload-channel"),
+                "youtube.video.metadata.read": ComponentBinding("youtube-upload-channel"),
                 "youtube.video.publish": ComponentBinding("youtube-upload-channel"),
                 "youtube.short.publish": ComponentBinding("youtube-upload-channel"),
                 "youtube.publication.status.read": ComponentBinding("youtube-upload-channel"),

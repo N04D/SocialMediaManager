@@ -205,6 +205,33 @@ class YouTubeChannelService:
             )
         return token
 
+    def read_video_metadata(self, *, video_id: str, access_token: str = "") -> dict[str, Any]:
+        if self.transport is None:
+            raise YouTubeChannelError("youtube.transport_missing", "YouTube transport is not configured.")
+        response = self.transport.get_video(video_id=video_id, access_token=access_token)
+        items = response.payload.get("items")
+        if not isinstance(items, list):
+            raise YouTubeChannelError("youtube.response_malformed", "YouTube video metadata response was malformed.")
+        if not items:
+            raise YouTubeChannelError("youtube.video_not_found", "YouTube video was not found.")
+        item = items[0]
+        if not isinstance(item, dict):
+            raise YouTubeChannelError("youtube.response_malformed", "YouTube video metadata response was malformed.")
+        snippet = item.get("snippet") or {}
+        status = item.get("status") or {}
+        processing = item.get("processingDetails") or {}
+        return {
+            "video_id": str(item.get("id") or video_id),
+            "title": str(snippet.get("title") or ""),
+            "description": str(snippet.get("description") or ""),
+            "published_at": str(snippet.get("publishedAt") or ""),
+            "channel_id": str(snippet.get("channelId") or ""),
+            "channel_title": str(snippet.get("channelTitle") or ""),
+            "privacy_status": str(status.get("privacyStatus") or ""),
+            "processing_status": str(processing.get("processingStatus") or ""),
+            "source": "youtube-upload-channel",
+        }
+
     def prepare(self, plan: YouTubePublishPlan) -> dict[str, Any]:
         validation = validate_short_asset(plan)
         return {

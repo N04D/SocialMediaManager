@@ -322,6 +322,105 @@ Current Website flow
 -> GitPublisher.publish
 ```
 
+## Phase 46 External Network Read Bridge
+
+Phase 46 connects exactly one production network read capability to the generic runtime:
+
+```text
+youtube.video.metadata.read
+```
+
+Inspection findings:
+
+| Candidate capability | Existing implementation | Actually uses network? | Authenticated? | Read-only? | Returns remote data? | Side effects? | Suitable for Phase 46? |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `youtube.transcript.import` | `YouTubeSourcePlugin.import_source` parses caller-supplied transcript and stores local content | No | No | No, local import/write | No remote data | Writes local content records | No |
+| `youtube.transcript.read` | `YouTubeSourcePlugin.parse_timestamped_transcript` parses supplied text; health reports transcript retrieval `not_configured` | No | No | Local parse only | No remote data | None for parse | No |
+| `youtube.video.read` | `YouTubeSourcePlugin.validate_video_ref` validates URL/video ID and import metadata | No | No | Local validation/import support | No remote data | Import path writes local content | No |
+| `youtube.publication.status.read` | `YouTubeChannelService.reconcile` calls `YouTubeTransport.get_video` for uploaded publication evidence | Yes | Yes, access token | Yes | Yes | None in `get_video`; tied to publication evidence status update | Partial |
+| `youtube.video.metadata.read` | `YouTubeChannelService.read_video_metadata` calls existing `YouTubeTransport.get_video` | Yes | Yes, access token | Yes | Yes | None | Yes |
+
+`youtube.video.metadata.read` is semantically correct because it reads remote YouTube Data API video metadata through the existing channel service and transport. It is more precise than `youtube.video.read` and avoids claiming transcript retrieval, which the current source plugin explicitly reports as not configured.
+
+Phase 46 runtime path:
+
+```text
+Event
+-> Portable Playbook
+-> PlaybookDeployment
+-> ExecutionPlan
+-> PlaybookExecutor
+-> CapabilityHandlerRegistry
+-> YouTubeVideoMetadataReadHandler
+-> YouTubeChannelService
+-> HttpYouTubeTransport.get_video
+-> External Network GET
+-> normalized NodeResult
+-> ExecutionLedger
+```
+
+Egress policy:
+
+- The generic `ComponentManifest` now has a forward-compatible `network_policy` dictionary.
+- `youtube-upload-channel` declares `network_policy.required = true`.
+- Allowed domains are `www.googleapis.com` for YouTube Data API reads/uploads and `oauth2.googleapis.com` for the existing OAuth token endpoint.
+- No wildcard egress is declared.
+- The Phase 46 reference execution observes one `GET` request to `https://www.googleapis.com/youtube/v3/videos`.
+- The handler accepts only `video_id`. It rejects URLs, arbitrary domains, metadata endpoints, local addresses, file URIs, and caller-controlled HTTP methods.
+
+Authentication boundary:
+
+- Playbooks contain no account IDs, install IDs, tokens, or secrets.
+- Deployments bind the logical `youtube_source` requirement to a concrete install.
+- Installs contain only config and secret references such as `access_token_ref`; raw tokens are resolved only at the production handler boundary.
+- Access tokens are passed to the existing service/transport and never written into `ExecutionContext`, `NodeResult`, `ExecutionLedger`, or trace output.
+
+Retry and timeout ownership:
+
+- `HttpYouTubeTransport` already requires a bounded timeout and passes it to `urllib.request.urlopen`.
+- Phase 46 does not add a second transport retry loop.
+- Node-level retry remains owned by `PlaybookExecutor` through node config.
+- Tests assert the success path performs exactly one network attempt.
+
+External error normalization:
+
+- Timeouts/network failures map to structured runtime failure.
+- YouTube 429 maps to `RATE_LIMITED`.
+- Authentication failure maps to `YOUTUBE_AUTHENTICATION_REQUIRED`.
+- Missing videos map to `YOUTUBE_VIDEO_NOT_FOUND`.
+- Malformed provider responses map to `YOUTUBE_RESPONSE_MALFORMED`.
+- Provider response bodies, authorization headers, cookies, and raw token data are not exposed as runtime output.
+
+Three production bridge proof:
+
+```mermaid
+flowchart TD
+    Executor[PlaybookExecutor]
+    Registry[CapabilityHandlerRegistry]
+    CalendarRead[CalendarRead]
+    GitRead[GitRead]
+    RemoteRead[RemoteRead]
+    CalendarService[Local Service]
+    GitService[Git Service]
+    YouTubeService[YouTube Service]
+    LocalDB[Local DB]
+    Repository[Repository]
+    Network[Network]
+
+    Executor --> Registry
+    Registry --> CalendarRead
+    Registry --> GitRead
+    Registry --> RemoteRead
+    CalendarRead --> CalendarService
+    GitRead --> GitService
+    RemoteRead --> YouTubeService
+    CalendarService --> LocalDB
+    GitService --> Repository
+    YouTubeService --> Network
+```
+
+The generic runtime now supports production capabilities backed by local service I/O, local repository/subprocess I/O, and external network I/O without provider-specific branching in the core.
+
 ## Current Inventory
 
 | Area | Current abstraction | Future abstraction | Compatibility strategy | Migration candidate | Risk |
@@ -364,6 +463,7 @@ Current Website flow
 | LinkedIn | `linkedin.comment.reply` | No implementation found | None | NOT IMPLEMENTED |
 | LinkedIn | `linkedin.dm.received` | No implementation found | None | NOT IMPLEMENTED |
 | YouTube | `youtube.video.read` | `YouTubeSourcePlugin.validate_video_ref` / import metadata | `youtube-source-import` | PARTIAL |
+| YouTube | `youtube.video.metadata.read` | `YouTubeChannelService.read_video_metadata` through `YouTubeTransport.get_video` | `youtube-upload-channel` | MAPPED |
 | YouTube | `youtube.transcript.read` | `YouTubeSourcePlugin.parse_timestamped_transcript` for supplied transcript | `youtube-source-import` | PARTIAL |
 | YouTube | `youtube.transcript.import` | `YouTubeSourcePlugin.import_source` | `youtube-source-import` | MAPPED |
 | YouTube | `youtube.video.publish` | `YouTubeChannelService.publish` | `youtube-upload-channel` | MAPPED |
@@ -394,6 +494,8 @@ Phase 44 does not add persistence. Calendar reads use existing local calendar st
 
 Phase 45 does not add persistence. Repository reads use the existing local Git worktree and the provided execution ledger only.
 
+Phase 46 does not add persistence. YouTube metadata reads use the existing YouTube channel service and transport; execution state still uses the provided ledger implementation.
+
 ## Compatibility Strategy
 
 - Existing `PluginManifest`, `PluginRegistry`, `PluginRuntime`, `ProviderResolver`, channel runtimes, scheduler, and workers are unchanged.
@@ -405,6 +507,7 @@ Phase 45 does not add persistence. Repository reads use the existing local Git w
 - Phase 43 execution does not call legacy channel runtimes, browser providers, HTTP clients, Git, subprocesses, or plugin services. Only explicitly registered internal handlers can execute.
 - Phase 44 introduces an explicit production handler registration for the local calendar read adapter only. Existing calendar UI/API/scheduler callers still use `ExecutionCalendarService` directly and are not converted to playbook execution.
 - Phase 45 introduces an explicit production handler registration for local Git repository status read only. Existing Website/Git production callers are not converted to playbook execution.
+- Phase 46 introduces an explicit production handler registration for external YouTube video metadata reads only. Existing YouTube import, OAuth, upload, status reconciliation, UI, and worker flows are not converted to playbook execution.
 
 ## Phase 42 Validation Decisions
 
@@ -430,3 +533,4 @@ Phase 45 does not add persistence. Repository reads use the existing local Git w
 - External mutations are not possible in the Phase 43 reference flow because only internal/test handlers are registered and side-effect paths are covered by tests.
 - Phase 44 `calendar.event.read` rejects secret-shaped handler input, normalizes output, exposes no mutation handler for `calendar.event.create/update/delete`, and is covered by mutation/network/subprocess tripwire tests.
 - Phase 45 `git.repository.status.read` rejects secret-shaped and arbitrary command/path input, exposes no write handler, uses no caller-controlled shell command, and is covered by Git mutation, remote-network, and repository-integrity tripwire tests.
+- Phase 46 `youtube.video.metadata.read` rejects secret-shaped input, accepts only a provider video ID, exposes no caller-controlled URL/endpoint/method, and is covered by upload/OAuth mutation, subprocess, SSRF-style input, credential-leakage, timeout, and structured provider-error tests.

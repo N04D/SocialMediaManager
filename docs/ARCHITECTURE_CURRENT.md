@@ -369,6 +369,104 @@ Generic Runtime
 -> GitPublisher
 ```
 
+### Phase 46 external network read bridge
+
+```mermaid
+flowchart TD
+    EventEnvelope[EventEnvelope]
+    Playbook[Portable Playbook]
+    Deployment[PlaybookDeployment]
+    Plan[ExecutionPlan]
+    Executor[PlaybookExecutor]
+    Registry[CapabilityHandlerRegistry]
+    Handler[YouTubeVideoMetadataReadHandler<br/>READ ONLY]
+    Service[YouTubeChannelService]
+    Transport[HttpYouTubeTransport.get_video]
+    Network[YouTube Data API<br/>www.googleapis.com]
+
+    EventEnvelope --> Playbook
+    Playbook --> Deployment
+    Deployment --> Plan
+    Plan --> Executor
+    Executor --> Registry
+    Registry --> Handler
+    Handler --> Service
+    Service --> Transport
+    Transport --> Network
+```
+
+The Phase 46 route is:
+
+```text
+Event
+-> Portable Playbook
+-> PlaybookDeployment
+-> ExecutionPlan
+-> PlaybookExecutor
+-> CapabilityHandlerRegistry
+-> YouTubeVideoMetadataReadHandler
+-> YouTubeChannelService
+-> HttpYouTubeTransport.get_video
+-> normalized NodeResult
+-> ExecutionLedger
+```
+
+The chosen capability is `youtube.video.metadata.read`. It is intentionally more precise than `youtube.video.read` because the source plugin only validates/imports caller-supplied YouTube source data and reports transcript retrieval as not configured. The remote proof uses the existing YouTube channel service and transport, which already know how to perform YouTube Data API `videos.list` reads.
+
+The production adapter lives in `youtube_runtime_handlers.py`. It accepts only `video_id`, rejects arbitrary URLs/endpoints/methods, resolves raw access tokens only at the handler boundary, and registers only the read capability. Upload/session/OAuth mutation methods remain on the legacy YouTube channel path and are not invoked by the Phase 46 reference flow.
+
+The component `youtube-upload-channel` now has generic `network_policy` metadata:
+
+```text
+required: true
+allowed_domains:
+  - www.googleapis.com
+  - oauth2.googleapis.com
+```
+
+The generic runtime core remains provider-neutral. The same `PlaybookExecutor`, `CapabilityHandlerRegistry`, `ExecutionLedger`, and trace model now support three different production I/O shapes:
+
+```mermaid
+flowchart TD
+    Executor[PlaybookExecutor]
+    Registry[CapabilityHandlerRegistry]
+    CalendarRead[CalendarRead]
+    GitRead[GitRead]
+    RemoteRead[RemoteRead]
+    CalendarService[Local Service]
+    GitService[Git Service]
+    YouTubeService[YouTube Service]
+    LocalDB[Local DB]
+    Repo[Repository]
+    Network[Network]
+
+    Executor --> Registry
+    Registry --> CalendarRead
+    Registry --> GitRead
+    Registry --> RemoteRead
+    CalendarRead --> CalendarService
+    GitRead --> GitService
+    RemoteRead --> YouTubeService
+    CalendarService --> LocalDB
+    GitService --> Repo
+    YouTubeService --> Network
+```
+
+Existing YouTube consumers remain unchanged:
+
+```text
+Current YouTube source/import/upload/status flows
+-> YouTubeSourcePlugin / YouTubeChannelService
+```
+
+The new route exists beside that path:
+
+```text
+Generic Runtime
+-> YouTubeVideoMetadataReadHandler
+-> YouTubeChannelService.read_video_metadata
+```
+
 ## Storage Boundaries
 
 - Source code, manifests, docs, schemas, templates, and tests are repository content.

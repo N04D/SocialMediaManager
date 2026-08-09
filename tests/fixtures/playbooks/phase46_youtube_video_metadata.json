@@ -1,0 +1,48 @@
+{
+  "description": "Phase 46 read-only external network proof for YouTube video metadata.",
+  "edges": [
+    {
+      "source": "trigger",
+      "target": "read-video"
+    }
+  ],
+  "metadata": {
+    "phase": "46",
+    "portable": true,
+    "side_effects": "read-only"
+  },
+  "name": "Phase 46 YouTube Video Metadata Read",
+  "nodes": [
+    {
+      "config": {
+        "event_type": "youtube.video.metadata.requested"
+      },
+      "kind": "trigger",
+      "node_id": "trigger"
+    },
+    {
+      "config": {
+        "capability": "youtube.video.metadata.read",
+        "input": {
+          "video_id": {
+            "from_event": "payload",
+            "path": "video_id"
+          }
+        },
+        "requirement": "youtube_source"
+      },
+      "kind": "capability",
+      "node_id": "read-video"
+    }
+  ],
+  "playbook_id": "youtube.phase46.video-metadata",
+  "requirements": {
+    "youtube_source": {
+      "capabilities": [
+        "youtube.video.metadata.read"
+      ]
+    }
+  },
+  "schema_version": "1.0",
+  "version": "1.0.0"
+}
