@@ -440,7 +440,28 @@ class PlaybookExecutor:
                     self.mutation_journal.mark_approved(
                         mutation_intent.mutation_id, approval_id=approval.approval_id if approval else ""
                     )
-                    self.mutation_journal.mark_applying(mutation_intent.mutation_id)
+                    claim, claimed = self.mutation_journal.claim_applying(
+                        mutation_intent.mutation_id, owner=context.execution_id
+                    )
+                    if not claimed:
+                        if claim.state == MutationState.APPLIED.value and claim.receipt:
+                            return NodeResult.success(
+                                {
+                                    "mutation_receipt": claim.receipt.to_dict(),
+                                    "resource_ref": claim.receipt.resource_ref,
+                                    "idempotent_replay": True,
+                                },
+                                {
+                                    **policy_metadata,
+                                    **_mutation_policy_metadata(mutation_intent),
+                                    "mutation_replayed": True,
+                                },
+                            )
+                        return NodeResult.failure(
+                            "MUTATION_ALREADY_APPLYING",
+                            "Mutation intent is already being applied.",
+                            {**policy_metadata, **_mutation_policy_metadata(mutation_intent)},
+                        )
                     input_data = _with_runtime_mutation(input_data, mutation_intent)
                     policy_metadata = {**policy_metadata, **_mutation_policy_metadata(mutation_intent)}
             handler = self.handler_registry.resolve(plan_node.component_id, plan_node.capability)
@@ -506,7 +527,7 @@ def _prepare_mutation_intent(
     input_data: dict[str, Any],
     journal: MutationJournal,
 ) -> MutationIntent:
-    normalized = canonical_mutation_input(input_data)
+    normalized = canonical_mutation_input(_intent_input(input_data, plan_node))
     fingerprint = mutation_input_fingerprint(normalized)
     mutation_id = build_mutation_id(
         execution_id=context.execution_id,
@@ -536,8 +557,7 @@ def _prepare_mutation_intent(
         input_fingerprint=fingerprint,
         idempotency_key=idempotency_key,
     )
-    journal.prepare_intent(intent)
-    return intent
+    return journal.prepare_intent(intent).intent
 
 
 def _mutation_policy_metadata(intent: MutationIntent) -> dict[str, Any]:
@@ -546,6 +566,11 @@ def _mutation_policy_metadata(intent: MutationIntent) -> dict[str, Any]:
         "mutation_id": intent.mutation_id,
         "mutation_idempotency_key": intent.idempotency_key,
     }
+
+
+def _intent_input(input_data: dict[str, Any], plan_node: ExecutionPlanNode) -> dict[str, Any]:
+    compensation = dict(plan_node.config.get("compensation") or {})
+    return {**input_data, "_compensation": {"mode": str(compensation.get("mode") or "none")}}
 
 
 def _approval_requires_replacement(approval: ApprovalRecord | None, metadata: dict[str, Any]) -> bool:

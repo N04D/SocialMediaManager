@@ -614,6 +614,56 @@ Approval authorizes an exact `MutationIntent`, not a generic capability. The run
 
 Phase 48 does not claim universal exactly-once semantics for external systems. It establishes durable idempotency semantics for the selected local production mutation.
 
+### Phase 49 compensation and recovery hardening
+
+Phase 49 does not add a new production mutation capability. The production write count remains one:
+
+```text
+calendar.event.create
+```
+
+Compensation is modeled generically:
+
+```mermaid
+flowchart TD
+    Mutation[Mutation]
+    Applied[APPLIED]
+    Failure[downstream failure]
+    Intent[CompensationIntent]
+    Policy[policy recheck]
+    Handler[Compensating Handler]
+    Receipt[CompensationReceipt]
+    Readback[Readback Verification]
+
+    Mutation --> Applied
+    Applied --> Failure
+    Failure --> Intent
+    Intent --> Policy
+    Policy --> Handler
+    Handler --> Receipt
+    Receipt --> Readback
+```
+
+Compensation is an explicit, auditable side effect and is not equivalent to transactional rollback.
+
+For the current calendar bridge, production compensation is blocked because the existing `ScheduleOccurrenceRepository` has no safe delete/remove inverse for the exact created occurrence. Phase 49 therefore does not register `calendar.event.delete` and does not hide a delete inside the generic core.
+
+The mutation journal now has a production-safe SQLite adapter:
+
+```text
+Mutation Journal
+      |
+      +---- PREPARED
+      +---- APPROVED
+      +---- APPLYING
+      +---- APPLIED
+      |
+      +---- COMPENSATING
+      +---- COMPENSATED
+```
+
+`SqliteMutationJournal` uses unique idempotency keys and transactionally claims `APPLYING` before handler invocation. Duplicate workers can observe an existing in-progress or applied intent, but they cannot both claim and apply the same mutation. Recovery is explicit through `recover_mutation(...)`, which uses side-effect readback before deciding whether an `APPLYING` mutation should become `APPLIED` or return to `APPROVED` for retry.
+
 ## Storage Boundaries
 
 - Source code, manifests, docs, schemas, templates, and tests are repository content.

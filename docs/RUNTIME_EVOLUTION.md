@@ -596,6 +596,109 @@ Phase 48 does not claim universal exactly-once delivery. It establishes durable 
 
 The production handler lives outside the generic runtime in `publication_calendar_runtime_handlers.py` as `CalendarEventCreateHandler`. It adapts normalized capability input to the existing scheduling repository and returns a normalized receipt. The generic core contains no `calendar.event.create` branch.
 
+### Phase 49 compensation and journal hardening
+
+Phase 49 does not add a second production mutation capability. `calendar.event.create` remains the only production write capability connected to the generic runtime.
+
+Inspection findings:
+
+| Question | Result |
+| --- | --- |
+| Can created occurrence be deleted by stable ID? | No existing `ScheduleOccurrenceRepository.delete/remove` method was found. |
+| Is delete already implemented? | No. Existing methods are `create`, `save`, `get`, `find_by_key`, `list_all`, and `list_by_schedule`. |
+| Is delete local? | Not applicable; no existing delete inverse exists. |
+| Is delete transaction-safe? | Not applicable; no existing delete inverse exists. |
+| Does `JsonMutationJournal` survive restart? | Yes, it persists records to JSON. |
+| Is `JsonMutationJournal` atomic? | It writes via temp-file replace, but it is not a multi-process transaction/claim mechanism. |
+| Is it safe across processes/workers? | No. It remains suitable for local/dev and simple tests, not production multi-worker mutation claiming. |
+| Is there existing SQLite transactional storage? | Yes. Several repository areas use SQLite with transactions/claims; Phase 49 adds a runtime-local SQLite journal without adding a new DB stack. |
+
+Compensation proof for `calendar.event.create` is therefore:
+
+```text
+COMPENSATION PROOF: BLOCKED
+```
+
+The blocker is intentional. Phase 49 does not invent calendar delete functionality and does not expose `calendar.event.delete`. A future phase can make calendar create compensatable only after an existing safe inverse operation exists or the domain owner explicitly adds one outside the generic core.
+
+Rollback and compensation are distinct:
+
+```text
+ROLLBACK
+= undo an uncommitted transaction
+
+COMPENSATION
+= logically undo an already applied mutation
+  through a new controlled and auditable side effect
+```
+
+Compensation is not mathematically equivalent to rollback. Phase 49 introduces generic compensation contracts but blocks production calendar compensation because the inverse operation is missing:
+
+- `CompensatableMutationHandler`
+- `CompensationIntent`
+- `CompensationReceipt`
+- `CompensationJournalRecord`
+- `CompensationState`
+
+The runtime still fingerprints node-level compensation policy as part of `MutationIntent`. Approval for:
+
+```text
+compensation.mode = none
+```
+
+cannot silently become approval for:
+
+```text
+compensation.mode = on_downstream_failure
+```
+
+Recovery and hardened journal model:
+
+```mermaid
+flowchart TD
+    Journal[Mutation Journal]
+    Prepared[PREPARED]
+    Approved[APPROVED]
+    Applying[APPLYING]
+    Applied[APPLIED]
+    Compensating[COMPENSATING]
+    Compensated[COMPENSATED]
+
+    Journal --> Prepared
+    Journal --> Approved
+    Journal --> Applying
+    Journal --> Applied
+    Journal --> Compensating
+    Journal --> Compensated
+```
+
+`SqliteMutationJournal` is the production-safe journal adapter for the generic mutation runtime. It uses:
+
+- `UNIQUE idempotency_key`;
+- `BEGIN IMMEDIATE` transactions;
+- atomic `claim_applying`;
+- atomic `claim_compensating`;
+- durable mutation and compensation records;
+- explicit `recover_mutation(...)` for stale `APPLYING` reconciliation.
+
+A production mutation must be claimed atomically before execution so duplicate workers cannot apply the same intent concurrently.
+
+Recovery is side-effect aware. `recover_mutation(...)` does not blindly retry an `APPLYING` record. It requires a caller-provided readback/verifier:
+
+```text
+APPLYING
+-> verifier finds resource
+-> mark APPLIED
+
+APPLYING
+-> verifier does not find resource
+-> return to APPROVED for safe retry
+```
+
+For the selected local calendar mutation, the verifier can use the stable occurrence key/resource identity and `ExecutionCalendarService.list_calendar_entries`.
+
+Because production compensation is blocked, the Phase 49 reference failure flow is not enabled for calendar create. The generic contracts and journal states are present for future compensatable components, but no internal calendar delete is registered and no public delete capability is added.
+
 ## Current Inventory
 
 | Area | Current abstraction | Future abstraction | Compatibility strategy | Migration candidate | Risk |
