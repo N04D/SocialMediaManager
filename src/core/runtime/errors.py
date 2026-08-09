@@ -32,3 +32,7 @@ class DeploymentValidationError(RuntimeContractError):
 
 class ExecutionLedgerError(RuntimeContractError):
     pass
+
+
+class PlaybookExecutionError(RuntimeContractError):
+    pass

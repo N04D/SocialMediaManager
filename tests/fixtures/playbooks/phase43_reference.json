@@ -1,0 +1,94 @@
+{
+  "description": "Safe Phase 43 reference fixture. It is compiled and executed only against test.* capabilities.",
+  "edges": [
+    {
+      "condition": "",
+      "source": "trigger",
+      "source_port": "",
+      "target": "uppercase",
+      "target_port": ""
+    },
+    {
+      "condition": "",
+      "source": "uppercase",
+      "source_port": "",
+      "target": "is-hello",
+      "target_port": ""
+    },
+    {
+      "condition": "true",
+      "source": "is-hello",
+      "source_port": "",
+      "target": "echo",
+      "target_port": ""
+    }
+  ],
+  "metadata": {
+    "phase": "43",
+    "side_effects": "none"
+  },
+  "name": "Phase 43 Reference",
+  "nodes": [
+    {
+      "config": {
+        "event_type": "test.input.received"
+      },
+      "kind": "trigger",
+      "node_id": "trigger"
+    },
+    {
+      "config": {
+        "field": "text",
+        "input": {
+          "text": {
+            "from_event": "payload",
+            "path": "text"
+          }
+        },
+        "transformer": "uppercase"
+      },
+      "kind": "transform",
+      "node_id": "uppercase"
+    },
+    {
+      "config": {
+        "left": {
+          "from_node": "uppercase",
+          "path": "text"
+        },
+        "operator": "equals",
+        "right": {
+          "literal": "HELLO"
+        }
+      },
+      "kind": "condition",
+      "node_id": "is-hello"
+    },
+    {
+      "config": {
+        "capability": "test.echo",
+        "input": {
+          "value": {
+            "from_node": "uppercase",
+            "path": "text"
+          }
+        },
+        "requirement": "echoer"
+      },
+      "kind": "capability",
+      "node_id": "echo"
+    }
+  ],
+  "playbook_id": "test.phase43.reference",
+  "requirements": {
+    "echoer": {
+      "capabilities": [
+        "test.echo"
+      ],
+      "description": "Safe echo capability for deterministic executor tests.",
+      "metadata": {}
+    }
+  },
+  "schema_version": "1.0",
+  "version": "1.0.0"
+}

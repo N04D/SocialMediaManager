@@ -2,12 +2,13 @@
 
 Phase 41 introduced contracts for a generic local-first workflow runtime without changing existing social publication behavior.
 Phase 42 adds portable playbook contracts, deployment bindings, side-effect-free execution plans, and an in-memory execution ledger.
+Phase 43 adds the first deterministic executor for internal/test capabilities only.
 
 ## Scope
 
 - No rewrite.
 - Existing Python stack, plugins, scheduler/workers, storage, dashboard, LinkedIn, YouTube, Markdown Website/Git, calendar, and analytics behavior remain unchanged.
-- No side-effectful playbook execution is introduced in this phase.
+- No production platform playbook execution is introduced in this phase.
 - No destructive storage migration is introduced in this phase.
 
 ## Future Runtime Shape
@@ -30,7 +31,7 @@ flowchart TD
     ComponentOut --> ExternalOut
 ```
 
-The side-effectful Playbook Runtime is future work. Phases 41 and 42 only define event, capability, component, install, playbook, deployment, plan compilation, ledger, resolution, and legacy compatibility contracts.
+The side-effectful production Playbook Runtime is future work. Phase 43 executes only internal/test capabilities. Production platform capabilities remain on the legacy path.
 
 ## Phase 42 Portable Playbooks
 
@@ -90,6 +91,94 @@ The distinction is explicit:
 | PlaybookDeployment | `src/core/runtime/deployments.py` | Workspace binding from playbook requirement slots to concrete installs, validated through the capability resolver. |
 | ExecutionPlan | `src/core/runtime/plans.py` | Deterministic, side-effect-free resolved plan containing install and component selections. |
 | ExecutionLedger | `src/core/runtime/ledger.py` | Protocol plus in-memory implementation for execution and node execution state history. |
+| ExecutionContext | `src/core/runtime/execution_context.py` | Per-execution context with trigger event, correlation/trace IDs, variables, and completed node outputs. |
+| NodeResult | `src/core/runtime/results.py` | Handler result contract with `success`, `failure`, `wait`, and `skip` outcomes. |
+| CapabilityHandler | `src/core/runtime/handlers.py` | Technical execution contract keyed by component and capability. |
+| PlaybookExecutor | `src/core/runtime/executor.py` | Deterministic DAG orchestrator that updates the ledger and calls registered internal handlers only. |
+| ExecutionTrace | `src/core/runtime/tracing.py` | Structured helper for execution, node execution, and transition history. |
+
+## Phase 43 Deterministic Executor
+
+```mermaid
+flowchart TD
+    EventEnvelope[EventEnvelope]
+    Deployment[PlaybookDeployment]
+    Plan[ExecutionPlan]
+    Executor[PlaybookExecutor]
+    NodeExecutor[Node execution loop]
+    HandlerRegistry[CapabilityHandlerRegistry]
+    Handler[Component Handler]
+    Result[NodeResult]
+    Ledger[ExecutionLedger]
+
+    EventEnvelope --> Deployment
+    Deployment --> Plan
+    Plan --> Executor
+    Executor --> NodeExecutor
+    NodeExecutor --> HandlerRegistry
+    HandlerRegistry --> Handler
+    Handler --> Result
+    Result --> Ledger
+    Executor --> Ledger
+```
+
+Execution lifecycle:
+
+```mermaid
+flowchart TD
+    Event[Event]
+    Plan[ExecutionPlan]
+    Pending[ExecutionRecord: PENDING]
+    Running[RUNNING]
+    NodeA[Node A]
+    NodeB[Node B]
+    Succeeded[SUCCEEDED]
+
+    Event --> Plan
+    Plan --> Pending
+    Pending --> Running
+    Running --> NodeA
+    NodeA --> NodeB
+    NodeB --> Succeeded
+```
+
+WAIT lifecycle:
+
+```mermaid
+flowchart TD
+    Running[RUNNING]
+    NodeWait[Node WAIT]
+    Waiting[Execution WAITING]
+    Resume[resume]
+    RunningAgain[RUNNING]
+    Succeeded[SUCCEEDED]
+
+    Running --> NodeWait
+    NodeWait --> Waiting
+    Waiting --> Resume
+    Resume --> RunningAgain
+    RunningAgain --> Succeeded
+```
+
+Phase 43 execution boundaries:
+
+- `PlaybookDefinition` remains portable intent and contains no install IDs, account IDs, tokens, or secret references.
+- `PlaybookDeployment` binds logical requirements to installs before execution.
+- `ExecutionPlan` contains concrete install/component selections but no transport details or secret values.
+- `PlaybookExecutor` executes a validated DAG deterministically and sequentially.
+- Capability handlers are resolved by `component_id + capability_id`, not by capability alone.
+- Input resolution supports literals, trigger event payload paths, and previous node outputs. It does not use Python eval, JavaScript, Jinja, or arbitrary expression execution.
+- Conditions support a small deterministic operator set: `equals`, `not_equals`, `exists`, `gt`, `gte`, `lt`, `lte`, and `contains`.
+- Transform nodes are deterministic/internal only, such as identity, field mapping, and uppercase string transformation.
+- Retry is attempt-count based with no sleep/backoff in Phase 43.
+- WAIT/resume is supported for internal handlers. No external callbacks, timers, approvals, or platform listeners are introduced.
+- The Phase 43 reference flow uses only `test.*` capabilities and internal handlers.
+
+Production isolation:
+
+- `PluginRuntime`, `LinkedInChannelRuntime`, `YouTubeChannelService`, `GitPublisher`, and `ExecutionCalendarService` are not called by the Phase 43 executor.
+- Existing dashboard, worker, scheduler, plugin runtime, and channel production paths remain unchanged.
+- No LinkedIn publish/reply, YouTube upload, Git write/push, calendar mutation, browser automation, HTTP/API call, subprocess call, Research/RAG, agent planning, or visual editor behavior is added.
 
 ## Current Inventory
 
@@ -156,6 +245,8 @@ Future persistence can add forward-compatible JSON stores under `studio_data/run
 
 Phase 42 follows the same least-invasive persistence decision. `ExecutionLedger` is a protocol and `InMemoryExecutionLedger` is the first implementation. No SQLite migration or new durable store is added yet because the current repository has several file-backed stores and no single generic runtime database boundary. A future durable ledger can be added as an adapter without changing `ExecutionRecord` or `NodeExecutionRecord`.
 
+Phase 43 keeps the same persistence boundary. The executor writes only to the provided `ExecutionLedger` implementation. Tests use `InMemoryExecutionLedger`; no database migration or file-backed execution store is added.
+
 ## Compatibility Strategy
 
 - Existing `PluginManifest`, `PluginRegistry`, `PluginRuntime`, `ProviderResolver`, channel runtimes, scheduler, and workers are unchanged.
@@ -164,6 +255,7 @@ Phase 42 follows the same least-invasive persistence decision. `ExecutionLedger`
 - PoC manifests live in `runtime_foundation_mappings.py` as `phase41_component_manifests()` and sample installs in `phase41_sample_installs()`.
 - Existing plugin capability strings remain valid and are not replaced in this phase.
 - Playbook validation and plan compilation do not call channel runtimes, browser providers, HTTP clients, Git, or plugin services.
+- Phase 43 execution does not call legacy channel runtimes, browser providers, HTTP clients, Git, subprocesses, or plugin services. Only explicitly registered internal handlers can execute.
 
 ## Phase 42 Validation Decisions
 
@@ -184,3 +276,6 @@ Phase 42 follows the same least-invasive persistence decision. `ExecutionLedger`
 - `PlaybookDefinition` rejects environment-specific and secret-shaped fields such as `install_id`, `account_id`, `workspace_id`, `token`, and `secret`.
 - `PlaybookDeployment`, `ExecutionRecord`, and `NodeExecutionRecord` reject secret-shaped config/metadata values unless they are explicit references.
 - `ExecutionPlan` contains concrete install/component IDs but no component config, secret refs, or secret values.
+- `ExecutionContext`, `NodeResult`, and `ExecutionTrace` reject or omit obvious secret-shaped values.
+- Arbitrary code evaluation is not used for input mapping, conditions, or transforms.
+- External mutations are not possible in the Phase 43 reference flow because only internal/test handlers are registered and side-effect paths are covered by tests.

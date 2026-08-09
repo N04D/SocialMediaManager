@@ -116,9 +116,11 @@ flowchart TD
     ChannelRuntime --> SharedServices
 ```
 
-### Phase 41/42 generic runtime foundation
+### Phase 41/42/43 generic runtime foundation
 
-Phase 41 added a contract layer beside the existing plugin runtime. Phase 42 adds portable playbook definitions, deployment bindings, side-effect-free execution plan compilation, and an in-memory execution ledger. These contracts do not execute playbooks and do not replace the current plugin registry, scheduler, workers, or storage.
+Phase 41 added a contract layer beside the existing plugin runtime. Phase 42 adds portable playbook definitions, deployment bindings, side-effect-free execution plan compilation, and an in-memory execution ledger. Phase 43 adds deterministic playbook execution for internal/test capabilities only.
+
+Phase 43 executes only internal/test capabilities. Production platform capabilities remain on the legacy path.
 
 ```mermaid
 flowchart TD
@@ -150,6 +152,11 @@ New generic contracts live in `src/core/runtime/`:
 - `PlaybookDeployment` binds logical requirement slots to concrete installs for one workspace.
 - `ExecutionPlan` is the deterministic resolved representation produced by validation and capability resolution only.
 - `ExecutionLedger` records execution and node execution state transitions for future audit and observability.
+- `ExecutionContext` carries the trigger event, correlation/trace IDs, variables, and completed node outputs for one execution.
+- `NodeResult` is the handler result contract with `success`, `failure`, `wait`, and `skip` outcomes.
+- `CapabilityHandlerRegistry` resolves execution handlers by `component_id + capability_id`.
+- `PlaybookExecutor` runs a validated DAG sequentially and deterministically against registered internal handlers.
+- `ExecutionTrace` exposes structured execution, node execution, and transition history.
 
 Concrete Phase 41 mappings for LinkedIn, YouTube, Website/GitHub, and the local publication calendar live outside the generic core in `runtime_foundation_mappings.py`.
 
@@ -187,7 +194,66 @@ flowchart TD
     ExecutionRecord --> NodeExecutionRecords
 ```
 
-The future side-effectful Playbook Runtime remains future work. Current business workflows still live in `pipeline.py`, `publication_planning.py`, `publication_scheduling.py`, `publication_execution.py`, channel runtimes, and existing plugins.
+```mermaid
+flowchart TD
+    EventEnvelope[EventEnvelope]
+    Deployment[PlaybookDeployment]
+    Plan[ExecutionPlan]
+    Executor[PlaybookExecutor]
+    NodeExecutor[Node execution loop]
+    HandlerRegistry[CapabilityHandlerRegistry]
+    Handler[Internal/test Component Handler]
+    Result[NodeResult]
+    Ledger[ExecutionLedger]
+
+    EventEnvelope --> Deployment
+    Deployment --> Plan
+    Plan --> Executor
+    Executor --> NodeExecutor
+    NodeExecutor --> HandlerRegistry
+    HandlerRegistry --> Handler
+    Handler --> Result
+    Result --> Ledger
+    Executor --> Ledger
+```
+
+```mermaid
+flowchart TD
+    Event[Event]
+    Plan[ExecutionPlan]
+    Pending[ExecutionRecord: PENDING]
+    Running[RUNNING]
+    NodeA[Node A]
+    NodeB[Node B]
+    Succeeded[SUCCEEDED]
+
+    Event --> Plan
+    Plan --> Pending
+    Pending --> Running
+    Running --> NodeA
+    NodeA --> NodeB
+    NodeB --> Succeeded
+```
+
+```mermaid
+flowchart TD
+    Running[RUNNING]
+    NodeWait[Node WAIT]
+    Waiting[Execution WAITING]
+    Resume[resume]
+    RunningAgain[RUNNING]
+    Succeeded[SUCCEEDED]
+
+    Running --> NodeWait
+    NodeWait --> Waiting
+    Waiting --> Resume
+    Resume --> RunningAgain
+    RunningAgain --> Succeeded
+```
+
+The future side-effectful production Playbook Runtime remains future work. Current business workflows still live in `pipeline.py`, `publication_planning.py`, `publication_scheduling.py`, `publication_execution.py`, channel runtimes, and existing plugins. The Phase 43 executor is isolated from `PluginRuntime`, `LinkedInChannelRuntime`, `YouTubeChannelService`, `GitPublisher`, and `ExecutionCalendarService`.
+
+Phase 43 input mapping supports only literals, trigger event payload paths, and previous node outputs. Condition nodes use a small deterministic operator set. Transform nodes are deterministic/internal only. No Python eval, JavaScript, Jinja execution, browser automation, HTTP/API calls, subprocesses, Git writes, or production platform mutations are introduced.
 
 ## Storage Boundaries
 

@@ -12,11 +12,15 @@ from .errors import (
     CapabilityResolutionError,
     DeploymentValidationError,
     ExecutionLedgerError,
+    PlaybookExecutionError,
     PlaybookValidationError,
     RuntimeContractError,
     RuntimeValidationError,
 )
 from .events import EventEnvelope, EventSource
+from .execution_context import ExecutionContext
+from .executor import ExecutionOutcome, PlaybookExecutor
+from .handlers import CapabilityHandler, CapabilityHandlerRegistry
 from .installs import ComponentBinding, Install
 from .ledger import (
     ExecutionLedger,
@@ -37,6 +41,8 @@ from .playbooks import (
     validate_playbook,
 )
 from .resolver import CapabilityResolution, CapabilityResolver, RuntimeRegistry
+from .results import NodeResult, NodeResultStatus
+from .tracing import ExecutionTrace, trace_execution
 
 __all__ = [
     "CapabilityReportEntry",
@@ -52,20 +58,29 @@ __all__ = [
     "DeploymentValidationResult",
     "EventEnvelope",
     "EventSource",
+    "ExecutionContext",
     "ExecutionLedger",
     "ExecutionLedgerError",
+    "ExecutionOutcome",
     "ExecutionPlan",
     "ExecutionPlanNode",
     "ExecutionRecord",
     "ExecutionState",
+    "ExecutionTrace",
     "ExecutionTransition",
     "InMemoryExecutionLedger",
     "Install",
     "LegacyCapabilityAdapter",
+    "CapabilityHandler",
+    "CapabilityHandlerRegistry",
+    "NodeResult",
+    "NodeResultStatus",
     "NodeExecutionRecord",
     "PlaybookDefinition",
     "PlaybookDeployment",
     "PlaybookEdge",
+    "PlaybookExecutionError",
+    "PlaybookExecutor",
     "PlaybookNode",
     "PlaybookNodeKind",
     "PlaybookValidationError",
@@ -75,6 +90,7 @@ __all__ = [
     "RuntimeValidationError",
     "capability_report",
     "compile_execution_plan",
+    "trace_execution",
     "validate_deployment",
     "validate_playbook",
 ]
