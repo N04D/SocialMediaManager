@@ -1,0 +1,83 @@
+{
+  "description": "Approved production mutation fixture for local publication calendar occurrences.",
+  "edges": [
+    {
+      "condition": "",
+      "source": "trigger",
+      "source_port": "",
+      "target": "create-calendar",
+      "target_port": ""
+    }
+  ],
+  "metadata": {
+    "phase": "48",
+    "side_effects": "approved_local_mutation"
+  },
+  "name": "Phase 48 Calendar Create",
+  "nodes": [
+    {
+      "config": {
+        "event_type": "calendar.create.requested"
+      },
+      "kind": "trigger",
+      "node_id": "trigger"
+    },
+    {
+      "config": {
+        "capability": "calendar.event.create",
+        "input": {
+          "campaign_id": {
+            "from_event": "payload",
+            "path": "campaign_id"
+          },
+          "end": {
+            "from_event": "payload",
+            "path": "end"
+          },
+          "occurrence_key": {
+            "from_event": "payload",
+            "path": "occurrence_key"
+          },
+          "schedule_id": {
+            "from_event": "payload",
+            "path": "schedule_id"
+          },
+          "sequence_number": {
+            "from_event": "payload",
+            "path": "sequence_number"
+          },
+          "start": {
+            "from_event": "payload",
+            "path": "start"
+          },
+          "status": {
+            "from_event": "payload",
+            "path": "status"
+          },
+          "timezone": {
+            "from_event": "payload",
+            "path": "timezone"
+          }
+        },
+        "requirement": "calendar",
+        "retry": {
+          "max_attempts": 2
+        }
+      },
+      "kind": "capability",
+      "node_id": "create-calendar"
+    }
+  ],
+  "playbook_id": "calendar.phase48.create",
+  "requirements": {
+    "calendar": {
+      "capabilities": [
+        "calendar.event.create"
+      ],
+      "description": "Create a local publication calendar occurrence.",
+      "metadata": {}
+    }
+  },
+  "schema_version": "1.0",
+  "version": "1.0.0"
+}

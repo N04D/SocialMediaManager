@@ -32,6 +32,16 @@ from .ledger import (
     NodeExecutionRecord,
 )
 from .legacy import LegacyCapabilityAdapter
+from .mutations import (
+    InMemoryMutationJournal,
+    JsonMutationJournal,
+    MutationIntent,
+    MutationJournal,
+    MutationJournalRecord,
+    MutationReceipt,
+    MutationState,
+    mutation_input_fingerprint,
+)
 from .plans import ExecutionPlan, ExecutionPlanNode, compile_execution_plan
 from .playbooks import (
     CapabilityRequirement,
@@ -83,8 +93,10 @@ __all__ = [
     "ExecutionTransition",
     "InMemoryExecutionLedger",
     "InMemoryApprovalStore",
+    "InMemoryMutationJournal",
     "Install",
     "InstallGrants",
+    "JsonMutationJournal",
     "EffectivePermission",
     "LegacyCapabilityAdapter",
     "CapabilityHandler",
@@ -92,6 +104,11 @@ __all__ = [
     "NodeResult",
     "NodeResultStatus",
     "NodeExecutionRecord",
+    "MutationIntent",
+    "MutationJournal",
+    "MutationJournalRecord",
+    "MutationReceipt",
+    "MutationState",
     "PlaybookDefinition",
     "PlaybookDeployment",
     "PlaybookEdge",
@@ -109,6 +126,7 @@ __all__ = [
     "RuntimeValidationError",
     "capability_report",
     "compile_execution_plan",
+    "mutation_input_fingerprint",
     "trace_execution",
     "validate_deployment",
     "validate_playbook",

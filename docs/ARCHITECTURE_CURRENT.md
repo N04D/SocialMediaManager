@@ -567,6 +567,53 @@ Generic Runtime
 -> CapabilityHandler
 ```
 
+### Phase 48 approved production mutation
+
+Phase 48 connects the first production mutation to the same generic runtime:
+
+```text
+calendar.event.create
+-> CalendarEventCreateHandler
+-> ScheduleOccurrenceRepository.create
+-> local publication calendar storage
+```
+
+This is local and readback-verifiable. It creates only a publication-calendar occurrence record in the existing scheduling JSON store. It does not enable external calendar mutation, LinkedIn/YouTube/Git mutations, website publish, or any second production write capability.
+
+Approved write lifecycle:
+
+```mermaid
+flowchart TD
+    Event[Event]
+    Playbook[Portable Playbook]
+    Deployment[Deployment]
+    Plan[ExecutionPlan]
+    Policy[Policy]
+    Intent[MutationIntent]
+    Approval[APPROVAL]
+    Executor[PlaybookExecutor]
+    Handler[CalendarEventCreateHandler]
+    Service[Existing Production Service]
+    Receipt[MutationReceipt]
+    Ledger[ExecutionLedger]
+
+    Event --> Playbook
+    Playbook --> Deployment
+    Deployment --> Plan
+    Plan --> Policy
+    Policy --> Intent
+    Intent --> Approval
+    Approval --> Executor
+    Executor --> Handler
+    Handler --> Service
+    Service --> Receipt
+    Receipt --> Ledger
+```
+
+Approval authorizes an exact `MutationIntent`, not a generic capability. The runtime fingerprints normalized input before approval, rechecks policy before handler invocation, and records the applied mutation in a durable journal. The selected local mutation uses the existing `occurrence_key` duplicate handling plus the mutation journal to prevent duplicate resources across retry, resume, duplicate approval, and duplicate trigger delivery.
+
+Phase 48 does not claim universal exactly-once semantics for external systems. It establishes durable idempotency semantics for the selected local production mutation.
+
 ## Storage Boundaries
 
 - Source code, manifests, docs, schemas, templates, and tests are repository content.

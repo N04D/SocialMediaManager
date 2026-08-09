@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from publication_calendar_runtime_handlers import (
+    CALENDAR_EVENT_CREATE_INPUT_SCHEMA,
+    CALENDAR_EVENT_CREATE_OUTPUT_SCHEMA,
     CALENDAR_EVENT_READ_INPUT_SCHEMA,
     CALENDAR_EVENT_READ_OUTPUT_SCHEMA,
 )
@@ -124,7 +126,14 @@ def phase41_component_manifests() -> tuple[ComponentManifest, ...]:
                     output_schema=CALENDAR_EVENT_READ_OUTPUT_SCHEMA,
                     description="Read local publication calendar entries from ExecutionCalendarService.",
                 ),
-                CapabilityDescriptor("calendar.event.create", "0.1.0", CapabilityMode.WRITE.value),
+                CapabilityDescriptor(
+                    "calendar.event.create",
+                    "0.1.0",
+                    CapabilityMode.WRITE.value,
+                    input_schema=CALENDAR_EVENT_CREATE_INPUT_SCHEMA,
+                    output_schema=CALENDAR_EVENT_CREATE_OUTPUT_SCHEMA,
+                    description="Create a local publication calendar occurrence through the existing JSON-backed scheduling repository.",
+                ),
                 CapabilityDescriptor("calendar.event.update", "0.1.0", CapabilityMode.WRITE.value),
             ),
             permissions={

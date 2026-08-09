@@ -10,9 +10,20 @@ from .execution_context import ExecutionContext
 from .handlers import CapabilityHandlerRegistry
 from .input_resolution import resolve_node_input
 from .ledger import TERMINAL_STATES, ExecutionLedger, ExecutionRecord, ExecutionState, InMemoryExecutionLedger
+from .mutations import (
+    InMemoryMutationJournal,
+    MutationIntent,
+    MutationJournal,
+    MutationReceipt,
+    MutationState,
+    build_mutation_id,
+    build_mutation_idempotency_key,
+    canonical_mutation_input,
+    mutation_input_fingerprint,
+)
 from .plans import ExecutionPlan, ExecutionPlanNode
 from .playbooks import PlaybookNode, PlaybookNodeKind
-from .policy import ApprovalStatus, InMemoryApprovalStore, RuntimePolicyEngine
+from .policy import ApprovalRecord, ApprovalStatus, InMemoryApprovalStore, RuntimePolicyEngine
 from .results import NodeResult, NodeResultStatus
 from .transforms import execute_transform
 
@@ -29,6 +40,7 @@ class PlaybookExecutor:
     ledger: ExecutionLedger = field(default_factory=InMemoryExecutionLedger)
     policy_engine: RuntimePolicyEngine | None = None
     approval_store: InMemoryApprovalStore = field(default_factory=InMemoryApprovalStore)
+    mutation_journal: MutationJournal = field(default_factory=InMemoryMutationJournal)
     _contexts: dict[str, ExecutionContext] = field(default_factory=dict)
     _plans: dict[str, ExecutionPlan] = field(default_factory=dict)
     _waiting_node_ids: dict[str, str] = field(default_factory=dict)
@@ -92,7 +104,15 @@ class PlaybookExecutor:
             resume_node_id=self._waiting_node_ids.pop(execution_id, ""),
         )
 
-    def approve_execution_node(self, execution_id: str, node_id: str, *, actor: str = "") -> ExecutionOutcome:
+    def approve_execution_node(
+        self,
+        execution_id: str,
+        node_id: str,
+        *,
+        actor: str = "",
+        actor_id: str = "",
+        actor_type: str = "",
+    ) -> ExecutionOutcome:
         record = self.ledger.get_execution(execution_id)
         if record is None:
             raise PlaybookExecutionError(
@@ -111,14 +131,50 @@ class PlaybookExecutor:
                 "Rejected approval cannot be approved later.",
                 {"execution_id": execution_id, "node_id": node_id},
             )
-        self.approval_store.approve(execution_id, node_id, actor=actor)
+        approved = self.approval_store.approve(
+            execution_id, node_id, actor=actor, actor_id=actor_id, actor_type=actor_type
+        )
+        mutation_id = str(approved.metadata.get("mutation_id") or "")
+        if mutation_id:
+            self.mutation_journal.mark_approved(mutation_id, approval_id=approved.approval_id)
         current = self.ledger.get_execution(execution_id)
         assert current is not None
         if current.state in TERMINAL_STATES:
             return ExecutionOutcome(current, self._contexts[execution_id])
         return self.resume_execution(execution_id)
 
-    def reject_execution_node(self, execution_id: str, node_id: str, *, actor: str = "") -> ExecutionOutcome:
+    def approve_mutation_intent(
+        self,
+        mutation_id: str,
+        *,
+        actor: str = "",
+        actor_id: str = "",
+        actor_type: str = "",
+    ) -> ExecutionOutcome:
+        record = self.mutation_journal.get(mutation_id)
+        if record is None:
+            raise PlaybookExecutionError(
+                "MUTATION_INTENT_NOT_FOUND",
+                "Mutation intent was not prepared.",
+                {"mutation_id": mutation_id},
+            )
+        return self.approve_execution_node(
+            record.intent.execution_id,
+            record.intent.node_id,
+            actor=actor,
+            actor_id=actor_id,
+            actor_type=actor_type,
+        )
+
+    def reject_execution_node(
+        self,
+        execution_id: str,
+        node_id: str,
+        *,
+        actor: str = "",
+        actor_id: str = "",
+        actor_type: str = "",
+    ) -> ExecutionOutcome:
         record = self.ledger.get_execution(execution_id)
         if record is None:
             raise PlaybookExecutionError(
@@ -131,7 +187,12 @@ class PlaybookExecutor:
                 "No approval is pending for this execution node.",
                 {"execution_id": execution_id, "node_id": node_id},
             )
-        self.approval_store.reject(execution_id, node_id, actor=actor)
+        rejected = self.approval_store.reject(
+            execution_id, node_id, actor=actor, actor_id=actor_id, actor_type=actor_type
+        )
+        mutation_id = str(rejected.metadata.get("mutation_id") or "")
+        if mutation_id:
+            self.mutation_journal.record_failed(mutation_id, error_code="APPROVAL_REJECTED")
         for node_execution in reversed(self.ledger.list_node_executions(execution_id)):
             if node_execution.node_id == node_id and node_execution.state == ExecutionState.WAITING.value:
                 self.ledger.record_node_transition(
@@ -292,6 +353,7 @@ class PlaybookExecutor:
         if node.kind == PlaybookNodeKind.CAPABILITY.value:
             input_data = resolve_node_input(node.config, context)
             policy_metadata: dict[str, Any] = {}
+            mutation_intent: MutationIntent | None = None
             if self.policy_engine is not None:
                 approval = self.approval_store.get(context.execution_id, node.node_id)
                 decision = self.policy_engine.evaluate(
@@ -299,17 +361,33 @@ class PlaybookExecutor:
                     plan_node=plan_node,
                     approval=approval,
                 )
+                if decision.effective_permission and decision.effective_permission.mutation:
+                    mutation_intent = _prepare_mutation_intent(
+                        context=context,
+                        plan_node=plan_node,
+                        input_data=input_data,
+                        journal=self.mutation_journal,
+                    )
                 if decision.required_approval:
+                    approval_metadata = dict(decision.metadata)
+                    if mutation_intent is not None:
+                        approval_metadata.update(_mutation_policy_metadata(mutation_intent))
+                    existing_approval = self.approval_store.get(context.execution_id, node.node_id)
                     requested = self.approval_store.request(
                         execution_id=context.execution_id,
                         node_id=node.node_id,
                         capability_id=plan_node.capability,
-                        metadata=decision.metadata,
+                        metadata=approval_metadata,
+                        replace_existing=_approval_requires_replacement(existing_approval, approval_metadata),
                     )
                     return NodeResult.wait(
-                        {"waiting": True, "approval_id": requested.approval_id},
                         {
-                            **decision.metadata,
+                            "waiting": True,
+                            "approval_id": requested.approval_id,
+                            "mutation_id": mutation_intent.mutation_id if mutation_intent else "",
+                        },
+                        {
+                            **approval_metadata,
                             "approval_id": requested.approval_id,
                             "approval_status": requested.status,
                             "waiting_reason": "approval_required",
@@ -320,8 +398,70 @@ class PlaybookExecutor:
                         decision.reason_code, "Runtime policy denied capability execution.", decision.metadata
                     )
                 policy_metadata = decision.metadata
+                if mutation_intent is not None:
+                    mismatch = _approved_intent_mismatch(approval, mutation_intent)
+                    if mismatch:
+                        requested = self.approval_store.request(
+                            execution_id=context.execution_id,
+                            node_id=node.node_id,
+                            capability_id=plan_node.capability,
+                            metadata={**decision.metadata, **_mutation_policy_metadata(mutation_intent)},
+                            replace_existing=True,
+                        )
+                        return NodeResult.wait(
+                            {
+                                "waiting": True,
+                                "approval_id": requested.approval_id,
+                                "mutation_id": mutation_intent.mutation_id,
+                            },
+                            {
+                                **decision.metadata,
+                                **_mutation_policy_metadata(mutation_intent),
+                                "approval_id": requested.approval_id,
+                                "approval_status": requested.status,
+                                "waiting_reason": "approval_required",
+                                "reason_code": "MUTATION_APPROVAL_MISMATCH",
+                            },
+                        )
+                    applied = self.mutation_journal.find_by_idempotency_key(mutation_intent.idempotency_key)
+                    if applied is not None and applied.state == MutationState.APPLIED.value and applied.receipt:
+                        return NodeResult.success(
+                            {
+                                "mutation_receipt": applied.receipt.to_dict(),
+                                "resource_ref": applied.receipt.resource_ref,
+                                "idempotent_replay": True,
+                            },
+                            {
+                                **policy_metadata,
+                                **_mutation_policy_metadata(mutation_intent),
+                                "mutation_replayed": True,
+                            },
+                        )
+                    self.mutation_journal.mark_approved(
+                        mutation_intent.mutation_id, approval_id=approval.approval_id if approval else ""
+                    )
+                    self.mutation_journal.mark_applying(mutation_intent.mutation_id)
+                    input_data = _with_runtime_mutation(input_data, mutation_intent)
+                    policy_metadata = {**policy_metadata, **_mutation_policy_metadata(mutation_intent)}
             handler = self.handler_registry.resolve(plan_node.component_id, plan_node.capability)
             result = handler.execute(context=context, node=node, resolved_node=plan_node, input_data=input_data)
+            if mutation_intent is not None:
+                if result.status == NodeResultStatus.SUCCESS.value:
+                    receipt = _mutation_receipt_from_result(result, mutation_intent)
+                    self.mutation_journal.record_applied(receipt)
+                    if "mutation_receipt" in result.output or "resource_ref" in result.output:
+                        result = NodeResult(
+                            status=result.status,
+                            output={**result.output, "mutation_receipt": receipt.to_dict()},
+                            metadata=result.metadata,
+                            error_code=result.error_code,
+                            error_message=result.error_message,
+                        )
+                elif result.status == NodeResultStatus.FAILURE.value:
+                    self.mutation_journal.record_failed(
+                        mutation_intent.mutation_id,
+                        error_code=result.error_code or "CAPABILITY_EXECUTION_FAILED",
+                    )
             if policy_metadata and isinstance(result, NodeResult):
                 return NodeResult(
                     status=result.status,
@@ -357,6 +497,98 @@ def _new_context(record: ExecutionRecord, trigger_event: EventEnvelope) -> Execu
 def _execution_idempotency_key(plan: ExecutionPlan, trigger_event: EventEnvelope) -> str:
     event_key = trigger_event.idempotency_key or trigger_event.external_event_id or trigger_event.event_id
     return f"{plan.deployment_id}:{event_key}"
+
+
+def _prepare_mutation_intent(
+    *,
+    context: ExecutionContext,
+    plan_node: ExecutionPlanNode,
+    input_data: dict[str, Any],
+    journal: MutationJournal,
+) -> MutationIntent:
+    normalized = canonical_mutation_input(input_data)
+    fingerprint = mutation_input_fingerprint(normalized)
+    mutation_id = build_mutation_id(
+        execution_id=context.execution_id,
+        node_id=plan_node.node_id,
+        capability_id=plan_node.capability,
+        component_id=plan_node.component_id,
+        install_id=plan_node.install_id,
+        input_fingerprint=fingerprint,
+    )
+    idempotency_key = build_mutation_idempotency_key(
+        deployment_id=context.deployment_id,
+        execution_id=context.execution_id,
+        node_id=plan_node.node_id,
+        trigger_idempotency_key=context.trigger_event.idempotency_key
+        or context.trigger_event.external_event_id
+        or context.trigger_event.event_id,
+        input_fingerprint=fingerprint,
+    )
+    intent = MutationIntent(
+        mutation_id=mutation_id,
+        execution_id=context.execution_id,
+        node_id=plan_node.node_id,
+        capability_id=plan_node.capability,
+        component_id=plan_node.component_id,
+        install_id=plan_node.install_id,
+        normalized_input=normalized,
+        input_fingerprint=fingerprint,
+        idempotency_key=idempotency_key,
+    )
+    journal.prepare_intent(intent)
+    return intent
+
+
+def _mutation_policy_metadata(intent: MutationIntent) -> dict[str, Any]:
+    return {
+        "input_fingerprint": intent.input_fingerprint,
+        "mutation_id": intent.mutation_id,
+        "mutation_idempotency_key": intent.idempotency_key,
+    }
+
+
+def _approval_requires_replacement(approval: ApprovalRecord | None, metadata: dict[str, Any]) -> bool:
+    if approval is None:
+        return False
+    mutation_id = str(metadata.get("mutation_id") or "")
+    if not mutation_id:
+        return False
+    return str(approval.metadata.get("input_fingerprint") or "") != str(metadata.get("input_fingerprint") or "")
+
+
+def _approved_intent_mismatch(approval: ApprovalRecord | None, intent: MutationIntent) -> bool:
+    if approval is None or approval.status != ApprovalStatus.APPROVED.value:
+        return False
+    return str(approval.metadata.get("input_fingerprint") or "") != intent.input_fingerprint
+
+
+def _with_runtime_mutation(input_data: dict[str, Any], intent: MutationIntent) -> dict[str, Any]:
+    return {
+        **input_data,
+        "_runtime": {
+            "idempotency_key": intent.idempotency_key,
+            "input_fingerprint": intent.input_fingerprint,
+            "mutation_id": intent.mutation_id,
+        },
+    }
+
+
+def _mutation_receipt_from_result(result: NodeResult, intent: MutationIntent) -> MutationReceipt:
+    receipt_payload = result.output.get("mutation_receipt")
+    if isinstance(receipt_payload, dict) and receipt_payload:
+        return MutationReceipt.from_dict(receipt_payload)
+    result_payload = {key: value for key, value in result.output.items() if key != "mutation_receipt"}
+    return MutationReceipt(
+        mutation_id=intent.mutation_id,
+        capability_id=intent.capability_id,
+        component_id=intent.component_id,
+        resource_ref=str(result.output.get("resource_ref") or f"runtime-mutation:{intent.mutation_id}"),
+        applied_at=str(result.metadata.get("applied_at") or ""),
+        idempotency_key=intent.idempotency_key,
+        result_fingerprint=mutation_input_fingerprint(result_payload),
+        metadata={},
+    )
 
 
 def _incoming_edges(plan: ExecutionPlan) -> dict[str, list[dict[str, Any]]]:

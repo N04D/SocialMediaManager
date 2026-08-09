@@ -105,12 +105,16 @@ class ApprovalRecord:
     requested_at: str = field(default_factory=utc_now_iso)
     decided_at: str = ""
     actor: str = ""
+    actor_id: str = ""
+    actor_type: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
     approval_id: str = field(default_factory=lambda: f"approval_{uuid4().hex}")
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "actor": self.actor,
+            "actor_id": self.actor_id,
+            "actor_type": self.actor_type,
             "approval_id": self.approval_id,
             "capability_id": self.capability_id,
             "decided_at": self.decided_at,
@@ -130,11 +134,17 @@ class InMemoryApprovalStore:
         return self.approvals.get((execution_id, node_id))
 
     def request(
-        self, *, execution_id: str, node_id: str, capability_id: str, metadata: dict[str, Any] | None = None
+        self,
+        *,
+        execution_id: str,
+        node_id: str,
+        capability_id: str,
+        metadata: dict[str, Any] | None = None,
+        replace_existing: bool = False,
     ) -> ApprovalRecord:
         key = (execution_id, node_id)
         existing = self.approvals.get(key)
-        if existing is not None:
+        if existing is not None and not replace_existing:
             return existing
         record = ApprovalRecord(
             execution_id=execution_id,
@@ -145,17 +155,47 @@ class InMemoryApprovalStore:
         self.approvals[key] = record
         return record
 
-    def approve(self, execution_id: str, node_id: str, *, actor: str = "") -> ApprovalRecord:
+    def approve(
+        self,
+        execution_id: str,
+        node_id: str,
+        *,
+        actor: str = "",
+        actor_id: str = "",
+        actor_type: str = "",
+    ) -> ApprovalRecord:
         record = self.approvals[(execution_id, node_id)]
         if record.status == ApprovalStatus.APPROVED.value:
             return record
-        approved = replace(record, status=ApprovalStatus.APPROVED.value, decided_at=utc_now_iso(), actor=actor)
+        approved = replace(
+            record,
+            status=ApprovalStatus.APPROVED.value,
+            decided_at=utc_now_iso(),
+            actor=actor,
+            actor_id=actor_id,
+            actor_type=actor_type,
+        )
         self.approvals[(execution_id, node_id)] = approved
         return approved
 
-    def reject(self, execution_id: str, node_id: str, *, actor: str = "") -> ApprovalRecord:
+    def reject(
+        self,
+        execution_id: str,
+        node_id: str,
+        *,
+        actor: str = "",
+        actor_id: str = "",
+        actor_type: str = "",
+    ) -> ApprovalRecord:
         record = self.approvals[(execution_id, node_id)]
-        rejected = replace(record, status=ApprovalStatus.REJECTED.value, decided_at=utc_now_iso(), actor=actor)
+        rejected = replace(
+            record,
+            status=ApprovalStatus.REJECTED.value,
+            decided_at=utc_now_iso(),
+            actor=actor,
+            actor_id=actor_id,
+            actor_type=actor_type,
+        )
         self.approvals[(execution_id, node_id)] = rejected
         return rejected
 

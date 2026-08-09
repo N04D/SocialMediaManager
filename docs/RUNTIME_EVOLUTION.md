@@ -526,6 +526,76 @@ test.resource.write
 
 It mutates only in-memory test state. It is used to prove mutation deny, approval wait, approval resume, rejection, and duplicate approval behavior without enabling a production mutation path.
 
+### Phase 48 approved production mutation
+
+Phase 48 connects exactly one production mutation to the generic runtime:
+
+```text
+calendar.event.create
+-> publication-calendar-local
+-> ScheduleOccurrenceRepository.create
+-> local publication calendar JSON storage
+```
+
+Mutation inspection:
+
+| Capability candidate | Existing service method | Local/external | Mutation type | Reversible? | Existing identifier? | Transaction/idempotency support | Suitable? |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `calendar.event.create` | `ScheduleOccurrenceRepository.create` through the local publication scheduling stack | Local | Create a publication calendar occurrence record | Yes in tests through isolated temp storage; production data remains local JSON | `occurrence_key` and `id` | JSON store lock plus duplicate `occurrence_key` returns the existing occurrence | YES |
+| `calendar.event.update` | Occurrence/schedule save/update paths exist | Local | Update existing scheduling state | More invasive because it changes existing records | Existing record IDs | Existing save methods, but broader state semantics | NO for Phase 48 |
+| Git/Website write | `GitPublisher.publish` | Local + remote risk | File write/commit/push | Not small enough; may push externally | Commit/hash/path | Git idempotency is publication-specific | NO |
+| LinkedIn/YouTube publish/reply/upload | Channel services | External | Platform mutation | Not reversible locally | Provider IDs | Provider-specific | NO |
+
+The chosen mutation is intentionally scoped to the local publication calendar. The capability output uses a stable `resource_ref`:
+
+```text
+calendar-occurrence:<occurrence_id>
+```
+
+Phase 48 introduces generic mutation contracts:
+
+- `MutationIntent`: exact normalized write input, input fingerprint, capability, component, install, execution, and idempotency key.
+- `MutationReceipt`: durable record of the applied mutation, resource reference, applied timestamp, result fingerprint, and safe metadata.
+- `MutationJournal`: durable state interface with `prepared`, `approved`, `applying`, `applied`, and `failed` states.
+- `JsonMutationJournal`: minimal file-backed journal adapter matching the repository's existing JSON-storage style.
+
+Write lifecycle:
+
+```mermaid
+flowchart TD
+    Write[Write Node]
+    Policy[Policy]
+    Intent[MutationIntent]
+    Approval[Approval Required]
+    Waiting[WAITING]
+    Recheck[Policy Recheck]
+    Journal[Idempotency / Journal]
+    Handler[Production Handler]
+    Receipt[MutationReceipt]
+    Readback[Readback Verification]
+
+    Write --> Policy
+    Policy --> Intent
+    Intent --> Approval
+    Approval --> Waiting
+    Waiting -->|approve| Recheck
+    Recheck --> Journal
+    Journal --> Handler
+    Handler --> Receipt
+    Receipt --> Readback
+```
+
+Approval authorizes an exact `MutationIntent`, not a generic capability. The runtime binds approval to the intent's `mutation_id` and deterministic input fingerprint. If input changes after approval, the old approval is invalid and the node returns to `WAITING` for a new approval. Policy is also re-evaluated immediately before handler invocation, so approval does not freeze or escalate permissions.
+
+Phase 48 does not claim universal exactly-once delivery. It establishes durable idempotency semantics for the selected local production mutation by combining:
+
+- explicit runtime mutation idempotency keys;
+- a durable mutation journal;
+- the existing `ScheduleOccurrenceRepository.create` duplicate-`occurrence_key` behavior;
+- read-after-write verification through `ExecutionCalendarService.list_calendar_entries`.
+
+The production handler lives outside the generic runtime in `publication_calendar_runtime_handlers.py` as `CalendarEventCreateHandler`. It adapts normalized capability input to the existing scheduling repository and returns a normalized receipt. The generic core contains no `calendar.event.create` branch.
+
 ## Current Inventory
 
 | Area | Current abstraction | Future abstraction | Compatibility strategy | Migration candidate | Risk |
@@ -581,7 +651,7 @@ It mutates only in-memory test state. It is used to prove mutation deny, approva
 | Website/GitHub | `website.publication.verify` | Markdown Website verification/evidence flow | `github-markdown-website` | MAPPED |
 | Website/GitHub | `website.analytics.read` | Website analytics read models/provider framework | `github-markdown-website` | PARTIAL |
 | Calendar | `calendar.event.read` | `ExecutionCalendarService.list_calendar_entries` | `publication-calendar-local` | MAPPED |
-| Calendar | `calendar.event.create` | Schedule materialization and repositories | `publication-calendar-local` | PARTIAL |
+| Calendar | `calendar.event.create` | `ScheduleOccurrenceRepository.create` via `CalendarEventCreateHandler` | `publication-calendar-local` | MAPPED |
 | Calendar | `calendar.event.update` | Schedule/campaign/occurrence state updates | `publication-calendar-local` | PARTIAL |
 | Calendar | External calendar sync | No Google/Microsoft/CalDAV implementation found | None | NOT IMPLEMENTED |
 
@@ -603,6 +673,8 @@ Phase 46 does not add persistence. YouTube metadata reads use the existing YouTu
 
 Phase 47 does not add durable policy persistence. `InstallGrants`, `DeploymentPolicy`, policy decisions, and approval records are in-memory/runtime-contract objects for now. Durable policy and approval storage can be added later as an adapter without changing the policy decision contract.
 
+Phase 48 adds a minimal durable mutation journal adapter. Tests use `JsonMutationJournal` against temporary storage; production callers can provide a concrete journal path. Rollback is additive: remove the journal file and unregister the mutation handler. Existing scheduling JSON data and legacy routes are not migrated or rewritten.
+
 ## Compatibility Strategy
 
 - Existing `PluginManifest`, `PluginRegistry`, `PluginRuntime`, `ProviderResolver`, channel runtimes, scheduler, and workers are unchanged.
@@ -616,6 +688,7 @@ Phase 47 does not add durable policy persistence. `InstallGrants`, `DeploymentPo
 - Phase 45 introduces an explicit production handler registration for local Git repository status read only. Existing Website/Git production callers are not converted to playbook execution.
 - Phase 46 introduces an explicit production handler registration for external YouTube video metadata reads only. Existing YouTube import, OAuth, upload, status reconciliation, UI, and worker flows are not converted to playbook execution.
 - Phase 47 policy enforcement applies only to the generic `PlaybookExecutor` when configured with a `RuntimePolicyEngine`. Legacy production routes remain unchanged and are not blocked by missing `InstallGrants`.
+- Phase 48 adds an explicit production mutation registration for local publication-calendar occurrence creation only. Existing calendar UI/API/scheduler callers still use the scheduling services directly and are not converted to playbook execution.
 
 ## Phase 42 Validation Decisions
 
@@ -639,7 +712,8 @@ Phase 47 does not add durable policy persistence. `InstallGrants`, `DeploymentPo
 - `ExecutionContext`, `NodeResult`, and `ExecutionTrace` reject or omit obvious secret-shaped values.
 - Arbitrary code evaluation is not used for input mapping, conditions, or transforms.
 - External mutations are not possible in the Phase 43 reference flow because only internal/test handlers are registered and side-effect paths are covered by tests.
-- Phase 44 `calendar.event.read` rejects secret-shaped handler input, normalizes output, exposes no mutation handler for `calendar.event.create/update/delete`, and is covered by mutation/network/subprocess tripwire tests.
+- Phase 44 `calendar.event.read` rejects secret-shaped handler input, normalizes output, and remains read-only when only read handlers are registered.
 - Phase 45 `git.repository.status.read` rejects secret-shaped and arbitrary command/path input, exposes no write handler, uses no caller-controlled shell command, and is covered by Git mutation, remote-network, and repository-integrity tripwire tests.
 - Phase 46 `youtube.video.metadata.read` rejects secret-shaped input, accepts only a provider video ID, exposes no caller-controlled URL/endpoint/method, and is covered by upload/OAuth mutation, subprocess, SSRF-style input, credential-leakage, timeout, and structured provider-error tests.
 - Phase 47 enforces capability grants, network, secret scope, filesystem, subprocess, mutation, and approval policy before handler invocation. Policy metadata uses neutral keys such as `access_scope` so secret-shaped trace fields are rejected by existing runtime guards.
+- Phase 48 requires approval for the first production mutation even when install/deployment policy allows writes. `MutationIntent`, `MutationReceipt`, journal records, approval records, ledger metadata, and trace output contain no raw credentials or secret-shaped fields. Duplicate approval, retry, resume, duplicate trigger delivery, and failure-after-apply paths are covered by idempotency tests for the selected local calendar mutation.
