@@ -319,6 +319,7 @@ class InMemoryExecutionLedger:
             finished_at=now if next_state in TERMINAL_STATES else record.finished_at,
             error_code=error_code or record.error_code,
             error_message=error_message or record.error_message,
+            metadata=_json_safe({**record.metadata, **(metadata or {})}),
         )
         self.node_executions[node_execution_id] = updated
         self.transitions.append(

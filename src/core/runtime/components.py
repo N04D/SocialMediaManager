@@ -18,6 +18,7 @@ class ComponentManifest:
     required_secrets: tuple[str, ...] = field(default_factory=tuple)
     config_schema: dict[str, Any] = field(default_factory=dict)
     network_policy: dict[str, Any] = field(default_factory=dict)
+    permissions: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -43,6 +44,7 @@ class ComponentManifest:
             "config_schema": json.loads(json.dumps(self.config_schema, sort_keys=True, ensure_ascii=True)),
             "metadata": json.loads(json.dumps(self.metadata, sort_keys=True, ensure_ascii=True)),
             "network_policy": json.loads(json.dumps(self.network_policy, sort_keys=True, ensure_ascii=True)),
+            "permissions": json.loads(json.dumps(self.permissions, sort_keys=True, ensure_ascii=True)),
             "provider": self.provider,
             "required_secrets": list(self.required_secrets),
             "sdk_version": self.sdk_version,
@@ -64,5 +66,6 @@ class ComponentManifest:
             required_secrets=tuple(str(item) for item in payload.get("required_secrets", [])),
             config_schema=dict(payload.get("config_schema") or {}),
             network_policy=dict(payload.get("network_policy") or {}),
+            permissions=dict(payload.get("permissions") or {}),
             metadata=dict(payload.get("metadata") or {}),
         )

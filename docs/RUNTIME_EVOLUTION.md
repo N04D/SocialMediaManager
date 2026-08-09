@@ -421,6 +421,111 @@ flowchart TD
 
 The generic runtime now supports production capabilities backed by local service I/O, local repository/subprocess I/O, and external network I/O without provider-specific branching in the core.
 
+## Phase 47 Runtime Policy, Permissions, and Approval Gates
+
+Phase 47 adds runtime authorization for the generic PlaybookExecutor path. No production mutation capability is enabled.
+
+Inspection findings:
+
+| Security concept | Existing repository shape | Phase 47 use |
+| --- | --- | --- |
+| Secret references | Channel configs and managed secret services use `*_secret_ref`, `secret_refs`, and redaction helpers. | Runtime policy validates only refs/scopes. Raw values stay at production handler boundaries. |
+| Plugin permissions | Plugin manifests already list broad permissions such as `outbound_network`, `secret_storage`, and `media_read`. | Component manifests now expose generic technical `permissions` for runtime execution. |
+| Component egress | Phase 46 added `network_policy` to `ComponentManifest`. | `RuntimePolicyEngine` evaluates network required/allowed domains before handler invocation. |
+| Install ownership | `Install` already binds capabilities to components and stores secret refs. | `InstallGrants` now explicitly allows/denies capabilities and sensitive privileges. |
+| Deployment config | `PlaybookDeployment` already binds portable requirements to installs. | `DeploymentPolicy` can only restrict effective permissions; it cannot grant beyond component/install. |
+| WAIT/resume | Phase 43 supports WAITING executions and resume. | Approval gates reuse WAITING semantics before handler execution. |
+| Audit/trace | `ExecutionLedger` stores node executions and append-only transitions. | Policy decisions are recorded in node metadata/transition metadata without secrets. |
+
+Effective permission model:
+
+```text
+Component Permissions
+        ∩
+Install Grants
+        ∩
+Deployment Policy
+        ↓
+Effective Permission
+        ↓
+Policy Decision
+        ↓
+ALLOW / DENY / APPROVAL_REQUIRED
+```
+
+Execution policy flow:
+
+```mermaid
+flowchart TD
+    Plan[ExecutionPlan]
+    Executor[PlaybookExecutor]
+    Policy[RuntimePolicyEngine]
+    Allow[ALLOW]
+    Deny[DENY]
+    Approval[APPROVAL]
+    Handler[CapabilityHandler]
+    Waiting[WAITING]
+    Decision[approve/reject]
+
+    Plan --> Executor
+    Executor --> Policy
+    Policy --> Allow
+    Policy --> Deny
+    Policy --> Approval
+    Allow --> Handler
+    Approval --> Waiting
+    Waiting --> Decision
+```
+
+Deterministic evaluation order:
+
+1. Deployment enabled.
+2. Install enabled.
+3. Component provides the capability.
+4. Capability explicitly denied.
+5. Capability explicitly granted.
+6. Mutation allowed for write capabilities.
+7. Network required/allowed.
+8. Required egress domains allowed by install and deployment.
+9. Filesystem access allowed.
+10. Subprocess access allowed.
+11. Required secret refs present and granted.
+12. Approval requirement.
+13. ALLOW.
+
+Sensitive privileges are default-deny in the generic runtime policy layer:
+
+- write/mutation;
+- network egress;
+- secret usage;
+- filesystem access;
+- subprocess access.
+
+Approval semantics:
+
+- Policy checks run after deterministic input resolution and before handler lookup/invocation.
+- `DENY` returns a structured runtime failure and handler invocation count remains zero.
+- `APPROVAL_REQUIRED` creates an `ApprovalRecord`, moves the node and execution to `WAITING`, and stores policy metadata in the ledger.
+- `approve_execution_node()` marks the approval approved and resumes the waiting node.
+- `reject_execution_node()` marks the approval rejected, fails the waiting node, and fails the execution.
+- Approval cannot override hard denies such as `NETWORK_NOT_ALLOWED`, `SECRET_NOT_GRANTED`, or `MUTATION_NOT_ALLOWED`.
+
+Production bridge permissions:
+
+| Bridge | Capability | Component permissions | Install grants used in tests |
+| --- | --- | --- | --- |
+| Calendar | `calendar.event.read` | no network, no filesystem, no subprocess, no secrets | capability grant only |
+| Git | `git.repository.status.read` | filesystem read, read-only Git subprocess, no network | capability + filesystem + subprocess |
+| YouTube | `youtube.video.metadata.read` | network to `www.googleapis.com`/`oauth2.googleapis.com`, scoped secret ref, no subprocess/filesystem | capability + network domains + `youtube-access-token-ref` |
+
+The only write capability used in Phase 47 is synthetic and internal:
+
+```text
+test.resource.write
+```
+
+It mutates only in-memory test state. It is used to prove mutation deny, approval wait, approval resume, rejection, and duplicate approval behavior without enabling a production mutation path.
+
 ## Current Inventory
 
 | Area | Current abstraction | Future abstraction | Compatibility strategy | Migration candidate | Risk |
@@ -496,6 +601,8 @@ Phase 45 does not add persistence. Repository reads use the existing local Git w
 
 Phase 46 does not add persistence. YouTube metadata reads use the existing YouTube channel service and transport; execution state still uses the provided ledger implementation.
 
+Phase 47 does not add durable policy persistence. `InstallGrants`, `DeploymentPolicy`, policy decisions, and approval records are in-memory/runtime-contract objects for now. Durable policy and approval storage can be added later as an adapter without changing the policy decision contract.
+
 ## Compatibility Strategy
 
 - Existing `PluginManifest`, `PluginRegistry`, `PluginRuntime`, `ProviderResolver`, channel runtimes, scheduler, and workers are unchanged.
@@ -508,6 +615,7 @@ Phase 46 does not add persistence. YouTube metadata reads use the existing YouTu
 - Phase 44 introduces an explicit production handler registration for the local calendar read adapter only. Existing calendar UI/API/scheduler callers still use `ExecutionCalendarService` directly and are not converted to playbook execution.
 - Phase 45 introduces an explicit production handler registration for local Git repository status read only. Existing Website/Git production callers are not converted to playbook execution.
 - Phase 46 introduces an explicit production handler registration for external YouTube video metadata reads only. Existing YouTube import, OAuth, upload, status reconciliation, UI, and worker flows are not converted to playbook execution.
+- Phase 47 policy enforcement applies only to the generic `PlaybookExecutor` when configured with a `RuntimePolicyEngine`. Legacy production routes remain unchanged and are not blocked by missing `InstallGrants`.
 
 ## Phase 42 Validation Decisions
 
@@ -534,3 +642,4 @@ Phase 46 does not add persistence. YouTube metadata reads use the existing YouTu
 - Phase 44 `calendar.event.read` rejects secret-shaped handler input, normalizes output, exposes no mutation handler for `calendar.event.create/update/delete`, and is covered by mutation/network/subprocess tripwire tests.
 - Phase 45 `git.repository.status.read` rejects secret-shaped and arbitrary command/path input, exposes no write handler, uses no caller-controlled shell command, and is covered by Git mutation, remote-network, and repository-integrity tripwire tests.
 - Phase 46 `youtube.video.metadata.read` rejects secret-shaped input, accepts only a provider video ID, exposes no caller-controlled URL/endpoint/method, and is covered by upload/OAuth mutation, subprocess, SSRF-style input, credential-leakage, timeout, and structured provider-error tests.
+- Phase 47 enforces capability grants, network, secret scope, filesystem, subprocess, mutation, and approval policy before handler invocation. Policy metadata uses neutral keys such as `access_scope` so secret-shaped trace fields are rejected by existing runtime guards.

@@ -28,6 +28,50 @@ def _safe_config(config: dict[str, Any]) -> dict[str, Any]:
 
 
 @dataclass(frozen=True)
+class DeploymentPolicy:
+    allow_network: bool = False
+    allowed_network_domains: tuple[str, ...] = field(default_factory=tuple)
+    allow_mutations: bool = False
+    allow_filesystem: bool = False
+    allow_subprocess: bool = False
+    require_approval_for_writes: bool = True
+    approval_required_capabilities: tuple[str, ...] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "allowed_network_domains", tuple(str(item) for item in self.allowed_network_domains))
+        object.__setattr__(
+            self,
+            "approval_required_capabilities",
+            tuple(str(item) for item in self.approval_required_capabilities),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "allow_filesystem": self.allow_filesystem,
+            "allow_mutations": self.allow_mutations,
+            "allow_network": self.allow_network,
+            "allow_subprocess": self.allow_subprocess,
+            "allowed_network_domains": list(self.allowed_network_domains),
+            "approval_required_capabilities": list(self.approval_required_capabilities),
+            "require_approval_for_writes": self.require_approval_for_writes,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> DeploymentPolicy:
+        return cls(
+            allow_network=bool(payload.get("allow_network", False)),
+            allowed_network_domains=tuple(str(item) for item in payload.get("allowed_network_domains", ())),
+            allow_mutations=bool(payload.get("allow_mutations", False)),
+            allow_filesystem=bool(payload.get("allow_filesystem", False)),
+            allow_subprocess=bool(payload.get("allow_subprocess", False)),
+            require_approval_for_writes=bool(payload.get("require_approval_for_writes", True)),
+            approval_required_capabilities=tuple(
+                str(item) for item in payload.get("approval_required_capabilities", ())
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class RequirementBinding:
     install_id: str
 
@@ -51,6 +95,7 @@ class PlaybookDeployment:
     requirement_bindings: dict[str, RequirementBinding] = field(default_factory=dict)
     enabled: bool = True
     config: dict[str, Any] = field(default_factory=dict)
+    policy: DeploymentPolicy = field(default_factory=DeploymentPolicy)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "deployment_id", validate_runtime_id(self.deployment_id, field_name="deployment_id"))
@@ -63,6 +108,11 @@ class PlaybookDeployment:
             )
         object.__setattr__(self, "requirement_bindings", normalized)
         object.__setattr__(self, "config", _safe_config(self.config))
+        object.__setattr__(
+            self,
+            "policy",
+            self.policy if isinstance(self.policy, DeploymentPolicy) else DeploymentPolicy.from_dict(dict(self.policy)),
+        )
 
     def binding_for(self, requirement_slot: str) -> RequirementBinding | None:
         return self.requirement_bindings.get(requirement_slot)
@@ -74,6 +124,7 @@ class PlaybookDeployment:
             "enabled": self.enabled,
             "playbook_id": self.playbook_id,
             "playbook_version": self.playbook_version,
+            "policy": self.policy.to_dict(),
             "requirement_bindings": {
                 slot: binding.to_dict() for slot, binding in sorted(self.requirement_bindings.items())
             },
@@ -94,6 +145,7 @@ class PlaybookDeployment:
             },
             enabled=bool(payload.get("enabled", True)),
             config=dict(payload.get("config") or {}),
+            policy=DeploymentPolicy.from_dict(dict(payload.get("policy") or {})),
         )
 
 
@@ -106,14 +158,20 @@ class CapabilityReportEntry:
     status: str = "OK"
     error_code: str = ""
     message: str = ""
+    policy_decision: str = ""
+    policy_reason: str = ""
+    approval_required: bool = False
 
     def to_dict(self) -> dict[str, str]:
         return {
+            "approval_required": str(self.approval_required),
             "capability": self.capability,
             "component_id": self.component_id,
             "error_code": self.error_code,
             "install_id": self.install_id,
             "message": self.message,
+            "policy_decision": self.policy_decision,
+            "policy_reason": self.policy_reason,
             "requirement": self.requirement,
             "status": self.status,
         }
@@ -132,7 +190,10 @@ class DeploymentValidationResult:
 
 
 def capability_report(
-    playbook: PlaybookDefinition, deployment: PlaybookDeployment, registry: RuntimeRegistry
+    playbook: PlaybookDefinition,
+    deployment: PlaybookDeployment,
+    registry: RuntimeRegistry,
+    policy_engine: Any | None = None,
 ) -> DeploymentValidationResult:
     resolver = CapabilityResolver(registry)
     entries: list[CapabilityReportEntry] = []
@@ -190,26 +251,72 @@ def capability_report(
                     )
                 )
             else:
+                policy_decision = ""
+                policy_reason = ""
+                approval_required = False
+                if policy_engine is not None:
+                    from .events import EventEnvelope, EventSource
+                    from .execution_context import ExecutionContext
+                    from .plans import ExecutionPlanNode
+
+                    context = ExecutionContext(
+                        execution_id="policy_report",
+                        deployment_id=deployment.deployment_id,
+                        trigger_event=EventEnvelope(
+                            event_type="runtime.policy.report",
+                            source=EventSource(provider="runtime"),
+                        ),
+                    )
+                    decision = policy_engine.evaluate(
+                        execution_context=context,
+                        plan_node=ExecutionPlanNode(
+                            node_id="policy-report",
+                            kind="capability",
+                            requirement=requirement_slot,
+                            capability=capability,
+                            install_id=resolved.install.install_id,
+                            component_id=resolved.component.component_id,
+                            provider=resolved.component.provider,
+                        ),
+                    )
+                    policy_decision = "ALLOW" if decision.allowed and not decision.required_approval else "APPROVAL"
+                    if not decision.allowed:
+                        policy_decision = "DENY"
+                    policy_reason = decision.reason_code
+                    approval_required = decision.required_approval
                 entries.append(
                     CapabilityReportEntry(
                         requirement=requirement_slot,
                         capability=capability,
                         install_id=resolved.install.install_id,
                         component_id=resolved.component.component_id,
+                        policy_decision=policy_decision,
+                        policy_reason=policy_reason,
+                        approval_required=approval_required,
                     )
                 )
     return DeploymentValidationResult(ok=not any(entry.status != "OK" for entry in entries), entries=tuple(entries))
 
 
 def validate_deployment(
-    playbook: PlaybookDefinition, deployment: PlaybookDeployment, registry: RuntimeRegistry
+    playbook: PlaybookDefinition,
+    deployment: PlaybookDeployment,
+    registry: RuntimeRegistry,
+    policy_engine: Any | None = None,
 ) -> DeploymentValidationResult:
-    result = capability_report(playbook, deployment, registry)
+    result = capability_report(playbook, deployment, registry, policy_engine=policy_engine)
     if not result.ok:
         first = result.failures()[0]
         raise DeploymentValidationError(
             first.error_code,
             first.message or "Playbook deployment is invalid.",
             first.to_dict(),
+        )
+    denied = next((entry for entry in result.entries if entry.policy_decision == "DENY"), None)
+    if denied is not None:
+        raise DeploymentValidationError(
+            denied.policy_reason,
+            denied.message or "Playbook deployment is not permitted by runtime policy.",
+            denied.to_dict(),
         )
     return result

@@ -12,6 +12,7 @@ from .input_resolution import resolve_node_input
 from .ledger import TERMINAL_STATES, ExecutionLedger, ExecutionRecord, ExecutionState, InMemoryExecutionLedger
 from .plans import ExecutionPlan, ExecutionPlanNode
 from .playbooks import PlaybookNode, PlaybookNodeKind
+from .policy import ApprovalStatus, InMemoryApprovalStore, RuntimePolicyEngine
 from .results import NodeResult, NodeResultStatus
 from .transforms import execute_transform
 
@@ -26,6 +27,8 @@ class ExecutionOutcome:
 class PlaybookExecutor:
     handler_registry: CapabilityHandlerRegistry
     ledger: ExecutionLedger = field(default_factory=InMemoryExecutionLedger)
+    policy_engine: RuntimePolicyEngine | None = None
+    approval_store: InMemoryApprovalStore = field(default_factory=InMemoryApprovalStore)
     _contexts: dict[str, ExecutionContext] = field(default_factory=dict)
     _plans: dict[str, ExecutionPlan] = field(default_factory=dict)
     _waiting_node_ids: dict[str, str] = field(default_factory=dict)
@@ -88,6 +91,63 @@ class PlaybookExecutor:
             execution_id=execution_id,
             resume_node_id=self._waiting_node_ids.pop(execution_id, ""),
         )
+
+    def approve_execution_node(self, execution_id: str, node_id: str, *, actor: str = "") -> ExecutionOutcome:
+        record = self.ledger.get_execution(execution_id)
+        if record is None:
+            raise PlaybookExecutionError(
+                "EXECUTION_NOT_FOUND", "Execution does not exist.", {"execution_id": execution_id}
+            )
+        approval = self.approval_store.get(execution_id, node_id)
+        if approval is None:
+            raise PlaybookExecutionError(
+                "APPROVAL_NOT_FOUND",
+                "No approval is pending for this execution node.",
+                {"execution_id": execution_id, "node_id": node_id},
+            )
+        if approval.status == ApprovalStatus.REJECTED.value:
+            raise PlaybookExecutionError(
+                "APPROVAL_REJECTED",
+                "Rejected approval cannot be approved later.",
+                {"execution_id": execution_id, "node_id": node_id},
+            )
+        self.approval_store.approve(execution_id, node_id, actor=actor)
+        current = self.ledger.get_execution(execution_id)
+        assert current is not None
+        if current.state in TERMINAL_STATES:
+            return ExecutionOutcome(current, self._contexts[execution_id])
+        return self.resume_execution(execution_id)
+
+    def reject_execution_node(self, execution_id: str, node_id: str, *, actor: str = "") -> ExecutionOutcome:
+        record = self.ledger.get_execution(execution_id)
+        if record is None:
+            raise PlaybookExecutionError(
+                "EXECUTION_NOT_FOUND", "Execution does not exist.", {"execution_id": execution_id}
+            )
+        approval = self.approval_store.get(execution_id, node_id)
+        if approval is None:
+            raise PlaybookExecutionError(
+                "APPROVAL_NOT_FOUND",
+                "No approval is pending for this execution node.",
+                {"execution_id": execution_id, "node_id": node_id},
+            )
+        self.approval_store.reject(execution_id, node_id, actor=actor)
+        for node_execution in reversed(self.ledger.list_node_executions(execution_id)):
+            if node_execution.node_id == node_id and node_execution.state == ExecutionState.WAITING.value:
+                self.ledger.record_node_transition(
+                    node_execution.node_execution_id,
+                    ExecutionState.FAILED.value,
+                    actor="playbook_executor.reject",
+                    error_code="APPROVAL_REJECTED",
+                    error_message="Approval was rejected.",
+                    metadata={"approval_status": ApprovalStatus.REJECTED.value},
+                )
+                break
+        current = self.ledger.get_execution(execution_id)
+        assert current is not None
+        if current.state not in TERMINAL_STATES:
+            self.ledger.record_transition(execution_id, ExecutionState.FAILED.value, actor="playbook_executor.reject")
+        return ExecutionOutcome(self.ledger.get_execution(execution_id), self._contexts[execution_id])  # type: ignore[arg-type]
 
     def _run_ready_nodes(self, *, plan: ExecutionPlan, execution_id: str, resume_node_id: str) -> ExecutionOutcome:
         context = self._contexts[execution_id]
@@ -230,9 +290,47 @@ class PlaybookExecutor:
         if node.kind == PlaybookNodeKind.CONDITION.value:
             return NodeResult.success({"value": evaluate_condition(node.config, context)})
         if node.kind == PlaybookNodeKind.CAPABILITY.value:
-            handler = self.handler_registry.resolve(plan_node.component_id, plan_node.capability)
             input_data = resolve_node_input(node.config, context)
-            return handler.execute(context=context, node=node, resolved_node=plan_node, input_data=input_data)
+            policy_metadata: dict[str, Any] = {}
+            if self.policy_engine is not None:
+                approval = self.approval_store.get(context.execution_id, node.node_id)
+                decision = self.policy_engine.evaluate(
+                    execution_context=context,
+                    plan_node=plan_node,
+                    approval=approval,
+                )
+                if decision.required_approval:
+                    requested = self.approval_store.request(
+                        execution_id=context.execution_id,
+                        node_id=node.node_id,
+                        capability_id=plan_node.capability,
+                        metadata=decision.metadata,
+                    )
+                    return NodeResult.wait(
+                        {"waiting": True, "approval_id": requested.approval_id},
+                        {
+                            **decision.metadata,
+                            "approval_id": requested.approval_id,
+                            "approval_status": requested.status,
+                            "waiting_reason": "approval_required",
+                        },
+                    )
+                if not decision.allowed:
+                    return NodeResult.failure(
+                        decision.reason_code, "Runtime policy denied capability execution.", decision.metadata
+                    )
+                policy_metadata = decision.metadata
+            handler = self.handler_registry.resolve(plan_node.component_id, plan_node.capability)
+            result = handler.execute(context=context, node=node, resolved_node=plan_node, input_data=input_data)
+            if policy_metadata and isinstance(result, NodeResult):
+                return NodeResult(
+                    status=result.status,
+                    output=result.output,
+                    metadata={**policy_metadata, **result.metadata},
+                    error_code=result.error_code,
+                    error_message=result.error_message,
+                )
+            return result
         if node.kind in {PlaybookNodeKind.APPROVAL.value, PlaybookNodeKind.DELAY.value}:
             return NodeResult.wait({"waiting": True, "kind": node.kind})
         if node.kind == PlaybookNodeKind.JOIN.value:

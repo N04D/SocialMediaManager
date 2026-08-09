@@ -22,6 +22,7 @@ class CapabilityDescriptor:
     input_schema: dict[str, Any] = field(default_factory=dict)
     output_schema: dict[str, Any] = field(default_factory=dict)
     description: str = ""
+    policy: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         validate_namespaced_id(self.capability_id, field_name="capability_id")
@@ -36,6 +37,7 @@ class CapabilityDescriptor:
             "input_schema": json.loads(json.dumps(self.input_schema, sort_keys=True, ensure_ascii=True)),
             "mode": self.mode,
             "output_schema": json.loads(json.dumps(self.output_schema, sort_keys=True, ensure_ascii=True)),
+            "policy": json.loads(json.dumps(self.policy, sort_keys=True, ensure_ascii=True)),
             "version": self.version,
         }
 
@@ -48,4 +50,5 @@ class CapabilityDescriptor:
             input_schema=dict(payload.get("input_schema") or {}),
             output_schema=dict(payload.get("output_schema") or {}),
             description=str(payload.get("description") or ""),
+            policy=dict(payload.get("policy") or {}),
         )

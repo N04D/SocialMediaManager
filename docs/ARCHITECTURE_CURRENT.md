@@ -467,6 +467,106 @@ Generic Runtime
 -> YouTubeChannelService.read_video_metadata
 ```
 
+### Phase 47 runtime policy and approvals
+
+Phase 47 introduces runtime authorization and approval enforcement for the generic PlaybookExecutor path. It does not enable any production mutation capability.
+
+```mermaid
+flowchart TD
+    Component[Component Permissions]
+    Install[Install Grants]
+    Deployment[Deployment Policy]
+    Effective[Effective Permission]
+    Decision[Policy Decision]
+    Allow[ALLOW]
+    Deny[DENY]
+    Approval[APPROVAL_REQUIRED]
+
+    Component --> Effective
+    Install --> Effective
+    Deployment --> Effective
+    Effective --> Decision
+    Decision --> Allow
+    Decision --> Deny
+    Decision --> Approval
+```
+
+Runtime enforcement:
+
+```mermaid
+flowchart TD
+    Plan[ExecutionPlan]
+    Executor[PlaybookExecutor]
+    Policy[RuntimePolicyEngine]
+    Handler[CapabilityHandler]
+    Waiting[WAITING]
+    Approval[approve/reject]
+
+    Plan --> Executor
+    Executor --> Policy
+    Policy -->|ALLOW| Handler
+    Policy -->|DENY| Executor
+    Policy -->|APPROVAL_REQUIRED| Waiting
+    Waiting --> Approval
+```
+
+The policy layer evaluates only generic contracts:
+
+- capability mode and capability policy metadata;
+- component permissions and network policy;
+- install grants and secret refs;
+- deployment policy;
+- current approval status.
+
+It does not branch on provider names such as YouTube, GitHub, Calendar, or LinkedIn.
+
+Sensitive privileges are default-deny for the generic runtime:
+
+- mutations/write capabilities;
+- external network;
+- scoped secret use;
+- filesystem access;
+- subprocess access.
+
+Current production bridge permissions:
+
+```text
+Calendar read
+-> no network
+-> no subprocess
+-> no filesystem requirement
+-> no secret requirement
+
+Git repository status read
+-> filesystem read
+-> read-only Git subprocess
+-> no network
+-> no secret requirement
+
+YouTube metadata read
+-> external network
+-> scoped access token ref
+-> no subprocess
+-> no filesystem requirement
+```
+
+Approval records are generic and contain no capability input or secret values. Approval can resume a node only when the policy decision is otherwise allowed and approval is the remaining gate. It cannot turn a hard deny into allow.
+
+Legacy routes remain unchanged:
+
+```text
+Existing application/channel flows
+-> existing services
+```
+
+Policy enforcement applies to:
+
+```text
+Generic Runtime
+-> RuntimePolicyEngine
+-> CapabilityHandler
+```
+
 ## Storage Boundaries
 
 - Source code, manifests, docs, schemas, templates, and tests are repository content.

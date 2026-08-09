@@ -10,7 +10,7 @@ from publication_git_runtime_handlers import (
 )
 from src.core.runtime.capabilities import CapabilityDescriptor, CapabilityMode
 from src.core.runtime.components import ComponentManifest
-from src.core.runtime.installs import ComponentBinding, Install
+from src.core.runtime.installs import ComponentBinding, Install, InstallGrants
 from src.core.runtime.resolver import RuntimeRegistry
 from youtube_runtime_handlers import (
     YOUTUBE_NETWORK_POLICY,
@@ -66,6 +66,7 @@ def phase41_component_manifests() -> tuple[ComponentManifest, ...]:
                     input_schema=YOUTUBE_VIDEO_METADATA_READ_INPUT_SCHEMA,
                     output_schema=YOUTUBE_VIDEO_METADATA_READ_OUTPUT_SCHEMA,
                     description="Read YouTube video metadata through the existing YouTube Data API transport.",
+                    policy={"required_secret_refs": ["youtube-access-token-ref"]},
                 ),
                 CapabilityDescriptor("youtube.video.publish", "0.1.0", CapabilityMode.WRITE.value),
                 CapabilityDescriptor("youtube.short.publish", "0.1.0", CapabilityMode.WRITE.value),
@@ -73,6 +74,12 @@ def phase41_component_manifests() -> tuple[ComponentManifest, ...]:
             ),
             required_secrets=("youtube-client-secret-ref", "youtube-refresh-token-ref"),
             network_policy=YOUTUBE_NETWORK_POLICY,
+            permissions={
+                "network": YOUTUBE_NETWORK_POLICY,
+                "secrets": {"required": True},
+                "filesystem": {"mode": "none"},
+                "subprocess": {"allowed": False},
+            },
             metadata={"legacy_plugin_id": "channel.youtube", "transport": "youtube_api"},
         ),
         ComponentManifest(
@@ -95,6 +102,12 @@ def phase41_component_manifests() -> tuple[ComponentManifest, ...]:
                 CapabilityDescriptor("website.publication.verify", "0.1.0", CapabilityMode.READ.value),
                 CapabilityDescriptor("website.analytics.read", "0.1.0", CapabilityMode.READ.value),
             ),
+            permissions={
+                "network": {"required": False, "allowed_domains": []},
+                "secrets": {"required": False},
+                "filesystem": {"mode": "read"},
+                "subprocess": {"allowed": True, "policy": "read-only-git"},
+            },
             metadata={"legacy_plugin_id": "channel.markdown_website", "transport": "git_worktree"},
         ),
         ComponentManifest(
@@ -114,6 +127,12 @@ def phase41_component_manifests() -> tuple[ComponentManifest, ...]:
                 CapabilityDescriptor("calendar.event.create", "0.1.0", CapabilityMode.WRITE.value),
                 CapabilityDescriptor("calendar.event.update", "0.1.0", CapabilityMode.WRITE.value),
             ),
+            permissions={
+                "network": {"required": False, "allowed_domains": []},
+                "secrets": {"required": False},
+                "filesystem": {"mode": "none"},
+                "subprocess": {"allowed": False},
+            },
             metadata={"legacy_plugin_id": "publication.scheduling.service", "transport": "local_json_store"},
         ),
     )
@@ -135,6 +154,18 @@ def phase41_sample_installs() -> tuple[Install, ...]:
             },
             config={"channel_id": "linkedin", "browser_profile_ref": "linkedin-session-profile-ref"},
             secret_refs=("linkedin-session-profile-ref",),
+            grants=InstallGrants(
+                allowed_capabilities=(
+                    "linkedin.connection.start",
+                    "linkedin.connection.read",
+                    "linkedin.post.create",
+                    "linkedin.post.read",
+                    "linkedin.analytics.read",
+                ),
+                allowed_secret_refs=("linkedin-session-profile-ref",),
+                allow_mutations=True,
+                require_approval_for_writes=True,
+            ),
         ),
         Install(
             install_id="youtube-don-main-channel",
@@ -154,10 +185,21 @@ def phase41_sample_installs() -> tuple[Install, ...]:
             },
             config={
                 "channel_account_id": "youtube",
+                "access_token_ref": "youtube-access-token-ref",
                 "client_id_ref": "youtube-client-id",
                 "client_secret_ref": "youtube-client-secret-ref",
             },
-            secret_refs=("youtube-client-secret-ref", "youtube-refresh-token-ref"),
+            secret_refs=("youtube-access-token-ref", "youtube-client-secret-ref", "youtube-refresh-token-ref"),
+            grants=InstallGrants(
+                allowed_capabilities=(
+                    "youtube.connection.read",
+                    "youtube.video.metadata.read",
+                    "youtube.publication.status.read",
+                ),
+                allowed_secret_refs=("youtube-access-token-ref",),
+                allow_network=True,
+                allowed_network_domains=("oauth2.googleapis.com", "www.googleapis.com"),
+            ),
         ),
         Install(
             install_id="github-don-website",
@@ -174,6 +216,11 @@ def phase41_sample_installs() -> tuple[Install, ...]:
             },
             config={"repository_reference_id": "configured-in-channel-account"},
             secret_refs=(),
+            grants=InstallGrants(
+                allowed_capabilities=("git.repository.status.read", "github.file.read", "website.publication.verify"),
+                allow_filesystem=True,
+                allow_subprocess=True,
+            ),
         ),
         Install(
             install_id="calendar-publication-local",
@@ -187,6 +234,7 @@ def phase41_sample_installs() -> tuple[Install, ...]:
             },
             config={"storage": "studio_data/publication_*.json"},
             secret_refs=(),
+            grants=InstallGrants(allowed_capabilities=("calendar.event.read",)),
         ),
     )
 

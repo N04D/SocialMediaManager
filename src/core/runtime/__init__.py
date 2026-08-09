@@ -2,6 +2,7 @@ from .capabilities import CapabilityDescriptor, CapabilityMode
 from .components import ComponentManifest
 from .deployments import (
     CapabilityReportEntry,
+    DeploymentPolicy,
     DeploymentValidationResult,
     PlaybookDeployment,
     RequirementBinding,
@@ -21,7 +22,7 @@ from .events import EventEnvelope, EventSource
 from .execution_context import ExecutionContext
 from .executor import ExecutionOutcome, PlaybookExecutor
 from .handlers import CapabilityHandler, CapabilityHandlerRegistry
-from .installs import ComponentBinding, Install
+from .installs import ComponentBinding, Install, InstallGrants
 from .ledger import (
     ExecutionLedger,
     ExecutionRecord,
@@ -40,12 +41,23 @@ from .playbooks import (
     PlaybookNodeKind,
     validate_playbook,
 )
+from .policy import (
+    ApprovalRecord,
+    ApprovalStatus,
+    EffectivePermission,
+    InMemoryApprovalStore,
+    PolicyDecision,
+    PolicyReasonCode,
+    RuntimePolicyEngine,
+)
 from .resolver import CapabilityResolution, CapabilityResolver, RuntimeRegistry
 from .results import NodeResult, NodeResultStatus
 from .tracing import ExecutionTrace, trace_execution
 
 __all__ = [
     "CapabilityReportEntry",
+    "ApprovalRecord",
+    "ApprovalStatus",
     "CapabilityDescriptor",
     "CapabilityMode",
     "CapabilityRequirement",
@@ -55,6 +67,7 @@ __all__ = [
     "ComponentBinding",
     "ComponentManifest",
     "DeploymentValidationError",
+    "DeploymentPolicy",
     "DeploymentValidationResult",
     "EventEnvelope",
     "EventSource",
@@ -69,7 +82,10 @@ __all__ = [
     "ExecutionTrace",
     "ExecutionTransition",
     "InMemoryExecutionLedger",
+    "InMemoryApprovalStore",
     "Install",
+    "InstallGrants",
+    "EffectivePermission",
     "LegacyCapabilityAdapter",
     "CapabilityHandler",
     "CapabilityHandlerRegistry",
@@ -84,9 +100,12 @@ __all__ = [
     "PlaybookNode",
     "PlaybookNodeKind",
     "PlaybookValidationError",
+    "PolicyDecision",
+    "PolicyReasonCode",
     "RequirementBinding",
     "RuntimeContractError",
     "RuntimeRegistry",
+    "RuntimePolicyEngine",
     "RuntimeValidationError",
     "capability_report",
     "compile_execution_plan",
