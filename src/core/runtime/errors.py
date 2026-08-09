@@ -20,3 +20,15 @@ class RuntimeValidationError(RuntimeContractError):
 
 class CapabilityResolutionError(RuntimeContractError):
     pass
+
+
+class PlaybookValidationError(RuntimeContractError):
+    pass
+
+
+class DeploymentValidationError(RuntimeContractError):
+    pass
+
+
+class ExecutionLedgerError(RuntimeContractError):
+    pass

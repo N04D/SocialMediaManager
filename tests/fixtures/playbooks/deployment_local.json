@@ -1,0 +1,18 @@
+{
+  "config": {
+    "dry_run": true
+  },
+  "deployment_id": "portable-local",
+  "enabled": true,
+  "playbook_id": "example.portable_event_to_capabilities",
+  "playbook_version": "1.0.0",
+  "requirement_bindings": {
+    "social_source": {
+      "install_id": "linkedin-don-personal"
+    },
+    "website_writer": {
+      "install_id": "github-don-website"
+    }
+  },
+  "workspace_id": "local"
+}

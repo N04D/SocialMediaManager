@@ -1,12 +1,13 @@
 # Runtime Evolution
 
-Phase 41 introduces contracts for a generic local-first workflow runtime without changing existing social publication behavior.
+Phase 41 introduced contracts for a generic local-first workflow runtime without changing existing social publication behavior.
+Phase 42 adds portable playbook contracts, deployment bindings, side-effect-free execution plans, and an in-memory execution ledger.
 
 ## Scope
 
 - No rewrite.
 - Existing Python stack, plugins, scheduler/workers, storage, dashboard, LinkedIn, YouTube, Markdown Website/Git, calendar, and analytics behavior remain unchanged.
-- No playbook execution is introduced in this phase.
+- No side-effectful playbook execution is introduced in this phase.
 - No destructive storage migration is introduced in this phase.
 
 ## Future Runtime Shape
@@ -29,7 +30,50 @@ flowchart TD
     ComponentOut --> ExternalOut
 ```
 
-The Playbook Runtime is future work. Phase 41 only defines event, capability, component, install, resolution, and legacy compatibility contracts.
+The side-effectful Playbook Runtime is future work. Phases 41 and 42 only define event, capability, component, install, playbook, deployment, plan compilation, ledger, resolution, and legacy compatibility contracts.
+
+## Phase 42 Portable Playbooks
+
+```mermaid
+flowchart TD
+    PlaybookDefinition[PlaybookDefinition]
+    RequirementA[requirement A]
+    RequirementB[requirement B]
+    Deployment[PlaybookDeployment]
+    InstallA[Install A]
+    InstallB[Install B]
+    ComponentsA[Components]
+    ComponentsB[Components]
+    ExecutionPlan[ExecutionPlan]
+
+    PlaybookDefinition -->|requires| RequirementA
+    PlaybookDefinition -->|requires| RequirementB
+    RequirementA --> Deployment
+    RequirementB --> Deployment
+    Deployment -->|binds requirements| InstallA
+    Deployment -->|binds requirements| InstallB
+    InstallA --> ComponentsA
+    InstallB --> ComponentsB
+    ComponentsA --> ExecutionPlan
+    ComponentsB --> ExecutionPlan
+```
+
+```mermaid
+flowchart TD
+    Event[Event]
+    ExecutionRecord[ExecutionRecord]
+    NodeExecutionRecords[NodeExecutionRecords]
+
+    Event --> ExecutionRecord
+    ExecutionRecord --> NodeExecutionRecords
+```
+
+The distinction is explicit:
+
+- `PlaybookDefinition` is portable intent. It can require logical slots and capabilities, but it must not contain install IDs, account IDs, workspace IDs, tokens, credentials, or secret references.
+- `PlaybookDeployment` is environment-specific binding. It maps requirement slots to concrete installs and may contain non-secret configuration.
+- `ExecutionPlan` is resolved representation. It contains concrete install/component/capability resolution and is produced without executing components.
+- `ExecutionLedger` records execution and node state transitions for future observability, retries, approvals, and audit.
 
 ## New Contracts
 
@@ -42,6 +86,10 @@ The Playbook Runtime is future work. Phase 41 only defines event, capability, co
 | Resolver | `src/core/runtime/resolver.py` | Resolves `install_id + capability` to an install and component manifest. |
 | Compatibility adapter | `src/core/runtime/legacy.py` | Describes capabilities from legacy plugin manifests without changing plugin behavior. |
 | Phase 41 mappings | `runtime_foundation_mappings.py` | Concrete PoC component manifests and sample installs for existing domains, kept outside the generic core. |
+| PlaybookDefinition | `src/core/runtime/playbooks.py` | Portable, versioned DAG definition with logical capability requirements, nodes, and edges. |
+| PlaybookDeployment | `src/core/runtime/deployments.py` | Workspace binding from playbook requirement slots to concrete installs, validated through the capability resolver. |
+| ExecutionPlan | `src/core/runtime/plans.py` | Deterministic, side-effect-free resolved plan containing install and component selections. |
+| ExecutionLedger | `src/core/runtime/ledger.py` | Protocol plus in-memory implementation for execution and node execution state history. |
 
 ## Current Inventory
 
@@ -106,6 +154,8 @@ Phase 41 uses an in-memory runtime registry with deterministic serialization for
 
 Future persistence can add forward-compatible JSON stores under `studio_data/runtime_components.json` and `studio_data/runtime_installs.json`. Rollback should be deleting those additive files only, leaving existing channel and scheduler data untouched.
 
+Phase 42 follows the same least-invasive persistence decision. `ExecutionLedger` is a protocol and `InMemoryExecutionLedger` is the first implementation. No SQLite migration or new durable store is added yet because the current repository has several file-backed stores and no single generic runtime database boundary. A future durable ledger can be added as an adapter without changing `ExecutionRecord` or `NodeExecutionRecord`.
+
 ## Compatibility Strategy
 
 - Existing `PluginManifest`, `PluginRegistry`, `PluginRuntime`, `ProviderResolver`, channel runtimes, scheduler, and workers are unchanged.
@@ -113,6 +163,17 @@ Future persistence can add forward-compatible JSON stores under `studio_data/run
 - `LegacyCapabilityAdapter` can describe selected existing plugin capabilities as generic component capabilities.
 - PoC manifests live in `runtime_foundation_mappings.py` as `phase41_component_manifests()` and sample installs in `phase41_sample_installs()`.
 - Existing plugin capability strings remain valid and are not replaced in this phase.
+- Playbook validation and plan compilation do not call channel runtimes, browser providers, HTTP clients, Git, or plugin services.
+
+## Phase 42 Validation Decisions
+
+- Playbook graphs must be DAGs for now. Bounded loops can be introduced later as explicit schema features.
+- Node kinds are limited to known schema kinds or namespaced third-party kinds; unknown plain strings fail with a controlled validation error.
+- Capability nodes reference a logical requirement slot and a capability declared by that requirement.
+- Deployment validation resolves each required capability through `CapabilityResolver` before any execution can exist.
+- Compile-time capability reports use structured entries with requirement, capability, install, component, status, and error code fields.
+- The generic execution state machine supports `pending`, `running`, `waiting`, `succeeded`, `failed`, `cancelled`, and `skipped`.
+- Ledger transitions are append/audit oriented: records are updated to current state, while transition history is retained separately.
 
 ## Security Notes
 
@@ -120,3 +181,6 @@ Future persistence can add forward-compatible JSON stores under `studio_data/run
 - `ComponentManifest.required_secrets` stores references/requirements only.
 - `EventEnvelope` rejects secret-shaped payload or metadata keys.
 - No runtime secret values were added to repository files.
+- `PlaybookDefinition` rejects environment-specific and secret-shaped fields such as `install_id`, `account_id`, `workspace_id`, `token`, and `secret`.
+- `PlaybookDeployment`, `ExecutionRecord`, and `NodeExecutionRecord` reject secret-shaped config/metadata values unless they are explicit references.
+- `ExecutionPlan` contains concrete install/component IDs but no component config, secret refs, or secret values.

@@ -1,0 +1,57 @@
+{
+  "description": "Portable fixture that validates trigger to two capability nodes without executing them.",
+  "edges": [
+    {
+      "source": "incoming-event",
+      "target": "read-social"
+    },
+    {
+      "source": "read-social",
+      "target": "write-website"
+    }
+  ],
+  "metadata": {
+    "fixture": true
+  },
+  "name": "Portable Event To Capabilities",
+  "nodes": [
+    {
+      "config": {
+        "event_type": "linkedin.post.created"
+      },
+      "kind": "trigger",
+      "node_id": "incoming-event"
+    },
+    {
+      "config": {
+        "capability": "linkedin.post.read",
+        "requirement": "social_source"
+      },
+      "kind": "capability",
+      "node_id": "read-social"
+    },
+    {
+      "config": {
+        "capability": "github.file.write",
+        "requirement": "website_writer"
+      },
+      "kind": "capability",
+      "node_id": "write-website"
+    }
+  ],
+  "playbook_id": "example.portable_event_to_capabilities",
+  "requirements": {
+    "social_source": {
+      "capabilities": [
+        "linkedin.post.read"
+      ]
+    },
+    "website_writer": {
+      "capabilities": [
+        "github.file.write"
+      ]
+    }
+  },
+  "schema_version": "1.0",
+  "version": "1.0.0"
+}

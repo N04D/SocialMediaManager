@@ -116,9 +116,9 @@ flowchart TD
     ChannelRuntime --> SharedServices
 ```
 
-### Phase 41 generic runtime foundation
+### Phase 41/42 generic runtime foundation
 
-Phase 41 adds a contract layer beside the existing plugin runtime. It does not execute playbooks and does not replace the current plugin registry, scheduler, workers, or storage.
+Phase 41 added a contract layer beside the existing plugin runtime. Phase 42 adds portable playbook definitions, deployment bindings, side-effect-free execution plan compilation, and an in-memory execution ledger. These contracts do not execute playbooks and do not replace the current plugin registry, scheduler, workers, or storage.
 
 ```mermaid
 flowchart TD
@@ -146,10 +146,48 @@ New generic contracts live in `src/core/runtime/`:
 - `Install` describes a configured account/workspace instance with capability bindings and secret references only.
 - `CapabilityResolver` resolves `install_id + capability` to the bound component without knowing transport details.
 - `LegacyCapabilityAdapter` describes existing plugin manifests as component capabilities without changing plugin behavior.
+- `PlaybookDefinition` describes portable intent with logical capability requirements, nodes, and DAG edges.
+- `PlaybookDeployment` binds logical requirement slots to concrete installs for one workspace.
+- `ExecutionPlan` is the deterministic resolved representation produced by validation and capability resolution only.
+- `ExecutionLedger` records execution and node execution state transitions for future audit and observability.
 
 Concrete Phase 41 mappings for LinkedIn, YouTube, Website/GitHub, and the local publication calendar live outside the generic core in `runtime_foundation_mappings.py`.
 
-The future Playbook Runtime remains future work. Current business workflows still live in `pipeline.py`, `publication_planning.py`, `publication_scheduling.py`, `publication_execution.py`, channel runtimes, and existing plugins.
+```mermaid
+flowchart TD
+    PlaybookDefinition[PlaybookDefinition]
+    RequirementA[requirement A]
+    RequirementB[requirement B]
+    Deployment[PlaybookDeployment]
+    InstallA[Install A]
+    InstallB[Install B]
+    ComponentsA[Components]
+    ComponentsB[Components]
+    ExecutionPlan[ExecutionPlan]
+
+    PlaybookDefinition --> RequirementA
+    PlaybookDefinition --> RequirementB
+    RequirementA --> Deployment
+    RequirementB --> Deployment
+    Deployment --> InstallA
+    Deployment --> InstallB
+    InstallA --> ComponentsA
+    InstallB --> ComponentsB
+    ComponentsA --> ExecutionPlan
+    ComponentsB --> ExecutionPlan
+```
+
+```mermaid
+flowchart TD
+    Event[Event]
+    ExecutionRecord[ExecutionRecord]
+    NodeExecutionRecords[NodeExecutionRecords]
+
+    Event --> ExecutionRecord
+    ExecutionRecord --> NodeExecutionRecords
+```
+
+The future side-effectful Playbook Runtime remains future work. Current business workflows still live in `pipeline.py`, `publication_planning.py`, `publication_scheduling.py`, `publication_execution.py`, channel runtimes, and existing plugins.
 
 ## Storage Boundaries
 
