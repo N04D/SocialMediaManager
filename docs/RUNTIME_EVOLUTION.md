@@ -3,12 +3,14 @@
 Phase 41 introduced contracts for a generic local-first workflow runtime without changing existing social publication behavior.
 Phase 42 adds portable playbook contracts, deployment bindings, side-effect-free execution plans, and an in-memory execution ledger.
 Phase 43 adds the first deterministic executor for internal/test capabilities only.
+Phase 44 connects the first read-only production capability bridge: `calendar.event.read`.
 
 ## Scope
 
 - No rewrite.
 - Existing Python stack, plugins, scheduler/workers, storage, dashboard, LinkedIn, YouTube, Markdown Website/Git, calendar, and analytics behavior remain unchanged.
 - No production platform playbook execution is introduced in this phase.
+- The only production bridge introduced in Phase 44 is local read-only calendar access.
 - No destructive storage migration is introduced in this phase.
 
 ## Future Runtime Shape
@@ -32,6 +34,8 @@ flowchart TD
 ```
 
 The side-effectful production Playbook Runtime is future work. Phase 43 executes only internal/test capabilities. Production platform capabilities remain on the legacy path.
+
+Phase 44 keeps that boundary and adds one narrow exception: `calendar.event.read` can be executed through a production adapter that calls the existing local `ExecutionCalendarService`. This bridge is read-only and does not add calendar create/update/delete, external calendar providers, browser automation, HTTP calls, or production social mutations.
 
 ## Phase 42 Portable Playbooks
 
@@ -96,6 +100,7 @@ The distinction is explicit:
 | CapabilityHandler | `src/core/runtime/handlers.py` | Technical execution contract keyed by component and capability. |
 | PlaybookExecutor | `src/core/runtime/executor.py` | Deterministic DAG orchestrator that updates the ledger and calls registered internal handlers only. |
 | ExecutionTrace | `src/core/runtime/tracing.py` | Structured helper for execution, node execution, and transition history. |
+| CalendarEventReadHandler | `publication_calendar_runtime_handlers.py` | Read-only production adapter from `calendar.event.read` to the existing `ExecutionCalendarService`. |
 
 ## Phase 43 Deterministic Executor
 
@@ -180,6 +185,56 @@ Production isolation:
 - Existing dashboard, worker, scheduler, plugin runtime, and channel production paths remain unchanged.
 - No LinkedIn publish/reply, YouTube upload, Git write/push, calendar mutation, browser automation, HTTP/API call, subprocess call, Research/RAG, agent planning, or visual editor behavior is added.
 
+## Phase 44 Calendar Read Bridge
+
+```mermaid
+flowchart TD
+    EventEnvelope[EventEnvelope]
+    Playbook[Portable Playbook]
+    Deployment[PlaybookDeployment]
+    Plan[ExecutionPlan]
+    Executor[PlaybookExecutor]
+    Registry[CapabilityHandlerRegistry]
+    Handler[CalendarEventReadHandler<br/>READ ONLY]
+    Service[ExecutionCalendarService]
+    Storage[Local Calendar Storage]
+
+    EventEnvelope --> Playbook
+    Playbook --> Deployment
+    Deployment --> Plan
+    Plan --> Executor
+    Executor --> Registry
+    Registry --> Handler
+    Handler --> Service
+    Service --> Storage
+```
+
+Current calendar responsibilities:
+
+- `ExecutionCalendarService.list_calendar_entries` reads local publication calendar entries from schedule occurrences and publication targets.
+- Existing UI/API routes call the same service directly, especially `/api/execution-calendar` and the content calendar page.
+- The service supports workspace, start/end range, timezone label, channel plugin, campaign, status, attention-required, and limit filtering.
+- `ExecutionCalendarService.summarize_range` is also read-only, but Phase 44 does not expose it as a generic capability.
+- Calendar mutations remain in existing scheduling/campaign services such as schedule creation, materialization, pause/resume/cancel, and campaign coordination.
+
+Safe `calendar.event.read` output:
+
+- The production adapter returns normalized event dictionaries with IDs, title, start/end, status, timezone, source, workspace, entry type, safe schedule/campaign/target references, attention flag, blockers, and safe summary.
+- It does not return repository objects, ORM/dataclass instances, storage paths, credentials, secret references, browser/session data, or arbitrary metadata dumps.
+
+Business logic that must not move into the generic runtime:
+
+- Recurrence calculation, materialization, schedule lifecycle, campaign coordination, authorization consumption, publication target lifecycle, and UI/API routing stay in the existing scheduling/calendar services.
+- The generic executor has no `if calendar.event.read` switch. It only resolves a component/capability handler and records deterministic execution state.
+
+Production adapter pattern:
+
+- `CalendarEventReadHandler` lives outside `src/core/runtime/`.
+- Registration is explicit through `register_calendar_runtime_handlers(handler_registry, calendar_service=...)`.
+- The handler registers only `calendar.event.read` for component `publication-calendar-local`.
+- No hidden import-time global registration is used.
+- Later component packaging can describe `publication-calendar-local` as providing `calendar.event.read` with `CalendarEventReadHandler` as its handler entrypoint, without adding marketplace or dynamic installation in Phase 44.
+
 ## Current Inventory
 
 | Area | Current abstraction | Future abstraction | Compatibility strategy | Migration candidate | Risk |
@@ -247,6 +302,8 @@ Phase 42 follows the same least-invasive persistence decision. `ExecutionLedger`
 
 Phase 43 keeps the same persistence boundary. The executor writes only to the provided `ExecutionLedger` implementation. Tests use `InMemoryExecutionLedger`; no database migration or file-backed execution store is added.
 
+Phase 44 does not add persistence. Calendar reads use existing local calendar storage through `ExecutionCalendarService`; execution state still uses the provided ledger implementation.
+
 ## Compatibility Strategy
 
 - Existing `PluginManifest`, `PluginRegistry`, `PluginRuntime`, `ProviderResolver`, channel runtimes, scheduler, and workers are unchanged.
@@ -256,6 +313,7 @@ Phase 43 keeps the same persistence boundary. The executor writes only to the pr
 - Existing plugin capability strings remain valid and are not replaced in this phase.
 - Playbook validation and plan compilation do not call channel runtimes, browser providers, HTTP clients, Git, or plugin services.
 - Phase 43 execution does not call legacy channel runtimes, browser providers, HTTP clients, Git, subprocesses, or plugin services. Only explicitly registered internal handlers can execute.
+- Phase 44 introduces an explicit production handler registration for the local calendar read adapter only. Existing calendar UI/API/scheduler callers still use `ExecutionCalendarService` directly and are not converted to playbook execution.
 
 ## Phase 42 Validation Decisions
 
@@ -279,3 +337,4 @@ Phase 43 keeps the same persistence boundary. The executor writes only to the pr
 - `ExecutionContext`, `NodeResult`, and `ExecutionTrace` reject or omit obvious secret-shaped values.
 - Arbitrary code evaluation is not used for input mapping, conditions, or transforms.
 - External mutations are not possible in the Phase 43 reference flow because only internal/test handlers are registered and side-effect paths are covered by tests.
+- Phase 44 `calendar.event.read` rejects secret-shaped handler input, normalizes output, exposes no mutation handler for `calendar.event.create/update/delete`, and is covered by mutation/network/subprocess tripwire tests.

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from publication_calendar_runtime_handlers import (
+    CALENDAR_EVENT_READ_INPUT_SCHEMA,
+    CALENDAR_EVENT_READ_OUTPUT_SCHEMA,
+)
 from src.core.runtime.capabilities import CapabilityDescriptor, CapabilityMode
 from src.core.runtime.components import ComponentManifest
 from src.core.runtime.installs import ComponentBinding, Install
@@ -72,7 +76,14 @@ def phase41_component_manifests() -> tuple[ComponentManifest, ...]:
             version="0.1.0",
             sdk_version=RUNTIME_SDK_VERSION,
             capabilities=(
-                CapabilityDescriptor("calendar.event.read", "0.1.0", CapabilityMode.READ.value),
+                CapabilityDescriptor(
+                    "calendar.event.read",
+                    "0.1.0",
+                    CapabilityMode.READ.value,
+                    input_schema=CALENDAR_EVENT_READ_INPUT_SCHEMA,
+                    output_schema=CALENDAR_EVENT_READ_OUTPUT_SCHEMA,
+                    description="Read local publication calendar entries from ExecutionCalendarService.",
+                ),
                 CapabilityDescriptor("calendar.event.create", "0.1.0", CapabilityMode.WRITE.value),
                 CapabilityDescriptor("calendar.event.update", "0.1.0", CapabilityMode.WRITE.value),
             ),

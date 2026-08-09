@@ -118,9 +118,9 @@ flowchart TD
 
 ### Phase 41/42/43 generic runtime foundation
 
-Phase 41 added a contract layer beside the existing plugin runtime. Phase 42 adds portable playbook definitions, deployment bindings, side-effect-free execution plan compilation, and an in-memory execution ledger. Phase 43 adds deterministic playbook execution for internal/test capabilities only.
+Phase 41 added a contract layer beside the existing plugin runtime. Phase 42 adds portable playbook definitions, deployment bindings, side-effect-free execution plan compilation, and an in-memory execution ledger. Phase 43 adds deterministic playbook execution for internal/test capabilities only. Phase 44 connects the first read-only production capability bridge for `calendar.event.read`.
 
-Phase 43 executes only internal/test capabilities. Production platform capabilities remain on the legacy path.
+Phase 43 executes only internal/test capabilities. Phase 44 adds one narrow production bridge: local read-only calendar access through the existing `ExecutionCalendarService`. Production platform mutations remain on the legacy path.
 
 ```mermaid
 flowchart TD
@@ -157,6 +157,7 @@ New generic contracts live in `src/core/runtime/`:
 - `CapabilityHandlerRegistry` resolves execution handlers by `component_id + capability_id`.
 - `PlaybookExecutor` runs a validated DAG sequentially and deterministically against registered internal handlers.
 - `ExecutionTrace` exposes structured execution, node execution, and transition history.
+- `CalendarEventReadHandler` bridges `calendar.event.read` to the existing local `ExecutionCalendarService` outside the generic runtime core.
 
 Concrete Phase 41 mappings for LinkedIn, YouTube, Website/GitHub, and the local publication calendar live outside the generic core in `runtime_foundation_mappings.py`.
 
@@ -254,6 +255,62 @@ flowchart TD
 The future side-effectful production Playbook Runtime remains future work. Current business workflows still live in `pipeline.py`, `publication_planning.py`, `publication_scheduling.py`, `publication_execution.py`, channel runtimes, and existing plugins. The Phase 43 executor is isolated from `PluginRuntime`, `LinkedInChannelRuntime`, `YouTubeChannelService`, `GitPublisher`, and `ExecutionCalendarService`.
 
 Phase 43 input mapping supports only literals, trigger event payload paths, and previous node outputs. Condition nodes use a small deterministic operator set. Transform nodes are deterministic/internal only. No Python eval, JavaScript, Jinja execution, browser automation, HTTP/API calls, subprocesses, Git writes, or production platform mutations are introduced.
+
+### Phase 44 calendar read bridge
+
+```mermaid
+flowchart TD
+    EventEnvelope[EventEnvelope]
+    Playbook[Portable Playbook]
+    Deployment[PlaybookDeployment]
+    Plan[ExecutionPlan]
+    Executor[PlaybookExecutor]
+    Registry[CapabilityHandlerRegistry]
+    Handler[CalendarEventReadHandler<br/>READ ONLY]
+    Service[ExecutionCalendarService]
+    Storage[Local Calendar Storage]
+
+    EventEnvelope --> Playbook
+    Playbook --> Deployment
+    Deployment --> Plan
+    Plan --> Executor
+    Executor --> Registry
+    Registry --> Handler
+    Handler --> Service
+    Service --> Storage
+```
+
+The Phase 44 route is:
+
+```text
+Event
+-> Portable Playbook
+-> PlaybookDeployment
+-> ExecutionPlan
+-> PlaybookExecutor
+-> CapabilityHandlerRegistry
+-> CalendarEventReadHandler
+-> ExecutionCalendarService
+-> normalized NodeResult
+-> ExecutionLedger
+```
+
+The generic runtime core remains calendar-neutral. The production adapter lives in `publication_calendar_runtime_handlers.py`, registers only `calendar.event.read` for `publication-calendar-local`, and calls the existing local service. Calendar create/update/delete, schedule materialization, campaign coordination, external Google/Outlook calendars, browser automation, HTTP calls, Git mutations, and social platform actions are not connected to the generic runtime in Phase 44.
+
+Existing calendar consumers remain unchanged:
+
+```text
+Current application
+-> ExecutionCalendarService
+```
+
+The new route exists beside that path:
+
+```text
+Generic Runtime
+-> CalendarEventReadHandler
+-> ExecutionCalendarService
+```
 
 ## Storage Boundaries
 

@@ -1,0 +1,67 @@
+{
+  "description": "Read-only production bridge fixture for local publication calendar entries.",
+  "edges": [
+    {
+      "condition": "",
+      "source": "trigger",
+      "source_port": "",
+      "target": "read-calendar",
+      "target_port": ""
+    }
+  ],
+  "metadata": {
+    "phase": "44",
+    "side_effects": "read_only"
+  },
+  "name": "Phase 44 Calendar Read",
+  "nodes": [
+    {
+      "config": {
+        "event_type": "calendar.read.requested"
+      },
+      "kind": "trigger",
+      "node_id": "trigger"
+    },
+    {
+      "config": {
+        "capability": "calendar.event.read",
+        "input": {
+          "end": {
+            "from_event": "payload",
+            "path": "end"
+          },
+          "limit": {
+            "literal": 100
+          },
+          "start": {
+            "from_event": "payload",
+            "path": "start"
+          },
+          "status": {
+            "from_event": "payload",
+            "path": "status"
+          },
+          "timezone": {
+            "from_event": "payload",
+            "path": "timezone"
+          }
+        },
+        "requirement": "calendar"
+      },
+      "kind": "capability",
+      "node_id": "read-calendar"
+    }
+  ],
+  "playbook_id": "calendar.phase44.read",
+  "requirements": {
+    "calendar": {
+      "capabilities": [
+        "calendar.event.read"
+      ],
+      "description": "Read local publication calendar entries.",
+      "metadata": {}
+    }
+  },
+  "schema_version": "1.0",
+  "version": "1.0.0"
+}

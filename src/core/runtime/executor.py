@@ -157,7 +157,11 @@ class PlaybookExecutor:
         max_attempts = int((node.config.get("retry") or {}).get("max_attempts") or 1)
         last_result = NodeResult.failure("INVALID_NODE_RESULT", "Node did not produce a result.")
         for _ in range(max(max_attempts, 1)):
-            node_execution = self.ledger.create_node_execution(context.execution_id, node.node_id)
+            node_execution = self.ledger.create_node_execution(
+                context.execution_id,
+                node.node_id,
+                metadata=_node_provenance(plan_node),
+            )
             self.ledger.record_node_transition(
                 node_execution.node_execution_id, ExecutionState.RUNNING.value, actor="playbook_executor"
             )
@@ -291,3 +295,18 @@ def _apply_condition_routing(
             target = str(edge["target"])
             skipped.add(target)
             executor._record_skip(execution_id, ExecutionPlanNode(target, "skipped"))
+
+
+def _node_provenance(plan_node: ExecutionPlanNode) -> dict[str, Any]:
+    metadata = {"kind": plan_node.kind}
+    if plan_node.requirement:
+        metadata["requirement"] = plan_node.requirement
+    if plan_node.install_id:
+        metadata["install_id"] = plan_node.install_id
+    if plan_node.capability:
+        metadata["capability"] = plan_node.capability
+    if plan_node.component_id:
+        metadata["component_id"] = plan_node.component_id
+    if plan_node.provider:
+        metadata["provider"] = plan_node.provider
+    return metadata
