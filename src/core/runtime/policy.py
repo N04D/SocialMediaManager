@@ -11,6 +11,12 @@ from .deployments import PlaybookDeployment
 from .events import utc_now_iso
 from .execution_context import ExecutionContext
 from .installs import Install
+from .permissions import (
+    EffectivePermissionSet,
+    PermissionContext,
+    capability_permission_requirements,
+    validate_component_permissions,
+)
 from .plans import ExecutionPlanNode
 from .resolver import RuntimeRegistry
 
@@ -47,6 +53,7 @@ class EffectivePermission:
     filesystem_allowed: bool = False
     subprocess_required: bool = False
     subprocess_allowed: bool = False
+    permission_set: EffectivePermissionSet | None = None
     mutation: bool = False
     mutation_allowed: bool = False
     approval_required: bool = False
@@ -69,7 +76,13 @@ class EffectivePermission:
             "secret_refs_required": list(self.secret_refs_required),
             "subprocess_allowed": self.subprocess_allowed,
             "subprocess_required": self.subprocess_required,
+            "permissions": self.permission_set.to_dict() if self.permission_set else {},
         }
+
+    def permission_context(self, roots: dict[str, str] | None = None) -> PermissionContext:
+        if self.permission_set is None:
+            raise RuntimeError("Effective permission set is not available.")
+        return PermissionContext(self.permission_set, dict(roots or {}))
 
 
 @dataclass(frozen=True)
@@ -245,6 +258,17 @@ class RuntimePolicyEngine:
                 return _deny(PolicyReasonCode.SECRET_REF_MISSING, effective)
             if secret_ref not in install.grants.allowed_secret_refs:
                 return _deny(PolicyReasonCode.SECRET_NOT_GRANTED, effective)
+        permission_validation = validate_component_permissions(
+            requested=capability_permission_requirements(component, capability.capability_id),
+            grants=_permission_grants_for_install(install),
+        )
+        if not permission_validation.ready:
+            reason = {
+                "MISSING_FILESYSTEM_PERMISSION": PolicyReasonCode.FILESYSTEM_ACCESS_NOT_ALLOWED,
+                "MISSING_OPERATION_PERMISSION": PolicyReasonCode.SUBPROCESS_NOT_ALLOWED,
+                "MISSING_EGRESS_PERMISSION": PolicyReasonCode.DOMAIN_NOT_ALLOWED,
+            }.get(permission_validation.reason_code, PolicyReasonCode.COMPONENT_CAPABILITY_MISSING)
+            return _deny(reason, effective, _decision_metadata(effective, reason.value))
         if effective.approval_required and (approval is None or approval.status != ApprovalStatus.APPROVED.value):
             return PolicyDecision(
                 allowed=True,
@@ -283,6 +307,12 @@ def _effective_permission(
     filesystem = dict(permissions.get("filesystem") or {})
     subprocess = dict(permissions.get("subprocess") or {})
     secret_refs = tuple(str(item) for item in capability.policy.get("required_secret_refs", ()))
+    requested_permissions = capability_permission_requirements(component, capability.capability_id)
+    permission_validation = validate_component_permissions(
+        requested=requested_permissions,
+        grants=_permission_grants_for_install(install),
+    )
+    permission_set = permission_validation.effective
     mutation = capability.mode == CapabilityMode.WRITE.value
     approval_required = capability.capability_id in deployment.policy.approval_required_capabilities or (
         mutation and (deployment.policy.require_approval_for_writes or install.grants.require_approval_for_writes)
@@ -302,6 +332,7 @@ def _effective_permission(
         filesystem_allowed=bool(install.grants.allow_filesystem and deployment.policy.allow_filesystem),
         subprocess_required=bool(subprocess.get("allowed", False)),
         subprocess_allowed=bool(install.grants.allow_subprocess and deployment.policy.allow_subprocess),
+        permission_set=permission_set,
         mutation=mutation,
         mutation_allowed=bool(install.grants.allow_mutations and deployment.policy.allow_mutations),
         approval_required=approval_required,
@@ -316,6 +347,17 @@ def _domains_allowed(domains: tuple[str, ...], install: Install, deployment: Pla
     if not install_domains or not deployment_domains:
         return False
     return set(domains).issubset(install_domains) and set(domains).issubset(deployment_domains)
+
+
+def _permission_grants_for_install(install: Install) -> Any:
+    from .permissions import InstallPermissionGrants
+
+    grants = install.grants.permission_grants
+    if not install.grants.allowed_network_domains or grants.network.egress:
+        return grants
+    payload = grants.to_dict()
+    payload["network"] = {"egress": [{"host": host, "port": 443} for host in install.grants.allowed_network_domains]}
+    return InstallPermissionGrants.from_dict(payload)
 
 
 def _decision_metadata(effective: EffectivePermission | None, reason_code: str) -> dict[str, Any]:
@@ -335,4 +377,5 @@ def _decision_metadata(effective: EffectivePermission | None, reason_code: str) 
         if set(effective.secret_refs_required).issubset(set(effective.secret_refs_granted))
         else "not_granted",
         "subprocess_required": effective.subprocess_required,
+        "effective_permissions": effective.permission_set.to_dict()["effective"] if effective.permission_set else {},
     }

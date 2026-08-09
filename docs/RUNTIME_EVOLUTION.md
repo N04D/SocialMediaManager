@@ -889,6 +889,107 @@ flowchart TD
 
 Existing functionality is not automatically eligible for the generic mutation runtime. A production mutation must prove the safety guarantees declared by its policy before it is admitted.
 
+### Phase 53 component permissions and egress
+
+Phase 53 turns host/external permissions into machine-readable runtime contracts. Capabilities define what a component can provide. Permissions define which host and external resources the implementation is allowed to use to provide those capabilities.
+
+Inspection findings:
+
+| Existing permission primitive | Can reuse? | Gap | Migration strategy |
+| --- | --- | --- | --- |
+| `ComponentManifest.permissions` dict | Yes | It previously mixed coarse booleans/metadata and was not capability-scoped. | Keep the dict for compatibility, add structured parsing through `ComponentPermissions`, and prefer capability `policy.permissions` for specific operations. |
+| `InstallGrants.allow_filesystem` / `allow_subprocess` | Yes | Coarse gate only; no scope or named operation. | Preserve as backward-compatible broad gates while adding `InstallPermissionGrants`. |
+| `InstallGrants.allowed_network_domains` | Yes | Domain allowlist existed, but not as structured egress destinations with ports/schemes. | Treat legacy domains as `https:443` egress grants for compatibility; new grants use `NetworkPermissions.egress`. |
+| Capability secret policy | Yes | Secret scopes were already capability-level. | Leave secret refs separate from permissions and keep grants secret-value-free. |
+| Markdown Website path guards | Yes | Domain-specific helpers already block traversal/symlink escapes. | Add generic `resolve_authorized_path(...)`; keep Git-specific path behavior in Markdown Website code. |
+| `GitPublisher.git(...)` | Partially | Existing commands are fixed and `shell=False`, but not represented as named operation grants. | Model logical operation IDs such as `git.status`, `git.rev_parse`, `git.add.path`, `git.commit`, and `git.push`. |
+| YouTube network policy | Yes | Existing policy used domains only. | Preserve old checks and expose effective egress metadata in policy decisions. |
+
+The new permission model is:
+
+```text
+Component/capability requests
+        ∩
+Install grants
+        =
+Effective Permission Set
+```
+
+Permissions are default-deny. Undeclared permissions are not usable, ungranted requested permissions are denied, and install grants that exceed the component request do not expand the effective set.
+
+```mermaid
+flowchart TD
+    Capability[Capability]
+    Component[Component]
+    Manifest[Component Permission Manifest]
+    Grants[Install Grants]
+    Effective[Effective Permission Set]
+    Guard[Runtime Guard]
+    FS[Filesystem]
+    Ops[Named Operations]
+    Egress[Network Egress]
+
+    Capability --> Component
+    Component --> Manifest
+    Manifest --> Effective
+    Grants --> Effective
+    Effective --> Guard
+    Guard --> FS
+    Guard --> Ops
+    Guard --> Egress
+```
+
+Implemented generic contracts:
+
+- `ComponentPermissions`
+- `FilesystemPermissions`
+- `OperationPermissions`
+- `NetworkPermissions`
+- `EgressDestination`
+- `InstallPermissionGrants`
+- `EffectivePermissionSet`
+- `PermissionContext`
+- `resolve_effective_permissions(...)`
+- `validate_component_permissions(...)`
+- `resolve_authorized_path(...)`
+
+Filesystem permissions use logical scopes such as `repository` instead of arbitrary host paths. Install configuration can map a logical scope to a concrete root, and the generic path resolver blocks absolute paths, `..` traversal, and symlink escapes.
+
+Operations are namespaced implementation permissions, not capabilities. For example, a future `website.article.publish` handler may need `git.add.path`, `git.commit`, and `git.push`, but a playbook still asks for `website.article.publish`; it never asks for raw Git operations.
+
+Network egress uses exact destinations with host, port, and scheme. Hostname suffix tricks such as `github.com.evil.example` do not match `github.com`. Local Git transport is treated as filesystem/local repository I/O, not external network egress. Git subprocess network egress still requires preflight validation of configured remote destinations before subprocess invocation; Phase 53 does not claim OS-level sandboxing or redirect-level inspection for subprocesses.
+
+Production Git read now declares and enforces:
+
+```text
+capability: git.repository.status.read
+filesystem.read: repository
+operations:
+  - git.status
+  - git.rev_parse
+  - git.cat_file
+```
+
+With a `RuntimePolicyEngine`, missing `git.rev_parse`/`git.cat_file` or missing `filesystem.read.repository` denies before `GitPublisher` starts any subprocess.
+
+Phase 53 re-evaluates `website.article.publish` admission. The original Phase 52 permission/operation/egress blockers are now structurally representable:
+
+```text
+BLOCKED_COMPONENT_PERMISSION_MISMATCH: resolved structurally
+BLOCKED_UNCONTROLLED_GIT_OPERATION: resolved structurally
+BLOCKED_REMOTE_EGRESS_POLICY: resolved structurally
+```
+
+The mutation is still not admitted:
+
+```text
+BLOCKED_IDEMPOTENCY
+BLOCKED_READBACK
+BLOCKED_RECOVERY
+```
+
+No `website.article.publish` production handler is registered, and production mutation count remains `1`.
+
 ## Current Inventory
 
 | Area | Current abstraction | Future abstraction | Compatibility strategy | Migration candidate | Risk |

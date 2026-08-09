@@ -18,6 +18,9 @@ from src.core.runtime.results import NodeResult
 
 GIT_WEBSITE_COMPONENT_ID = "github-markdown-website"
 GIT_REPOSITORY_STATUS_READ_CAPABILITY = "git.repository.status.read"
+GIT_STATUS_OPERATION = "git.status"
+GIT_REV_PARSE_OPERATION = "git.rev_parse"
+GIT_CAT_FILE_OPERATION = "git.cat_file"
 
 GIT_REPOSITORY_STATUS_READ_INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -65,6 +68,12 @@ class GitRepositoryStatusReadHandler:
             include_changed_paths = _validate_input(input_data)
             repository = self._repository_for_install(resolved_node.install_id)
             validate_repository_reference(repository)
+            permission_context = _permission_context(input_data)
+            if permission_context is not None:
+                permission_context.require_filesystem_read("repository")
+                permission_context.require_operation(GIT_STATUS_OPERATION)
+                permission_context.require_operation(GIT_REV_PARSE_OPERATION)
+                permission_context.require_operation(GIT_CAT_FILE_OPERATION)
             head = self.git_publisher.head_state(repository.managed_checkout_root)
             status_output = self.git_publisher.git(repository.managed_checkout_root, "status", "--porcelain")
             changed_paths = _parse_status_paths(status_output or "")
@@ -121,7 +130,7 @@ def register_git_runtime_handlers(
 
 
 def _validate_input(input_data: dict[str, Any]) -> bool:
-    allowed = {"include_changed_paths"}
+    allowed = {"_runtime", "include_changed_paths"}
     unknown = sorted(set(input_data) - allowed)
     if unknown:
         raise PlaybookExecutionError(
@@ -137,6 +146,13 @@ def _validate_input(input_data: dict[str, Any]) -> bool:
             {"field": "include_changed_paths"},
         )
     return value
+
+
+def _permission_context(input_data: dict[str, Any]) -> Any | None:
+    runtime = input_data.get("_runtime")
+    if not isinstance(runtime, dict):
+        return None
+    return runtime.get("permission_context")
 
 
 def _parse_status_paths(status_output: str) -> list[str]:

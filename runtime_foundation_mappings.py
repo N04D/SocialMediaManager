@@ -7,12 +7,16 @@ from publication_calendar_runtime_handlers import (
     CALENDAR_EVENT_READ_OUTPUT_SCHEMA,
 )
 from publication_git_runtime_handlers import (
+    GIT_CAT_FILE_OPERATION,
     GIT_REPOSITORY_STATUS_READ_INPUT_SCHEMA,
     GIT_REPOSITORY_STATUS_READ_OUTPUT_SCHEMA,
+    GIT_REV_PARSE_OPERATION,
+    GIT_STATUS_OPERATION,
 )
 from src.core.runtime.capabilities import CapabilityDescriptor, CapabilityMode
 from src.core.runtime.components import ComponentManifest
 from src.core.runtime.installs import ComponentBinding, Install, InstallGrants
+from src.core.runtime.permissions import InstallPermissionGrants
 from src.core.runtime.resolver import RuntimeRegistry
 from youtube_runtime_handlers import (
     YOUTUBE_NETWORK_POLICY,
@@ -99,16 +103,41 @@ def phase41_component_manifests() -> tuple[ComponentManifest, ...]:
                     input_schema=GIT_REPOSITORY_STATUS_READ_INPUT_SCHEMA,
                     output_schema=GIT_REPOSITORY_STATUS_READ_OUTPUT_SCHEMA,
                     description="Read local Git repository branch, HEAD, and worktree status.",
+                    policy={
+                        "permissions": {
+                            "filesystem": {"read": ["repository"]},
+                            "operations": [GIT_STATUS_OPERATION, GIT_REV_PARSE_OPERATION, GIT_CAT_FILE_OPERATION],
+                        }
+                    },
                 ),
-                CapabilityDescriptor("website.article.publish", "0.1.0", CapabilityMode.WRITE.value),
+                CapabilityDescriptor(
+                    "website.article.publish",
+                    "0.1.0",
+                    CapabilityMode.WRITE.value,
+                    policy={
+                        "permissions": {
+                            "filesystem": {"read": ["repository"], "write": ["repository"]},
+                            "operations": [
+                                "git.status",
+                                "git.rev_parse",
+                                "git.add.path",
+                                "git.commit",
+                                "git.push",
+                                "git.fetch",
+                            ],
+                            "network": {"egress": [{"host": "github.com", "port": 443, "scheme": "https"}]},
+                        }
+                    },
+                ),
                 CapabilityDescriptor("website.publication.verify", "0.1.0", CapabilityMode.READ.value),
                 CapabilityDescriptor("website.analytics.read", "0.1.0", CapabilityMode.READ.value),
             ),
             permissions={
                 "network": {"required": False, "allowed_domains": []},
                 "secrets": {"required": False},
-                "filesystem": {"mode": "read"},
-                "subprocess": {"allowed": True, "policy": "read-only-git"},
+                "filesystem": {"read": ["repository"]},
+                "operations": [GIT_STATUS_OPERATION, GIT_REV_PARSE_OPERATION, GIT_CAT_FILE_OPERATION],
+                "subprocess": {"allowed": True, "policy": "named-operations"},
             },
             metadata={"legacy_plugin_id": "channel.markdown_website", "transport": "git_worktree"},
         ),
@@ -229,6 +258,12 @@ def phase41_sample_installs() -> tuple[Install, ...]:
                 allowed_capabilities=("git.repository.status.read", "github.file.read", "website.publication.verify"),
                 allow_filesystem=True,
                 allow_subprocess=True,
+                permission_grants=InstallPermissionGrants.from_dict(
+                    {
+                        "filesystem": {"read": ["repository"]},
+                        "operations": [GIT_STATUS_OPERATION, GIT_REV_PARSE_OPERATION, GIT_CAT_FILE_OPERATION],
+                    }
+                ),
             ),
         ),
         Install(

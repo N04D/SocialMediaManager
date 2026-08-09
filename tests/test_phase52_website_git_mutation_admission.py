@@ -37,9 +37,9 @@ def test_phase52_admission_is_blocked_with_structured_reasons() -> None:
 
     assert result.status == "BLOCKED"
     assert not result.admitted
-    assert "BLOCKED_COMPONENT_PERMISSION_MISMATCH" in result.reasons
-    assert "BLOCKED_UNCONTROLLED_GIT_OPERATION" in result.reasons
-    assert "BLOCKED_REMOTE_EGRESS_POLICY" in result.reasons
+    assert "BLOCKED_COMPONENT_PERMISSION_MISMATCH" not in result.reasons
+    assert "BLOCKED_UNCONTROLLED_GIT_OPERATION" not in result.reasons
+    assert "BLOCKED_REMOTE_EGRESS_POLICY" not in result.reasons
     assert "BLOCKED_IDEMPOTENCY" in result.reasons
     assert "BLOCKED_READBACK" in result.reasons
     assert "BLOCKED_RECOVERY" in result.reasons
@@ -85,7 +85,7 @@ def test_phase52_manifest_and_install_stay_read_only_for_generic_runtime() -> No
     component = _git_component()
     install = _git_install()
 
-    assert component.permissions["filesystem"]["mode"] == "read"
-    assert component.permissions["subprocess"]["policy"] == "read-only-git"
+    assert component.permissions["filesystem"]["read"] == ["repository"]
+    assert component.permissions["subprocess"]["policy"] == "named-operations"
     assert WEBSITE_ARTICLE_PUBLISH_CAPABILITY not in install.grants.allowed_capabilities
     assert install.grants.allow_mutations is False

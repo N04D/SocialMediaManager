@@ -108,7 +108,7 @@ def register_youtube_runtime_handlers(
 
 
 def _validate_input(input_data: dict[str, Any]) -> str:
-    allowed = {"video_id"}
+    allowed = {"_runtime", "video_id"}
     unknown = sorted(set(input_data) - allowed)
     if unknown:
         raise PlaybookExecutionError(

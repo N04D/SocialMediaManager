@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .identifiers import validate_namespaced_id, validate_runtime_id
+from .permissions import InstallPermissionGrants
 
 SECRET_VALUE_FRAGMENTS = ("password", "token", "secret", "credential", "api_key")
 
@@ -34,6 +35,7 @@ class InstallGrants:
     allow_mutations: bool = False
     allow_filesystem: bool = False
     allow_subprocess: bool = False
+    permission_grants: InstallPermissionGrants = field(default_factory=InstallPermissionGrants)
     require_approval_for_writes: bool = False
 
     def __post_init__(self) -> None:
@@ -55,6 +57,13 @@ class InstallGrants:
         )
         object.__setattr__(self, "allowed_network_domains", tuple(str(item) for item in self.allowed_network_domains))
         object.__setattr__(self, "allowed_secret_refs", tuple(str(item) for item in self.allowed_secret_refs))
+        object.__setattr__(
+            self,
+            "permission_grants",
+            self.permission_grants
+            if isinstance(self.permission_grants, InstallPermissionGrants)
+            else InstallPermissionGrants.from_dict(dict(self.permission_grants)),
+        )
 
     def allows_capability(self, capability_id: str) -> bool:
         return capability_id in self.allowed_capabilities
@@ -72,6 +81,7 @@ class InstallGrants:
             "allowed_network_domains": list(self.allowed_network_domains),
             "allowed_secret_refs": list(self.allowed_secret_refs),
             "denied_capabilities": list(self.denied_capabilities),
+            "permission_grants": self.permission_grants.to_dict(),
             "require_approval_for_writes": self.require_approval_for_writes,
         }
 
@@ -86,6 +96,7 @@ class InstallGrants:
             allow_mutations=bool(payload.get("allow_mutations", False)),
             allow_filesystem=bool(payload.get("allow_filesystem", False)),
             allow_subprocess=bool(payload.get("allow_subprocess", False)),
+            permission_grants=InstallPermissionGrants.from_dict(dict(payload.get("permission_grants") or {})),
             require_approval_for_writes=bool(payload.get("require_approval_for_writes", False)),
         )
 

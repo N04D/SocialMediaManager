@@ -13,6 +13,7 @@ from src.core.runtime.mutation_policies import (
     ReadbackPolicy,
     RecoveryPolicy,
 )
+from src.core.runtime.permissions import capability_permission_requirements
 
 WEBSITE_ARTICLE_PUBLISH_CAPABILITY = "website.article.publish"
 
@@ -62,16 +63,13 @@ def website_article_publish_admission(
     elif capability.mode != CapabilityMode.WRITE.value:
         reasons.append("BLOCKED_CAPABILITY_MODE")
 
-    permissions = dict(component.permissions or {})
-    filesystem = dict(permissions.get("filesystem") or {})
-    subprocess = dict(permissions.get("subprocess") or {})
-    network = dict(permissions.get("network") or component.network_policy or {})
-
-    if str(filesystem.get("mode") or "none") != "write":
+    requested = capability_permission_requirements(component, WEBSITE_ARTICLE_PUBLISH_CAPABILITY)
+    if "repository" not in requested.filesystem.write:
         reasons.append("BLOCKED_COMPONENT_PERMISSION_MISMATCH")
-    if str(subprocess.get("policy") or "") != "website-publish-git":
+    required_operations = {"git.add.path", "git.commit", "git.push"}
+    if not required_operations.issubset(set(requested.operations.operations)):
         reasons.append("BLOCKED_UNCONTROLLED_GIT_OPERATION")
-    if bool(network.get("required", False)) is False:
+    if not requested.network.egress:
         reasons.append("BLOCKED_REMOTE_EGRESS_POLICY")
 
     if install is not None:

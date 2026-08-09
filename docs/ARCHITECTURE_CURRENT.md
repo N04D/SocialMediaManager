@@ -789,6 +789,58 @@ flowchart TD
 
 Existing functionality is not automatically eligible for the generic mutation runtime. A production mutation must prove the safety guarantees declared by its policy before it is admitted.
 
+## Phase 53 Component Permissions
+
+Phase 53 adds a generic component permission model. Capabilities define what a component can provide; permissions define which host and external resources the implementation is allowed to use to provide those capabilities.
+
+```text
+requested permissions
+        ∩
+install grants
+        =
+effective permissions
+```
+
+Permissions are default-deny. A component may request filesystem scopes, named operations, and egress destinations. An install explicitly grants a subset. Extra install grants do not silently expand the component's effective permissions.
+
+```mermaid
+flowchart TD
+    Capability[Capability]
+    Component[Component]
+    Manifest[Component Permission Manifest]
+    Grants[Install Grants]
+    Effective[Effective Permission Set]
+    Guard[Runtime Guard]
+    FS[FS]
+    Ops[Ops]
+    Egress[Egress]
+
+    Capability --> Component
+    Component --> Manifest
+    Manifest --> Effective
+    Grants --> Effective
+    Effective --> Guard
+    Guard --> FS
+    Guard --> Ops
+    Guard --> Egress
+```
+
+Current generic contracts include `ComponentPermissions`, `FilesystemPermissions`, `OperationPermissions`, `NetworkPermissions`, `EgressDestination`, `InstallPermissionGrants`, `EffectivePermissionSet`, and `PermissionContext`.
+
+The existing Git read production bridge now declares:
+
+```text
+git.repository.status.read
+filesystem.read.repository
+git.status
+git.rev_parse
+git.cat_file
+```
+
+With policy enforcement enabled, missing repository read or missing Git operation grants block before `GitPublisher` can invoke subprocesses.
+
+Phase 53 does not admit Website publishing. It only makes the previously missing permission, operation, and egress contracts expressible and enforceable. `website.article.publish` remains blocked on idempotency, readback, and recovery, and production mutation count remains `1`.
+
 ## Storage Boundaries
 
 - Source code, manifests, docs, schemas, templates, and tests are repository content.

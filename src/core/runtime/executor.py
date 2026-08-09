@@ -379,6 +379,11 @@ class PlaybookExecutor:
                     return NodeResult.failure(
                         decision.reason_code, "Runtime policy denied capability execution.", decision.metadata
                     )
+                if decision.effective_permission and decision.effective_permission.permission_set is not None:
+                    input_data = _with_permission_context(
+                        input_data,
+                        decision.effective_permission.permission_context(_permission_roots_for_install(plan_node)),
+                    )
                 if decision.effective_permission and decision.effective_permission.mutation:
                     handler = self.handler_registry.resolve(plan_node.component_id, plan_node.capability)
                     mutation_policy = _effective_mutation_policy_for_handler(handler, node)
@@ -731,8 +736,9 @@ def _intent_input(
     input_data: dict[str, Any], plan_node: ExecutionPlanNode, effective_policy: MutationPolicy
 ) -> dict[str, Any]:
     compensation = dict(plan_node.config.get("compensation") or {})
+    public_input = {key: value for key, value in input_data.items() if key != "_runtime"}
     return {
-        **input_data,
+        **public_input,
         "_compensation": {"mode": str(compensation.get("mode") or "none")},
         "_mutation_policy": effective_policy.to_dict(),
         "_mutation_policy_fingerprint": effective_policy.fingerprint(),
@@ -800,11 +806,27 @@ def _with_runtime_mutation(input_data: dict[str, Any], intent: MutationIntent) -
     return {
         **input_data,
         "_runtime": {
+            **dict(input_data.get("_runtime") or {}),
             "idempotency_key": intent.idempotency_key,
             "input_fingerprint": intent.input_fingerprint,
             "mutation_id": intent.mutation_id,
         },
     }
+
+
+def _with_permission_context(input_data: dict[str, Any], permission_context: Any) -> dict[str, Any]:
+    return {
+        **input_data,
+        "_runtime": {
+            **dict(input_data.get("_runtime") or {}),
+            "permission_context": permission_context,
+        },
+    }
+
+
+def _permission_roots_for_install(plan_node: ExecutionPlanNode) -> dict[str, str]:
+    del plan_node
+    return {}
 
 
 def _build_compensation_intent(
