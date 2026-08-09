@@ -708,6 +708,47 @@ flowchart TD
 
 `ScheduleOccurrenceRepository.remove_created_occurrence(...)` verifies exact resource identity, runtime mutation ownership, receipt provenance, and unchanged created-state fingerprint before removing an occurrence. Changed resources and wrong-resource receipts are blocked. SQLite compensation claims keep duplicate workers from applying the same private inverse twice, and `recover_compensation(...)` lets stale `COMPENSATING` records converge after readback proves the inverse already happened.
 
+### Phase 51 mutation safety policies
+
+Phase 51 formalizes mutation safety as an implementation-owned runtime contract:
+
+```text
+Capability
+   |
+   v
+Mutation Implementation
+   |
+   +---- Minimum MutationPolicy
+   |
+   v
+Effective Policy Resolution
+   |
+   v
+Safety Preflight
+   |
+   v
+Approval / Intent
+   |
+   v
+Mutation Execution
+```
+
+A capability defines what can be done. A mutation policy defines the minimum safety guarantees under which that implementation may be executed.
+
+Playbooks and deployments may require stronger guarantees but may never weaken an implementation's minimum safety policy. The runtime validates approval, idempotency, readback, compensation, and recovery constraints before the handler is invoked, and repeats enforcement on resume because the effective policy is included in the mutation intent fingerprint.
+
+The current production mutation declaration for `calendar.event.create` is:
+
+```text
+requires_approval: true
+idempotency_required: true
+readback: REQUIRED
+compensation: SUPPORTED
+recovery: AUTOMATIC
+```
+
+No new production mutation capability is introduced in Phase 51.
+
 ## Storage Boundaries
 
 - Source code, manifests, docs, schemas, templates, and tests are repository content.

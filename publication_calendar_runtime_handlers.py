@@ -14,6 +14,12 @@ from publication_scheduling import (
 from src.core.runtime.errors import PlaybookExecutionError
 from src.core.runtime.execution_context import ExecutionContext, _assert_no_secret_values
 from src.core.runtime.handlers import CapabilityHandlerRegistry
+from src.core.runtime.mutation_policies import (
+    CompensationPolicy,
+    MutationPolicy,
+    ReadbackPolicy,
+    RecoveryPolicy,
+)
 from src.core.runtime.mutations import (
     CompensationIntent,
     CompensationReceipt,
@@ -140,6 +146,13 @@ class CalendarEventCreateHandler:
     occurrence_repository: ScheduleOccurrenceRepository
     component_id: str = CALENDAR_COMPONENT_ID
     capability_id: str = CALENDAR_EVENT_CREATE_CAPABILITY
+    mutation_policy: MutationPolicy = MutationPolicy(
+        requires_approval=True,
+        idempotency_required=True,
+        readback=ReadbackPolicy.REQUIRED.value,
+        compensation=CompensationPolicy.SUPPORTED.value,
+        recovery=RecoveryPolicy.AUTOMATIC.value,
+    )
 
     def execute(
         self,
@@ -209,6 +222,20 @@ class CalendarEventCreateHandler:
             },
             {"applied_at": receipt.applied_at, "readback_verified": True},
         )
+
+    def verify_readback(self, receipt: MutationReceipt, context: ExecutionContext) -> bool:
+        occurrence_id = _receipt_occurrence_id(receipt)
+        if not occurrence_id:
+            return False
+        entries = self.calendar_service.list_calendar_entries(
+            workspace_id=context.trigger_event.workspace_id,
+            start="1970-01-01T00:00:00+00:00",
+            end="9999-12-31T23:59:59+00:00",
+            timezone="UTC",
+            limit=500,
+        )
+        expected = f"calendar_occurrence_{occurrence_id}"
+        return any(_normalize_calendar_entry(entry)["id"] == expected for entry in entries)
 
     def compensate(
         self,

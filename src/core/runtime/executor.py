@@ -10,6 +10,13 @@ from .execution_context import ExecutionContext
 from .handlers import CapabilityHandlerRegistry
 from .input_resolution import resolve_node_input
 from .ledger import TERMINAL_STATES, ExecutionLedger, ExecutionRecord, ExecutionState, InMemoryExecutionLedger
+from .mutation_policies import (
+    MutationPolicy,
+    ReadbackPolicy,
+    RecoveryPolicy,
+    requested_mutation_policy_from_config,
+    validate_mutation_safety,
+)
 from .mutations import (
     CompensatableMutationHandler,
     CompensationIntent,
@@ -360,6 +367,7 @@ class PlaybookExecutor:
             input_data = resolve_node_input(node.config, context)
             policy_metadata: dict[str, Any] = {}
             mutation_intent: MutationIntent | None = None
+            handler = None
             if self.policy_engine is not None:
                 approval = self.approval_store.get(context.execution_id, node.node_id)
                 decision = self.policy_engine.evaluate(
@@ -367,17 +375,51 @@ class PlaybookExecutor:
                     plan_node=plan_node,
                     approval=approval,
                 )
+                if not decision.allowed and not decision.required_approval:
+                    return NodeResult.failure(
+                        decision.reason_code, "Runtime policy denied capability execution.", decision.metadata
+                    )
                 if decision.effective_permission and decision.effective_permission.mutation:
+                    handler = self.handler_registry.resolve(plan_node.component_id, plan_node.capability)
+                    mutation_policy = _effective_mutation_policy_for_handler(handler, node)
+                    safety = validate_mutation_safety(
+                        handler=handler,
+                        requested_policy=mutation_policy,
+                        idempotency_key="preflight",
+                    )
+                    if not safety.ready:
+                        return NodeResult.failure(
+                            safety.reason_code,
+                            "Mutation safety policy blocked execution.",
+                            _mutation_safety_metadata(safety),
+                        )
                     mutation_intent = _prepare_mutation_intent(
                         context=context,
                         plan_node=plan_node,
                         input_data=input_data,
+                        effective_policy=mutation_policy,
                         journal=self.mutation_journal,
                     )
-                if decision.required_approval:
+                    safety = validate_mutation_safety(
+                        handler=handler,
+                        requested_policy=mutation_policy,
+                        idempotency_key=mutation_intent.idempotency_key,
+                    )
+                    if not safety.ready:
+                        return NodeResult.failure(
+                            safety.reason_code,
+                            "Mutation safety policy blocked execution.",
+                            _mutation_safety_metadata(safety),
+                        )
+                    policy_metadata.update(_mutation_policy_metadata(mutation_policy))
+                approval_required = decision.required_approval or (
+                    mutation_policy.requires_approval if mutation_intent is not None else False
+                )
+                if approval_required and (approval is None or approval.status != ApprovalStatus.APPROVED.value):
                     approval_metadata = dict(decision.metadata)
                     if mutation_intent is not None:
-                        approval_metadata.update(_mutation_policy_metadata(mutation_intent))
+                        approval_metadata.update(_mutation_intent_metadata(mutation_intent))
+                        approval_metadata.update(policy_metadata)
                     existing_approval = self.approval_store.get(context.execution_id, node.node_id)
                     requested = self.approval_store.request(
                         execution_id=context.execution_id,
@@ -399,19 +441,16 @@ class PlaybookExecutor:
                             "waiting_reason": "approval_required",
                         },
                     )
-                if not decision.allowed:
-                    return NodeResult.failure(
-                        decision.reason_code, "Runtime policy denied capability execution.", decision.metadata
-                    )
                 policy_metadata = decision.metadata
                 if mutation_intent is not None:
+                    policy_metadata = {**policy_metadata, **_mutation_policy_metadata(mutation_policy)}
                     mismatch = _approved_intent_mismatch(approval, mutation_intent)
                     if mismatch:
                         requested = self.approval_store.request(
                             execution_id=context.execution_id,
                             node_id=node.node_id,
                             capability_id=plan_node.capability,
-                            metadata={**decision.metadata, **_mutation_policy_metadata(mutation_intent)},
+                            metadata={**decision.metadata, **_mutation_intent_metadata(mutation_intent)},
                             replace_existing=True,
                         )
                         return NodeResult.wait(
@@ -422,7 +461,7 @@ class PlaybookExecutor:
                             },
                             {
                                 **decision.metadata,
-                                **_mutation_policy_metadata(mutation_intent),
+                                **_mutation_intent_metadata(mutation_intent),
                                 "approval_id": requested.approval_id,
                                 "approval_status": requested.status,
                                 "waiting_reason": "approval_required",
@@ -439,7 +478,7 @@ class PlaybookExecutor:
                             },
                             {
                                 **policy_metadata,
-                                **_mutation_policy_metadata(mutation_intent),
+                                **_mutation_intent_metadata(mutation_intent),
                                 "mutation_replayed": True,
                             },
                         )
@@ -459,18 +498,18 @@ class PlaybookExecutor:
                                 },
                                 {
                                     **policy_metadata,
-                                    **_mutation_policy_metadata(mutation_intent),
+                                    **_mutation_intent_metadata(mutation_intent),
                                     "mutation_replayed": True,
                                 },
                             )
                         return NodeResult.failure(
                             "MUTATION_ALREADY_APPLYING",
                             "Mutation intent is already being applied.",
-                            {**policy_metadata, **_mutation_policy_metadata(mutation_intent)},
+                            {**policy_metadata, **_mutation_intent_metadata(mutation_intent)},
                         )
                     input_data = _with_runtime_mutation(input_data, mutation_intent)
-                    policy_metadata = {**policy_metadata, **_mutation_policy_metadata(mutation_intent)}
-            handler = self.handler_registry.resolve(plan_node.component_id, plan_node.capability)
+                    policy_metadata = {**policy_metadata, **_mutation_intent_metadata(mutation_intent)}
+            handler = handler or self.handler_registry.resolve(plan_node.component_id, plan_node.capability)
             result = handler.execute(context=context, node=node, resolved_node=plan_node, input_data=input_data)
             if mutation_intent is not None:
                 if result.status == NodeResultStatus.SUCCESS.value:
@@ -644,9 +683,10 @@ def _prepare_mutation_intent(
     context: ExecutionContext,
     plan_node: ExecutionPlanNode,
     input_data: dict[str, Any],
+    effective_policy: MutationPolicy,
     journal: MutationJournal,
 ) -> MutationIntent:
-    normalized = canonical_mutation_input(_intent_input(input_data, plan_node))
+    normalized = canonical_mutation_input(_intent_input(input_data, plan_node, effective_policy))
     fingerprint = mutation_input_fingerprint(normalized)
     mutation_id = build_mutation_id(
         execution_id=context.execution_id,
@@ -679,7 +719,7 @@ def _prepare_mutation_intent(
     return journal.prepare_intent(intent).intent
 
 
-def _mutation_policy_metadata(intent: MutationIntent) -> dict[str, Any]:
+def _mutation_intent_metadata(intent: MutationIntent) -> dict[str, Any]:
     return {
         "input_fingerprint": intent.input_fingerprint,
         "mutation_id": intent.mutation_id,
@@ -687,9 +727,58 @@ def _mutation_policy_metadata(intent: MutationIntent) -> dict[str, Any]:
     }
 
 
-def _intent_input(input_data: dict[str, Any], plan_node: ExecutionPlanNode) -> dict[str, Any]:
+def _intent_input(
+    input_data: dict[str, Any], plan_node: ExecutionPlanNode, effective_policy: MutationPolicy
+) -> dict[str, Any]:
     compensation = dict(plan_node.config.get("compensation") or {})
-    return {**input_data, "_compensation": {"mode": str(compensation.get("mode") or "none")}}
+    return {
+        **input_data,
+        "_compensation": {"mode": str(compensation.get("mode") or "none")},
+        "_mutation_policy": effective_policy.to_dict(),
+        "_mutation_policy_fingerprint": effective_policy.fingerprint(),
+    }
+
+
+def _effective_mutation_policy_for_handler(handler: object, node: PlaybookNode) -> MutationPolicy:
+    minimum = getattr(handler, "mutation_policy", None)
+    if not isinstance(minimum, MutationPolicy):
+        component_id = str(getattr(handler, "component_id", ""))
+        if component_id.startswith("test-"):
+            minimum = MutationPolicy(
+                requires_approval=False,
+                idempotency_required=False,
+                readback=ReadbackPolicy.UNAVAILABLE.value,
+                compensation="unavailable",
+                recovery=RecoveryPolicy.UNRECOVERABLE.value,
+            )
+        else:
+            raise PlaybookExecutionError(
+                "BLOCKED_POLICY_MISSING",
+                "Production mutation handler does not declare a mutation policy.",
+            )
+    requested = requested_mutation_policy_from_config(node.config, minimum)
+    safety = validate_mutation_safety(handler=handler, requested_policy=requested, idempotency_key="preflight")
+    if not safety.ready:
+        raise PlaybookExecutionError(
+            safety.reason_code,
+            "Mutation safety policy blocked execution.",
+            _mutation_safety_metadata(safety),
+        )
+    assert safety.effective_policy is not None
+    return safety.effective_policy
+
+
+def _mutation_policy_metadata(policy: MutationPolicy) -> dict[str, Any]:
+    return {
+        "mutation_policy": policy.to_dict(),
+        "mutation_policy_fingerprint": policy.fingerprint(),
+    }
+
+
+def _mutation_safety_metadata(safety: Any) -> dict[str, Any]:
+    payload = safety.to_dict() if hasattr(safety, "to_dict") else {}
+    payload["reason_code"] = getattr(safety, "reason_code", "")
+    return payload
 
 
 def _approval_requires_replacement(approval: ApprovalRecord | None, metadata: dict[str, Any]) -> bool:

@@ -767,6 +767,62 @@ Compensation is implementation-owned recovery behavior and is not exposed as a g
 
 Phase 50 also adds `recover_compensation(...)` as a generic recovery helper. Like `recover_mutation(...)`, it is side-effect aware: a component/domain verifier must prove the compensation already happened before the journal converges a stale `COMPENSATING` record to `COMPENSATED`.
 
+### Phase 51 mutation safety policies
+
+Phase 51 adds an explicit generic `MutationPolicy` contract. A capability still describes what can be done; a mutation policy describes the minimum runtime safety guarantees under which a specific mutation implementation may execute.
+
+Inspection findings before the refactor:
+
+| Safety assumption | Previous location | Phase 51 contract |
+| --- | --- | --- |
+| Approval required | `RuntimePolicyEngine` inferred from write mode plus install/deployment flags | `MutationPolicy.requires_approval` is owned by the mutation implementation and cannot be weakened. |
+| Idempotency required | `PlaybookExecutor` always built mutation IDs/keys for write nodes | `MutationPolicy.idempotency_required` is validated before side effect. |
+| Readback required | Calendar handler returned `readback_verified`; recovery depended on caller-provided readback | `ReadbackPolicy.REQUIRED` blocks execution unless the handler provides a verifier. |
+| Compensation support | Node `compensation.mode` plus handler `compensate(...)` were checked only at compensation time | `CompensationPolicy` distinguishes `REQUIRED`, `SUPPORTED`, `UNAVAILABLE`, and `FORBIDDEN`. |
+| Recovery behavior | `recover_mutation(...)` and `recover_compensation(...)` existed, but support level was implicit | `RecoveryPolicy` distinguishes `AUTOMATIC`, `MANUAL`, and `UNRECOVERABLE`. |
+
+The effective policy is resolved from:
+
+```text
+implementation minimum policy
+        +
+playbook/deployment stricter request
+        =
+effective mutation policy
+```
+
+Playbooks and deployments may require stronger guarantees, but may never weaken an implementation's minimum safety policy. A downgrade such as `requires_approval=true` to `requires_approval=false` is rejected before handler invocation.
+
+```mermaid
+flowchart TD
+    Capability[Capability]
+    Implementation[Mutation Implementation]
+    Minimum[Minimum MutationPolicy]
+    Effective[Effective Policy Resolution]
+    Preflight[Safety Preflight]
+    Approval[Approval / Intent]
+    Execution[Mutation Execution]
+
+    Capability --> Implementation
+    Implementation --> Minimum
+    Minimum --> Effective
+    Effective --> Preflight
+    Preflight --> Approval
+    Approval --> Execution
+```
+
+For `calendar.event.create`, the declared production policy is:
+
+```text
+requires_approval: true
+idempotency_required: true
+readback: REQUIRED
+compensation: SUPPORTED
+recovery: AUTOMATIC
+```
+
+The effective policy and policy fingerprint are included in `MutationIntent.normalized_input`, so approval is bound to the safety policy as well as to the mutation input. If the handler policy changes after approval, the old approval no longer matches the new intent fingerprint and no side effect is performed.
+
 ## Current Inventory
 
 | Area | Current abstraction | Future abstraction | Compatibility strategy | Migration candidate | Risk |
