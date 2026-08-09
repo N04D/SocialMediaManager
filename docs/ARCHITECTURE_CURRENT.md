@@ -116,6 +116,41 @@ flowchart TD
     ChannelRuntime --> SharedServices
 ```
 
+### Phase 41 generic runtime foundation
+
+Phase 41 adds a contract layer beside the existing plugin runtime. It does not execute playbooks and does not replace the current plugin registry, scheduler, workers, or storage.
+
+```mermaid
+flowchart TD
+    ExternalPlatform[External Platform]
+    ComponentA[Component]
+    Event[Event]
+    FuturePlaybook[Future Playbook Runtime]
+    Install[Install]
+    ComponentB[Component]
+    ExternalPlatformB[External Platform]
+
+    ExternalPlatform --> ComponentA
+    ComponentA -->|emits| Event
+    Event --> FuturePlaybook
+    FuturePlaybook -->|requires capability| Install
+    Install -->|resolves| ComponentB
+    ComponentB --> ExternalPlatformB
+```
+
+New generic contracts live in `src/core/runtime/`:
+
+- `EventEnvelope` and `EventSource` define universal event identity, source, tracing, idempotency, payload, and metadata fields.
+- `CapabilityDescriptor` defines extensible namespaced capabilities with `read`, `write`, and `event` modes.
+- `ComponentManifest` describes technical implementations that provide one or more capabilities.
+- `Install` describes a configured account/workspace instance with capability bindings and secret references only.
+- `CapabilityResolver` resolves `install_id + capability` to the bound component without knowing transport details.
+- `LegacyCapabilityAdapter` describes existing plugin manifests as component capabilities without changing plugin behavior.
+
+Concrete Phase 41 mappings for LinkedIn, YouTube, Website/GitHub, and the local publication calendar live outside the generic core in `runtime_foundation_mappings.py`.
+
+The future Playbook Runtime remains future work. Current business workflows still live in `pipeline.py`, `publication_planning.py`, `publication_scheduling.py`, `publication_execution.py`, channel runtimes, and existing plugins.
+
 ## Storage Boundaries
 
 - Source code, manifests, docs, schemas, templates, and tests are repository content.
