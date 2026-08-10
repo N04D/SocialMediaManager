@@ -15,6 +15,7 @@ from .deployments import (
     capability_report,
     validate_deployment,
 )
+from .dispatcher import DispatchResult, TriggerDispatcher
 from .errors import (
     CapabilityResolutionError,
     DeploymentValidationError,
@@ -25,6 +26,13 @@ from .errors import (
     RuntimeValidationError,
 )
 from .events import EventEnvelope, EventSource
+from .event_store import (
+    EventDeliveryState,
+    EventDispatchRecord,
+    EventStore,
+    InMemoryEventStore,
+    SqliteEventStore,
+)
 from .execution_context import ExecutionContext
 from .executor import ExecutionOutcome, PlaybookExecutor
 from .handlers import CapabilityHandler, CapabilityHandlerRegistry
@@ -107,11 +115,32 @@ from .policy import (
     PolicyReasonCode,
     RuntimePolicyEngine,
 )
+from .candidates import (
+    ExternalSourceCandidate,
+    MutationHandlerCandidate,
+    ProductionExternalSourceActivationResult,
+    ProductionMutationActivationResult,
+    admit_and_activate_external_source,
+    admit_and_register_mutation,
+    compute_candidate_evidence_fingerprint,
+)
 from .resolver import CapabilityResolution, CapabilityResolver, RuntimeRegistry
 from .results import NodeResult, NodeResultStatus
+from .sources import (
+    ExternalEventSource,
+    ExternalSourceRecord,
+    SourceBatch,
+    SourceCheckpoint,
+    SourceCheckpointStore,
+    SourceHealth,
+    poll_and_ingest_external_events,
+)
 from .tracing import ExecutionTrace, trace_execution
 
 __all__ = [
+    "ExternalSourceCandidate",
+    "ProductionExternalSourceActivationResult",
+    "admit_and_activate_external_source",
     "MutationHandlerCandidate",
     "ProductionMutationActivationResult",
     "admit_and_register_mutation",
@@ -214,6 +243,20 @@ __all__ = [
     "recover_compensation",
     "recover_mutation",
     "trace_execution",
+    "EventDeliveryState",
+    "EventDispatchRecord",
+    "EventStore",
+    "InMemoryEventStore",
+    "SqliteEventStore",
+    "DispatchResult",
+    "TriggerDispatcher",
+    "ExternalEventSource",
+    "ExternalSourceRecord",
+    "SourceBatch",
+    "SourceCheckpoint",
+    "SourceCheckpointStore",
+    "SourceHealth",
+    "poll_and_ingest_external_events",
     "validate_component_permissions",
     "validate_deployment",
     "validate_mutation_safety",

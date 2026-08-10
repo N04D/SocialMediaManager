@@ -307,7 +307,7 @@ class PlaybookExecutor:
                 result = NodeResult.failure(
                     "CAPABILITY_EXECUTION_FAILED",
                     "Node execution failed.",
-                    {"error": type(exc).__name__},
+                    {"error": type(exc).__name__, "message": str(exc)},
                 )
             if not isinstance(result, NodeResult):
                 result = NodeResult.failure("INVALID_NODE_RESULT", "Handler returned an invalid node result.")

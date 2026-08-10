@@ -1068,6 +1068,24 @@ BLOCKED_HANDLER_NOT_REGISTERED
 production mutation count: 1
 ```
 
+### Phase 57 external event source foundation
+
+Phase 57 establishes a generic external event source ingestion foundation without expanding production mutation capabilities.
+
+Contracts & Core Components:
+- `ExternalEventSource` protocol defining standard poll-based remote source behavior (`poll(install_id, checkpoint, limit)`).
+- `SourceCheckpointStore` backing checkpoint persistence, worker leasing, and health metric tracking in SQLite.
+- `poll_and_ingest_external_events` transaction workflow: acquires a worker lease, polls the source, persists normalized `EventEnvelope` instances into `SqliteEventStore`, and advances source checkpoints safely.
+
+Admission Status:
+```text
+PHASE 57: BLOCKED_NO_EXISTING_DISCOVERY
+```
+Rationale: YouTube plugin inspection confirmed that no native remote channel feed discovery mechanism currently exists in the codebase (only single `video_id` lookups). To maintain production integrity and avoid fake scraping or API hacks, admission is held at `BLOCKED_NO_EXISTING_DISCOVERY` until a genuine discovery mechanism is identified.
+
+Production Mutation Guard:
+- Total active production mutations remain strictly `2` (`calendar.event.create` and `website.article.publish`).
+
 ## Current Inventory
 
 | Area | Current abstraction | Future abstraction | Compatibility strategy | Migration candidate | Risk |

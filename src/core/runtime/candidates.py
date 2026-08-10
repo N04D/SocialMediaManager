@@ -167,6 +167,128 @@ def admit_and_register_mutation(
     )
 
 
+@dataclass(frozen=True)
+class ExternalSourceCandidate:
+    component_id: str
+    source_id: str
+    event_type: str
+    build_source: Callable[[], Any]
+    read_only: bool = True
+    bounded_polling: bool = True
+    page_size_limit: int = 50
+    max_pages_limit: int = 10
+    first_poll_policy: str = "FROM_NOW"
+    gap_detection: bool = True
+    stable_external_identity: bool = True
+    checkpoint_support: bool = True
+    required_egress: tuple[str, ...] = field(default_factory=tuple)
+    required_secrets: tuple[str, ...] = field(default_factory=tuple)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def fingerprint(self) -> str:
+        payload = {
+            "bounded_polling": self.bounded_polling,
+            "checkpoint_support": self.checkpoint_support,
+            "component_id": self.component_id,
+            "event_type": self.event_type,
+            "first_poll_policy": self.first_poll_policy,
+            "gap_detection": self.gap_detection,
+            "max_pages_limit": self.max_pages_limit,
+            "page_size_limit": self.page_size_limit,
+            "read_only": self.read_only,
+            "required_egress": list(self.required_egress),
+            "required_secrets": list(self.required_secrets),
+            "source_id": self.source_id,
+            "stable_external_identity": self.stable_external_identity,
+        }
+        encoded = json.dumps(_json_safe(payload), sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+
+@dataclass(frozen=True)
+class ProductionExternalSourceActivationResult:
+    source_id: str
+    component_id: str
+    status: str
+    activated: bool
+    evidence_fingerprint: str
+    reasons: tuple[str, ...] = field(default_factory=tuple)
+    source: Any | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "activated": self.activated,
+            "component_id": self.component_id,
+            "evidence_fingerprint": self.evidence_fingerprint,
+            "metadata": _json_safe(self.metadata),
+            "reasons": list(self.reasons),
+            "source_id": self.source_id,
+            "status": self.status,
+        }
+
+
+def admit_and_activate_external_source(
+    *,
+    candidate: ExternalSourceCandidate,
+    component: Any,
+    install: Any = None,
+    source_registry: dict[tuple[str, str], Any] | None = None,
+    admission_evaluator: Callable[..., Any],
+) -> ProductionExternalSourceActivationResult:
+    initial_fingerprint = candidate.fingerprint()
+    admission_result = admission_evaluator(component=component, install=install, candidate=candidate)
+
+    if not hasattr(admission_result, "status") or admission_result.status != "ADMITTED":
+        reasons = getattr(admission_result, "reasons", ("BLOCKED_ADMISSION_FAILED",))
+        return ProductionExternalSourceActivationResult(
+            source_id=candidate.source_id,
+            component_id=candidate.component_id,
+            status=getattr(admission_result, "status", "BLOCKED_ADMISSION_FAILED"),
+            activated=False,
+            evidence_fingerprint=initial_fingerprint,
+            reasons=tuple(reasons),
+            metadata=dict(getattr(admission_result, "metadata", {})),
+        )
+
+    current_fingerprint = candidate.fingerprint()
+    if initial_fingerprint != current_fingerprint:
+        return ProductionExternalSourceActivationResult(
+            source_id=candidate.source_id,
+            component_id=candidate.component_id,
+            status="BLOCKED_CANDIDATE_MUTATED",
+            activated=False,
+            evidence_fingerprint=current_fingerprint,
+            reasons=("BLOCKED_CANDIDATE_MUTATED",),
+        )
+
+    try:
+        source_instance = candidate.build_source()
+        if source_registry is not None:
+            source_registry[(candidate.component_id, candidate.source_id)] = source_instance
+    except Exception as exc:
+        return ProductionExternalSourceActivationResult(
+            source_id=candidate.source_id,
+            component_id=candidate.component_id,
+            status="ACTIVATION_FAILED",
+            activated=False,
+            evidence_fingerprint=current_fingerprint,
+            reasons=("ACTIVATION_FAILED",),
+            metadata={"error": type(exc).__name__},
+        )
+
+    return ProductionExternalSourceActivationResult(
+        source_id=candidate.source_id,
+        component_id=candidate.component_id,
+        status="ADMITTED",
+        activated=True,
+        evidence_fingerprint=current_fingerprint,
+        reasons=(),
+        source=source_instance,
+        metadata={"activation": "successful", "evidence_fingerprint": current_fingerprint},
+    )
+
+
 def _handler_identity_from_factory(factory: Callable[[], CapabilityHandler]) -> str:
     if hasattr(factory, "__qualname__"):
         return f"{factory.__module__}.{factory.__qualname__}"
@@ -179,3 +301,4 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_json_safe(item) for item in value]
     return value
+

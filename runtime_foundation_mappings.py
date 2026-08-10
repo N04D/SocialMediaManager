@@ -120,6 +120,7 @@ def phase41_component_manifests() -> tuple[ComponentManifest, ...]:
                             "operations": [
                                 "git.status",
                                 "git.rev_parse",
+                                "git.cat_file",
                                 "git.add.path",
                                 "git.commit",
                                 "git.push",

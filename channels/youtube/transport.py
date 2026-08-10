@@ -45,6 +45,16 @@ class YouTubeTransport:
     def get_channel(self, *, access_token: str) -> YouTubeResponse:
         raise NotImplementedError
 
+    def get_channel_uploads_playlist(
+        self, *, channel_id: str = "", access_token: str = "", api_key: str = ""
+    ) -> YouTubeResponse:
+        raise NotImplementedError
+
+    def list_playlist_items(
+        self, *, playlist_id: str, page_token: str = "", max_results: int = 50, access_token: str = "", api_key: str = ""
+    ) -> YouTubeResponse:
+        raise NotImplementedError
+
     def refresh_access_token(self, *, refresh_token: str, client_id: str, client_secret: str) -> YouTubeResponse:
         raise NotImplementedError
 
@@ -155,6 +165,36 @@ class HttpYouTubeTransport(YouTubeTransport):
             f"{VIDEO_ENDPOINT.rsplit('/', 1)[0]}/channels?{query}", method="GET", access_token=access_token
         )
 
+    def get_channel_uploads_playlist(
+        self, *, channel_id: str = "", access_token: str = "", api_key: str = ""
+    ) -> YouTubeResponse:
+        params: dict[str, str] = {"part": "contentDetails,snippet"}
+        if channel_id:
+            params["id"] = channel_id
+        else:
+            params["mine"] = "true"
+        if api_key:
+            params["key"] = api_key
+        query = urllib.parse.urlencode(params)
+        endpoint = f"{VIDEO_ENDPOINT.rsplit('/', 1)[0]}/channels"
+        return self._request(f"{endpoint}?{query}", method="GET", access_token=access_token)
+
+    def list_playlist_items(
+        self, *, playlist_id: str, page_token: str = "", max_results: int = 50, access_token: str = "", api_key: str = ""
+    ) -> YouTubeResponse:
+        params: dict[str, str] = {
+            "part": "snippet,contentDetails,status",
+            "playlistId": playlist_id,
+            "maxResults": str(min(max_results, 50)),
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        if api_key:
+            params["key"] = api_key
+        query = urllib.parse.urlencode(params)
+        endpoint = f"{VIDEO_ENDPOINT.rsplit('/', 1)[0]}/playlistItems"
+        return self._request(f"{endpoint}?{query}", method="GET", access_token=access_token)
+
     def refresh_access_token(self, *, refresh_token: str, client_id: str, client_secret: str) -> YouTubeResponse:
         body = urllib.parse.urlencode(
             {
@@ -185,6 +225,15 @@ class FakeYouTubeTransport(YouTubeTransport):
         self.requests: list[dict[str, Any]] = []
         self.sessions: dict[str, dict[str, Any]] = {}
         self.create_count = 0
+        self.channels: list[dict[str, Any]] = [
+            {
+                "id": "channel-test",
+                "snippet": {"title": "Test Creator"},
+                "contentDetails": {"relatedPlaylists": {"uploads": "UU_channel_test"}},
+            }
+        ]
+        self.playlist_items: dict[str, list[dict[str, Any]]] = {}
+        self.error_override: Exception | None = None
 
     def create_upload_session(
         self, *, access_token: str, metadata: dict[str, Any], total_bytes: int
@@ -248,11 +297,37 @@ class FakeYouTubeTransport(YouTubeTransport):
 
     def get_channel(self, *, access_token: str) -> YouTubeResponse:
         self.requests.append({"method": "GET", "endpoint": "channels.list"})
-        return YouTubeResponse(200, {"items": [{"id": "channel-test", "snippet": {"title": "Test Creator"}}]}, {})
+        return YouTubeResponse(200, {"items": self.channels}, {})
 
-    def refresh_access_token(self, **kwargs) -> YouTubeResponse:
-        self.requests.append({"method": "POST", "endpoint": "oauth.refresh"})
-        return YouTubeResponse(200, {"access_token": "refreshed-access", "token_type": "Bearer"}, {})
+    def get_channel_uploads_playlist(
+        self, *, channel_id: str = "", access_token: str = "", api_key: str = ""
+    ) -> YouTubeResponse:
+        self.requests.append({"method": "GET", "endpoint": "channels.list", "channel_id": channel_id})
+        if self.error_override:
+            raise self.error_override
+        matched = [c for c in self.channels if not channel_id or c["id"] == channel_id]
+        return YouTubeResponse(200, {"items": matched}, {})
+
+    def list_playlist_items(
+        self, *, playlist_id: str, page_token: str = "", max_results: int = 50, access_token: str = "", api_key: str = ""
+    ) -> YouTubeResponse:
+        self.requests.append({
+            "method": "GET",
+            "endpoint": "playlistItems.list",
+            "playlist_id": playlist_id,
+            "page_token": page_token,
+            "max_results": max_results,
+        })
+        if self.error_override:
+            raise self.error_override
+        items = self.playlist_items.get(playlist_id, [])
+        offset = int(page_token) if page_token and page_token.isdigit() else 0
+        paged = items[offset : offset + max_results]
+        next_token = str(offset + max_results) if offset + max_results < len(items) else ""
+        payload = {"items": paged}
+        if next_token:
+            payload["nextPageToken"] = next_token
+        return YouTubeResponse(200, payload, {})
 
 
 def _http_error_code(status: int) -> str:

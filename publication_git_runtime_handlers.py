@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import hashlib
 from channels.markdown_website.errors import MarkdownWebsiteError
 from channels.markdown_website.git_publisher import GitPublisher, sha256_path
 from channels.markdown_website.models import (
@@ -31,6 +32,8 @@ from src.core.runtime.candidates import (
 
 from src.core.runtime.components import ComponentManifest
 from src.core.runtime.errors import PlaybookExecutionError
+from src.core.runtime.events import EventEnvelope, EventSource
+from src.core.runtime.event_store import EventStore
 from src.core.runtime.execution_context import ExecutionContext, _assert_no_secret_values
 from src.core.runtime.handlers import CapabilityHandler, CapabilityHandlerRegistry
 from src.core.runtime.installs import Install
@@ -40,7 +43,7 @@ from src.core.runtime.mutation_policies import (
     ReadbackPolicy,
     RecoveryPolicy,
 )
-from src.core.runtime.mutations import MutationReceipt, mutation_input_fingerprint
+from src.core.runtime.mutations import MutationJournal, MutationJournalRecord, MutationReceipt, MutationState, mutation_input_fingerprint
 from src.core.runtime.plans import ExecutionPlanNode
 from src.core.runtime.playbooks import PlaybookNode
 from src.core.runtime.results import NodeResult
@@ -171,179 +174,193 @@ class WebsiteArticlePublishHandler:
         resolved_node: ExecutionPlanNode,
         input_data: dict[str, Any],
     ) -> NodeResult:
-        _assert_no_secret_values(input_data)
-        permission_context = _permission_context(input_data)
+        try:
+            _assert_no_secret_values(input_data)
+            permission_context = _permission_context(input_data)
 
-        title = str(input_data.get("title") or "Untitled Article")
-        markdown_content = str(input_data.get("markdown_content") or "")
-        relative_path = str(input_data.get("relative_path") or "posts/article.md")
-        branch = str(input_data.get("branch") or "main")
-        remote_name = str(input_data.get("remote_name") or self.remote_name)
-        push = bool(input_data.get("push", True))
+            title = str(input_data.get("title") or "Untitled Article")
+            markdown_content = str(input_data.get("markdown_content") or "")
+            relative_path = str(input_data.get("relative_path") or "posts/article.md")
+            branch = str(input_data.get("branch") or "main")
+            remote_name = str(input_data.get("remote_name") or self.remote_name)
+            push = bool(input_data.get("push", True))
 
-        content_item_id = str(input_data.get("content_item_id") or "item-001")
-        content_revision_id = str(input_data.get("content_revision_id") or "rev-001")
-        publication_target_id = str(input_data.get("publication_target_id") or "target-001")
-        publication_attempt_id = str(input_data.get("publication_attempt_id") or "attempt-001")
+            content_item_id = str(input_data.get("content_item_id") or "item-001")
+            content_revision_id = str(input_data.get("content_revision_id") or "rev-001")
+            publication_target_id = str(input_data.get("publication_target_id") or "target-001")
+            publication_attempt_id = str(input_data.get("publication_attempt_id") or "attempt-001")
 
-        repository = self.repository_resolver(resolved_node.install_id)
-        if repository is None:
-            raise PlaybookExecutionError(
-                "GIT_REPOSITORY_MISSING",
-                "No repository reference is configured for this install.",
-                {"install_id": resolved_node.install_id},
+            repository = self.repository_resolver(resolved_node.install_id)
+            if repository is None:
+                raise PlaybookExecutionError(
+                    "GIT_REPOSITORY_MISSING",
+                    "No repository reference is configured for this install.",
+                    {"install_id": resolved_node.install_id},
+                )
+
+            if permission_context is not None:
+                permission_context.require_filesystem_write("repository")
+                permission_context.require_operation("git.status")
+                permission_context.require_operation("git.rev_parse")
+                permission_context.require_operation("git.cat_file")
+                permission_context.require_operation("git.add.path")
+                permission_context.require_operation("git.commit")
+                if push:
+                    permission_context.require_operation("git.push")
+                    remote_url = getattr(repository, "remote_url", "")
+                    if remote_url and ("github.com" in remote_url or "gitlab.com" in remote_url):
+                        permission_context.require_egress("github.com", 443)
+
+            repo_root = repository.managed_checkout_root
+            validate_repository_reference(repository)
+
+            # Staging isolation check: inspect pre-existing staged files
+            status_out = self.git_publisher.git(repo_root, "status", "--porcelain")
+            staged_files: list[str] = []
+            for line in (status_out or "").splitlines():
+                if not line.strip():
+                    continue
+                index_status = line[0]
+                fpath = line[3:] if len(line) > 3 else line[2:]
+                if index_status in {"M", "A", "D", "R", "C"}:
+                    staged_files.append(fpath)
+
+            if staged_files:
+                raise PlaybookExecutionError(
+                    "UNCONTROLLED_GIT_STAGING",
+                    "Pre-existing staged files in index; cannot safely isolate publish mutation.",
+                    {"staged_files": staged_files},
+                )
+
+            target_abs_path = ensure_under(repo_root, relative_path)
+            target_abs_path.parent.mkdir(parents=True, exist_ok=True)
+            target_abs_path.write_text(markdown_content, encoding="utf-8")
+
+            # Stage ONLY exact target path
+            self.git_publisher.git(repo_root, "add", "--", relative_path)
+
+            rendered_checksum = sha256_path(target_abs_path)
+            snapshot = input_data.get("snapshot")
+            snapshot_checksum = (
+                snapshot.snapshot_checksum
+                if hasattr(snapshot, "snapshot_checksum")
+                else (snapshot.get("snapshot_checksum") if isinstance(snapshot, dict) else rendered_checksum)
             )
 
-        if permission_context is not None:
-            permission_context.require_filesystem_write("repository")
-            permission_context.require_operation("git.status")
-            permission_context.require_operation("git.rev_parse")
-            permission_context.require_operation("git.cat_file")
-            permission_context.require_operation("git.add.path")
-            permission_context.require_operation("git.commit")
+            runtime_meta = dict(input_data.get("_runtime") or {})
+            intent_fingerprint = (
+                str(runtime_meta.get("input_fingerprint") or "")
+                or input_data.get("intent_fingerprint")
+                or (permission_context.intent_fingerprint if permission_context and hasattr(permission_context, "intent_fingerprint") else "")
+                or mutation_input_fingerprint({"path": relative_path, "content": markdown_content})
+            )
+            mutation_id = str(
+                runtime_meta.get("mutation_id")
+                or input_data.get("mutation_id")
+                or f"mut_{content_revision_id}_{publication_target_id}"
+            )
+            idempotency_key = str(
+                runtime_meta.get("idempotency_key")
+                or f"website.article.publish:{publication_target_id}:{content_revision_id}"
+            )
+
+            commit_message = (
+                f"publish: {title}\n\n"
+                f"Content-Revision: {content_revision_id}\n"
+                f"Publication-Target: {publication_target_id}\n"
+                f"Publication-Attempt: {publication_attempt_id}\n"
+                f"Snapshot-Checksum: {snapshot_checksum}\n"
+                f"Mutation-ID: {mutation_id}\n"
+                f"Intent-Fingerprint: {intent_fingerprint}\n"
+            )
+
+            commit_sha = self.git_publisher.git(repo_root, "commit", "-m", commit_message).strip()
+            if not commit_sha or " " in commit_sha:
+                commit_sha = self.git_publisher.git(repo_root, "rev-parse", "HEAD").strip()
+
             if push:
-                permission_context.require_operation("git.push")
-                remote_url = getattr(repository, "remote_url", "")
-                if remote_url and ("github.com" in remote_url or "gitlab.com" in remote_url):
-                    permission_context.require_egress("github.com", 443)
+                self.git_publisher.git(repo_root, "push", remote_name, branch)
 
-        repo_root = repository.managed_checkout_root
-        validate_repository_reference(repository)
-
-        # Staging isolation check: inspect pre-existing staged files
-        status_out = self.git_publisher.git(repo_root, "status", "--porcelain")
-        staged_files: list[str] = []
-        for line in (status_out or "").splitlines():
-            if not line.strip():
-                continue
-            index_status = line[0]
-            fpath = line[3:] if len(line) > 3 else line[2:]
-            if index_status in {"M", "A", "D", "R", "C"}:
-                staged_files.append(fpath)
-
-        if staged_files:
-            raise PlaybookExecutionError(
-                "UNCONTROLLED_GIT_STAGING",
-                "Pre-existing staged files in index; cannot safely isolate publish mutation.",
-                {"staged_files": staged_files},
-            )
-
-        target_abs_path = ensure_under(repo_root, relative_path)
-        target_abs_path.parent.mkdir(parents=True, exist_ok=True)
-        target_abs_path.write_text(markdown_content, encoding="utf-8")
-
-        # Stage ONLY exact target path
-        self.git_publisher.git(repo_root, "add", "--", relative_path)
-
-        rendered_checksum = sha256_path(target_abs_path)
-        snapshot = input_data.get("snapshot")
-        snapshot_checksum = (
-            snapshot.snapshot_checksum
-            if hasattr(snapshot, "snapshot_checksum")
-            else (snapshot.get("snapshot_checksum") if isinstance(snapshot, dict) else rendered_checksum)
-        )
-
-        intent_fingerprint = (
-            input_data.get("intent_fingerprint")
-            or (permission_context.intent_fingerprint if permission_context and hasattr(permission_context, "intent_fingerprint") else "")
-            or mutation_input_fingerprint({"path": relative_path, "content": markdown_content})
-        )
-        mutation_id = input_data.get("mutation_id") or f"mut_{content_revision_id}_{publication_target_id}"
-
-        commit_message = (
-            f"publish: {title}\n\n"
-            f"Content-Revision: {content_revision_id}\n"
-            f"Publication-Target: {publication_target_id}\n"
-            f"Publication-Attempt: {publication_attempt_id}\n"
-            f"Snapshot-Checksum: {snapshot_checksum}\n"
-            f"Mutation-ID: {mutation_id}\n"
-            f"Intent-Fingerprint: {intent_fingerprint}\n"
-        )
-
-        commit_sha = self.git_publisher.git(repo_root, "commit", "-m", commit_message).strip()
-        if not commit_sha or " " in commit_sha:
-            commit_sha = self.git_publisher.git(repo_root, "rev-parse", "HEAD").strip()
-
-        if push:
-            self.git_publisher.git(repo_root, "push", remote_name, branch)
-
-        evidence = WebsitePublicationEvidence(
-            repository_reference_id=repository.id,
-            branch=branch,
-            base_commit="HEAD~1",
-            publication_commit=commit_sha,
-            remote_name=remote_name if push else "",
-            remote_commit=commit_sha if push else "",
-            markdown_relative_path=relative_path,
-            media_relative_paths=(),
-            rendered_markdown_checksum=rendered_checksum,
-            media_checksums={},
-            public_url="",
-            snapshot_checksum=str(snapshot_checksum),
-            revision_binding={
-                "content_revision_id": content_revision_id,
-                "publication_target_id": publication_target_id,
-                "publication_attempt_id": publication_attempt_id,
-                "mutation_id": mutation_id,
-                "intent_fingerprint": intent_fingerprint,
-            },
-            verification_status="verified",
-            verification_timestamp=datetime.now(UTC).isoformat(),
-            mutation_manifest=WebsiteMutationManifest(
-                created_paths=(relative_path,),
-                modified_paths=(),
-                deleted_paths=(),
-                original_checksums={},
-                resulting_checksums={relative_path: rendered_checksum},
-                media_bindings={},
+            evidence = WebsitePublicationEvidence(
+                repository_reference_id=repository.id,
+                branch=branch,
+                base_commit="HEAD~1",
+                publication_commit=commit_sha,
+                remote_name=remote_name if push else "",
+                remote_commit=commit_sha if push else "",
+                markdown_relative_path=relative_path,
+                media_relative_paths=(),
                 rendered_markdown_checksum=rendered_checksum,
+                media_checksums={},
+                public_url="",
                 snapshot_checksum=str(snapshot_checksum),
-            ),
-        )
-        readback_result = verify_website_publish(
-            evidence=evidence,
-            repository=repository,
-            git_publisher=self.git_publisher,
-            check_remote=push,
-        )
-        if readback_result.state not in {
-            WebsitePublishReadbackState.EXPECTED_COMMIT_PRESENT,
-            WebsitePublishReadbackState.EXPECTED_COMMIT_AT_HEAD,
-            WebsitePublishReadbackState.EXPECTED_COMMIT_REMOTE,
-        }:
-            raise PlaybookExecutionError(
-                "READBACK_FAILED",
-                "Readback verification of published website article failed.",
-                {"readback": readback_result.to_dict()},
+                revision_binding={
+                    "content_revision_id": content_revision_id,
+                    "publication_target_id": publication_target_id,
+                    "publication_attempt_id": publication_attempt_id,
+                    "mutation_id": mutation_id,
+                    "intent_fingerprint": intent_fingerprint,
+                },
+                verification_status="verified",
+                verification_timestamp=datetime.now(UTC).isoformat(),
+                mutation_manifest=WebsiteMutationManifest(
+                    created_paths=(relative_path,),
+                    modified_paths=(),
+                    deleted_paths=(),
+                    original_checksums={},
+                    resulting_checksums={relative_path: rendered_checksum},
+                    media_bindings={},
+                    rendered_markdown_checksum=rendered_checksum,
+                    snapshot_checksum=str(snapshot_checksum),
+                ),
+            )
+            readback_result = verify_website_publish(
+                evidence=evidence,
+                repository=repository,
+                git_publisher=self.git_publisher,
+                check_remote=push,
+            )
+            if readback_result.state not in {
+                WebsitePublishReadbackState.EXPECTED_COMMIT_PRESENT,
+                WebsitePublishReadbackState.EXPECTED_COMMIT_AT_HEAD,
+                WebsitePublishReadbackState.EXPECTED_COMMIT_REMOTE,
+            }:
+                raise PlaybookExecutionError(
+                    "READBACK_FAILED",
+                    "Readback verification of published website article failed.",
+                    {"readback": readback_result.to_dict()},
+                )
+
+            now_iso = datetime.now(UTC).isoformat()
+            receipt = MutationReceipt(
+                mutation_id=mutation_id,
+                idempotency_key=idempotency_key,
+                capability_id=WEBSITE_ARTICLE_PUBLISH_CAPABILITY,
+                component_id=GIT_WEBSITE_COMPONENT_ID,
+                resource_ref=f"git-commit:{commit_sha}",
+                applied_at=now_iso,
+                result_fingerprint=rendered_checksum,
+                metadata={
+                    "commit_sha": commit_sha,
+                    "install_id": resolved_node.install_id,
+                    "path": relative_path,
+                    "pushed": push,
+                    "readback_verified": True,
+                },
             )
 
-        now_iso = datetime.now(UTC).isoformat()
-        receipt = MutationReceipt(
-            mutation_id=mutation_id,
-            idempotency_key=f"website.article.publish:{publication_target_id}:{content_revision_id}",
-            capability_id=WEBSITE_ARTICLE_PUBLISH_CAPABILITY,
-            component_id=GIT_WEBSITE_COMPONENT_ID,
-            resource_ref=f"git-commit:{commit_sha}",
-            applied_at=now_iso,
-            result_fingerprint=rendered_checksum,
-            metadata={
-                "commit_sha": commit_sha,
-                "install_id": resolved_node.install_id,
-                "path": relative_path,
-                "pushed": push,
-                "readback_verified": True,
-            },
-        )
-
-        return NodeResult.success(
-            {
-                "publication_commit": commit_sha,
-                "mutation_receipt": receipt.to_dict(),
-                "readback_verified": True,
-                "resource_ref": f"git-commit:{commit_sha}",
-                "path": relative_path,
-            }
-        )
+            return NodeResult.success(
+                {
+                    "publication_commit": commit_sha,
+                    "mutation_receipt": receipt.to_dict(),
+                    "readback_verified": True,
+                    "resource_ref": f"git-commit:{commit_sha}",
+                    "path": relative_path,
+                }
+            )
+        except Exception as exc:
+            print(f"DEBUG EXCEPTION IN PUBLISH EXECUTE: {type(exc).__name__}: {exc}")
+            raise
 
     def verify_readback(self, receipt: MutationReceipt, context: ExecutionContext) -> bool:
         if not receipt.resource_ref.startswith("git-commit:"):
@@ -488,3 +505,89 @@ def _parse_status_paths(status_output: str) -> list[str]:
             path = line
         paths.append(str(Path(path)))
     return sorted(paths)
+
+
+def build_mutation_event_id(mutation_id: str, event_type: str, resource_ref: str) -> str:
+    seed = f"{mutation_id}:{event_type}:{resource_ref}"
+    return f"evt_{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:32]}"
+
+
+def build_website_published_event(
+    record: MutationJournalRecord, context: ExecutionContext | None = None
+) -> EventEnvelope:
+    if record.state != MutationState.APPLIED.value or record.receipt is None:
+        raise ValueError("Cannot emit website.article.published event for mutation that is not APPLIED.")
+
+    event_id = build_mutation_event_id(
+        mutation_id=record.intent.mutation_id,
+        event_type="website.article.published",
+        resource_ref=record.receipt.resource_ref,
+    )
+
+    correlation_id = (
+        context.trigger_event.correlation_id
+        if (context and context.trigger_event and context.trigger_event.correlation_id)
+        else record.intent.execution_id
+    )
+    trace_id = (
+        context.trigger_event.trace_id
+        if (context and context.trigger_event and context.trigger_event.trace_id)
+        else record.intent.execution_id
+    )
+
+    commit_sha = str(record.receipt.metadata.get("commit_sha") or "")
+    if not commit_sha and record.receipt.resource_ref.startswith("git-commit:"):
+        commit_sha = record.receipt.resource_ref.split(":", 1)[1]
+
+    payload = {
+        "commit_sha": commit_sha,
+        "content_id": str(record.intent.normalized_input.get("content_id") or ""),
+        "path": str(record.receipt.metadata.get("path") or ""),
+        "publication_ref": record.receipt.resource_ref,
+        "revision_id": str(record.intent.normalized_input.get("revision_id") or ""),
+        "target": str(record.intent.normalized_input.get("target") or "website"),
+    }
+
+    metadata = {
+        "applied_at": record.receipt.applied_at,
+        "mutation_id": record.intent.mutation_id,
+    }
+
+    return EventEnvelope(
+        event_id=event_id,
+        event_type="website.article.published",
+        source=EventSource(
+            component=record.intent.component_id,
+            install=record.intent.install_id,
+            provider="github",
+        ),
+        causation_id=record.intent.mutation_id,
+        correlation_id=correlation_id,
+        trace_id=trace_id,
+        idempotency_key=f"event:{record.intent.mutation_id}:website.article.published",
+        entity_ref=record.receipt.resource_ref,
+        payload=payload,
+        metadata=metadata,
+    )
+
+
+def reconcile_mutation_events(journal: MutationJournal, store: EventStore) -> list[EventEnvelope]:
+    emitted: list[EventEnvelope] = []
+    records = getattr(journal, "records", {})
+    if not records and hasattr(journal, "_connect"):
+        # For SqliteMutationJournal
+        with journal._connect() as connection:  # type: ignore[attr-defined]
+            rows = connection.execute(
+                "SELECT * FROM runtime_mutation_journal WHERE state=?", (MutationState.APPLIED.value,)
+            ).fetchall()
+            from src.core.runtime.mutations import _mutation_record_from_row
+            records = {row["mutation_id"]: _mutation_record_from_row(row) for row in rows}
+
+    for record in records.values():
+        if record.state == MutationState.APPLIED.value and record.intent.capability_id == WEBSITE_ARTICLE_PUBLISH_CAPABILITY:
+            event = build_website_published_event(record)
+            appended = store.append(event)
+            emitted.append(appended)
+
+    return emitted
+
