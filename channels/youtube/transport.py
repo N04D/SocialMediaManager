@@ -233,6 +233,7 @@ class FakeYouTubeTransport(YouTubeTransport):
             }
         ]
         self.playlist_items: dict[str, list[dict[str, Any]]] = {}
+        self.videos_by_id: dict[str, dict[str, Any]] = {}
         self.error_override: Exception | None = None
 
     def create_upload_session(
@@ -268,12 +269,27 @@ class FakeYouTubeTransport(YouTubeTransport):
 
     def get_video(self, *, video_id: str, access_token: str) -> YouTubeResponse:
         self.requests.append({"method": "GET", "endpoint": "videos.list", "id": video_id})
+        if self.error_override:
+            raise self.error_override
+        if video_id in self.videos_by_id:
+            raw_item = self.videos_by_id[video_id]
+            if raw_item is None:
+                return YouTubeResponse(200, {"items": []}, {})
+            return YouTubeResponse(200, {"items": [raw_item]}, {})
+
         return YouTubeResponse(
             200,
             {
                 "items": [
                     {
                         "id": video_id,
+                        "snippet": {
+                            "title": f"Title for {video_id}",
+                            "description": f"Description for {video_id}",
+                            "channelId": "channel-test",
+                            "publishedAt": "2026-08-10T00:00:00Z",
+                        },
+                        "contentDetails": {"duration": "PT5M"},
                         "status": {"privacyStatus": self.observed_privacy},
                         "processingDetails": {"processingStatus": self.processing_status},
                     }

@@ -14,6 +14,12 @@ class ContentType(StrEnum):
     UNKNOWN = "unknown"
 
 
+class ContentCompleteness(StrEnum):
+    METADATA_ONLY = "metadata_only"
+    PARTIAL = "partial"
+    COMPLETE = "complete"
+
+
 class ContentStatus(StrEnum):
     DRAFT = "draft"
     READY = "ready"

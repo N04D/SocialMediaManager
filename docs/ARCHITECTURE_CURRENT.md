@@ -905,3 +905,31 @@ No `website.article.publish` handler is registered with `PlaybookExecutor` yet, 
 - No vector database/RAG subsystem.
 - No built visual workflow editor.
 - No generic arbitrary site deployment runner; Markdown Website publishing is constrained to allowlisted repository/path operations.
+
+### Phase 59 YouTube Resource Ingestion & Content Provenance
+
+Phase 59 adds `youtube.video.read` capability, `ResourceRef`, `ExternalResourceSnapshot`, and `ContentRepository` upsert to bridge event-driven execution (`youtube.video.published`) with local content identity, revisioning, external refs, and source provenance.
+
+```text
+youtube.video.published (Event)
+      ↓
+youtube.video.read (Capability)
+      ↓
+ExternalResourceSnapshot (Normalized Snapshot)
+      ↓
+ContentRepository.upsert_external_resource
+      ↓
+ContentItem (Entity Identity: youtube:video:<id>)
+      ↓
+ContentRevision (Checksummed Metadata Revision)
+      ↓
+Source Provenance (Lineage tracking)
+```
+
+Key guarantees:
+- `youtube.video.read` is strictly read-only and requires explicit `METADATA_ONLY` completeness. No transcripts or AI generations are claimed.
+- `ResourceRef` standardizes canonical cross-platform identity (`provider:resource_type:external_id`).
+- `ContentRepository` (`InMemoryContentRepository`, `SqliteContentRepository`) provides idempotent entity identity matching and creates new revisions only when metadata checksums change. Re-polls and event replays produce no duplicate revisions.
+- Core content models (`ResourceRef`, `ExternalResourceSnapshot`, `ContentRepository`) maintain 100% provider neutrality without hardcoded provider branches.
+- Production mutation count remains strictly 2 (`calendar.event.create`, `website.article.publish`).
+
