@@ -1283,3 +1283,33 @@ No production execution affordance is emitted. Unsafe labels such as publish, se
 Promotion decisions contain no secrets, provider headers, Authorization/Bearer values, raw metrics payloads, or raw transcript bodies. Phase 68 does not persist decisions and does not implement an approval UI.
 
 Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no production execution, no approval UI, no YouTube metrics production reader, no external writes, no AI calls, and no LLM evaluation.
+
+### Phase 69 Manual Review Packet For Promotion Decisions
+
+Phase 69 adds a provider-neutral `ManualReviewPacketBuilder` above `PromotionDecision`. The builder creates a safe read-only packet for human review or future agent review. It only summarizes supplied objects: promotion decision, sandbox evaluation, sandbox execution, and playbook plan. It does not approve, create an approval UI, execute, replay, evaluate, re-decide promotion, call AI, use LLM summarization, open raw payloads, write external systems, add event sources, scrape, automate browsers, or admit YouTube metrics.
+
+```text
+PromotionDecision
+        |
+        v
+ManualReviewPacket
+        |
+        v
+Future Approval Workflow
+```
+
+`ManualReviewPacket` contains subject ids, packet status, review reasons, decision summary, evaluation summary, execution summary, plan summary, safe next actions, required reviews, provenance refs, redaction flags, generated time, and schema version.
+
+Packet statuses are:
+
+- `ready_for_review` for needs-review decisions.
+- `informational` for eligible decisions and safe blocked-decision summaries.
+- `blocked_from_review` for missing required objects, unsafe redaction, unsupported decision status, or policy-disallowed packets.
+
+Summaries are intentionally narrow. Decision summary includes status, reason codes, severities, safe next actions, required reviews, and policy id/version. Evaluation summary includes status, check counts, warning/failure reason codes, policy version, and subject fingerprint. Execution summary includes execution id, playbook id/version, sandbox/read-only flags, execution status, step counts by status, blocker reason codes, redaction flags, and fingerprint. Plan summary includes plan id, playbook id/version, executability, step count, blockers, required capabilities, and raw/mutation requirement flags.
+
+Full step output is omitted by default. Packets never include raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth-like tokens, secrets, or full provider payloads. Unsafe next-action labels from input are omitted and recorded as `unsafe_next_action_omitted`.
+
+Phase 69 does not persist packets. The approval workflow remains a separate future layer.
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no production execution, no approval UI, no approval action, no YouTube metrics production reader, no external writes, no AI calls, and no LLM summarization.

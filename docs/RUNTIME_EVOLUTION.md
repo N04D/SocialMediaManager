@@ -2078,6 +2078,126 @@ AI calls: 0
 LLM evaluation: 0
 ```
 
+## Phase 69 Manual Review Packet For Promotion Decisions
+
+Phase 69 introduces a safe, read-only `ManualReviewPacketBuilder` above Phase 68 promotion decisions. It structures existing promotion/evaluation/execution/plan state for human or future agent review. It does not approve, create an approval UI, execute, replay, evaluate, re-run promotion, call AI, use LLM summarization, fetch raw payloads, scrape, automate browsers, write external systems, add event sources, or admit YouTube metrics.
+
+```text
+PromotionDecision
+        |
+        v
+ManualReviewPacket
+        |
+        v
+Future approval workflow
+```
+
+### Packet Model
+
+`ManualReviewPacket` contains:
+
+```text
+packet_id
+subject_execution_id
+subject_evaluation_id
+subject_decision_id
+status
+review_reason
+decision_summary
+evaluation_summary
+execution_summary
+plan_summary
+safe_next_actions
+required_reviews
+provenance
+redaction
+generated_at
+schema_version
+```
+
+Packet statuses are:
+
+```text
+ready_for_review
+informational
+blocked_from_review
+```
+
+Reason codes include:
+
+```text
+decision_needs_review
+decision_blocked
+decision_eligible
+evaluation_warning
+evaluation_failed
+missing_evaluation
+missing_execution
+missing_plan
+unsafe_redaction
+unsupported_decision_status
+unsafe_next_action_omitted
+```
+
+### Safe Summaries
+
+Decision summary records decision status, reason codes, severities, safe next actions, required reviews, and policy id/version.
+
+Evaluation summary records evaluation status, check counts, warnings/failures reason codes, policy version, and subject fingerprint.
+
+Execution summary records execution id, playbook id/version, sandbox/read-only flags, execution status, step counts by status, blocker reason codes, redaction flags, and fingerprint.
+
+Plan summary records plan id, playbook id/version, executability, step count, blocked reasons, required capabilities, and raw/mutation required flags.
+
+The packet omits full step outputs by default. Even when policy marks `include_step_output=True`, Phase 69 only records the redaction flag; it does not include raw step output bodies.
+
+### Packet Policy
+
+`ReviewPacketPolicy` controls:
+
+```text
+include_step_output
+include_check_details
+include_provenance_refs
+allow_blocked_packets
+require_decision
+require_evaluation
+require_execution
+require_plan
+```
+
+Default policy requires a decision, treats evaluation/execution/plan as optional, records missing optional objects as reason codes, includes provenance refs, and omits full step output.
+
+### Safe Next Actions
+
+Packets copy only safe next-action labels:
+
+```text
+allow_manual_review
+allow_read_only_agent_consumption
+allow_sandbox_replay
+allow_prepare_approval_request
+```
+
+Unsafe input labels such as production execution, publishing, mutation, sending, or AI calls are omitted and recorded as `unsafe_next_action_omitted`.
+
+### Redaction And Boundaries
+
+Packets contain no raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth material, API keys, refresh tokens, secret canaries, or full provider payloads.
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+production execution: 0
+approval UI: 0
+approval action: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+LLM summarization: 0
+```
+
 ## Phase 62 Read-Only Content Performance Context API
 
 Phase 62 adds a deterministic, provider-neutral, read-only context layer over the Phase 61 content/publication/metrics graph. It is intended as a future input boundary for agents, AI, and playbooks, but it does not call AI and does not generate recommendations, classifications, summaries, causality claims, mutations, event sources, scraping, browser automation, or production YouTube metrics reads.
