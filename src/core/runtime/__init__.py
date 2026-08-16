@@ -135,6 +135,14 @@ from .playbook_sandbox import (
     SandboxRedactionState,
     StepExecutionResult,
 )
+from .sandbox_execution_store import (
+    SANDBOX_EXECUTION_STORE_SCHEMA_VERSION,
+    SANDBOX_REPLAY_SCHEMA_VERSION,
+    SandboxAuditEvent,
+    SandboxExecutionStore,
+    SandboxReplayResult,
+    SandboxReplayService,
+)
 from .policy import (
     ApprovalRecord,
     ApprovalStatus,
@@ -273,11 +281,17 @@ __all__ = [
     "RawAccessPolicy",
     "ReadOnlyPlaybookSandbox",
     "READ_ONLY_SANDBOX_VERSION",
+    "SANDBOX_EXECUTION_STORE_SCHEMA_VERSION",
     "SqliteMutationJournal",
     "SANDBOX_EXECUTION_SCHEMA_VERSION",
+    "SANDBOX_REPLAY_SCHEMA_VERSION",
     "SUPPORTED_SANDBOX_STEP_KINDS",
+    "SandboxAuditEvent",
     "SandboxExecutionRecord",
+    "SandboxExecutionStore",
     "SandboxRedactionState",
+    "SandboxReplayResult",
+    "SandboxReplayService",
     "StepPlan",
     "StepExecutionResult",
     "build_compensation_id",

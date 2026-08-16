@@ -1653,6 +1653,112 @@ YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
 AI calls: 0
 ```
 
+## Phase 66 Sandbox Execution Store, Replay & Audit Trail
+
+Phase 66 makes the Phase 65 sandbox output durable and replayable without changing the production runtime boundary. It introduces a local, provider-neutral `SandboxExecutionStore` plus explicit `SandboxReplayService`.
+
+```text
+ReadOnlyPlaybookSandbox
+        |
+        v
+SandboxExecutionRecord
+        |
+        v
+SandboxExecutionStore
+        |
+        +-- durable save/get/list
+        +-- deterministic fingerprint
+        +-- explicit replay
+        +-- deterministic comparison
+        +-- audit trail
+        |
+        v
+Future learning/agent layer
+```
+
+The store is local/durable and writes only its own sandbox execution store file. It does not write to providers, production content stores, event sources, mutation journals, calendars, websites, browsers, or analytics systems.
+
+### Persisted Record Contract
+
+Persisted records retain:
+
+```text
+execution_id
+plan_id
+playbook_id
+playbook_version
+sandbox: true
+read_only: true
+status
+step_results
+blocked_reasons
+redaction flags
+provenance
+executed_at
+schema_version
+fingerprint
+```
+
+Default persisted records do not contain raw metrics payloads, raw transcript bodies, provider headers, OAuth tokens, API keys, Authorization headers, refresh tokens, or secret values. If caller-provided audit actors contain secret-shaped values, the persisted audit actor is redacted.
+
+### Fingerprints And Comparison
+
+`SandboxExecutionStore.fingerprint(record)` creates a deterministic content fingerprint. It ignores volatile fields:
+
+```text
+execution_id
+executed_at
+generated_at
+fingerprint
+store_schema_version
+```
+
+It preserves semantic fields including playbook id/version, plan reference, step statuses, step outputs, blockers, redaction flags, context schema/ref, sandbox schema version, and provenance. Therefore the same execution content with a different id or timestamp has the same fingerprint, while changed outputs or blockers produce a different fingerprint.
+
+`SandboxExecutionStore.compare(a, b)` returns deterministic reason codes, including:
+
+```text
+status_changed
+step_status_changed
+blocker_changed
+output_changed
+redaction_changed
+playbook_version_changed
+context_ref_changed
+context_schema_changed
+step_set_changed
+record_changed
+```
+
+No AI diffing or interpretation is performed.
+
+### Replay
+
+Replay is explicit. `SandboxReplayService.replay(execution_id, context, plan=..., policy=..., save_replay=False)`:
+
+1. loads the stored execution record;
+2. requires caller-provided context and plan;
+3. runs the read-only sandbox again;
+4. compares original and replay fingerprints;
+5. returns a `SandboxReplayResult`.
+
+If the execution, context, or plan is missing, replay returns structured blockers such as `missing_execution`, `missing_context`, or `missing_plan`. Replay does not save the new record unless `save_replay=True` is explicitly passed.
+
+### Audit Trail
+
+Saves append local audit events. Saved replay results append replay audit linkage back to the original execution id. Audit events include source, safe actor, execution id, status, fingerprint, playbook id/version, and replay comparison refs where relevant. Audit events contain no raw payloads, provider headers, credentials, or transcript bodies.
+
+Phase 66 adds no AI, no autonomous production execution, no production `PlaybookExecutor`, no scraping, no browser automation, no YouTube metrics production reader, no network path, no event source, no production mutation, and no external write.
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+```
+
 ## Phase 64 Playbook Planning & Dry-Run Resolution
 
 Phase 64 inserts a read-only planning layer between the Phase 63 registry and any future execution layer. It can explain what would be required to run a selected playbook against a `ContentPerformanceContext`, but it never runs the playbook.

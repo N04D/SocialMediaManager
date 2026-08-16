@@ -1190,3 +1190,32 @@ Unknown step kinds block fail-closed with `unsupported_step_kind`. Non-executabl
 Every step result records `mutation_used: false`, `raw_access_used: false`, and `side_effects: false` by default. Redaction flags remain false for raw metrics, raw transcript, secrets, provider headers, and mutations. Raw access remains opt-in and is not implemented as an execution path in Phase 65.
 
 Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no YouTube metrics production reader, and no AI calls.
+
+### Phase 66 Sandbox Execution Store, Replay And Audit Trail
+
+Phase 66 persists read-only sandbox executions in a local, provider-neutral `SandboxExecutionStore`. The store makes `SandboxExecutionRecord` durable, listable, fingerprintable, replayable, and audit-visible without adding any production side effects. It does not invoke the production `PlaybookExecutor`, call AI, use network, scrape, automate browsers, fetch raw metrics, read secrets, write external systems, add event sources, or admit YouTube metrics.
+
+```text
+ReadOnlyPlaybookSandbox
+        |
+        v
+SandboxExecutionStore
+        |
+        +-- save/get/list
+        +-- deterministic fingerprint
+        +-- replay comparison
+        +-- audit trail
+        |
+        v
+Future Learning/Agent Layer
+```
+
+Persisted records include execution id, plan id, playbook id/version, sandbox/read-only flags, status, step results, blockers, redaction flags, provenance, timestamps, schema version, and a deterministic fingerprint. Raw metrics payloads, raw transcript bodies, provider headers, OAuth material, Authorization headers, and secret values remain forbidden by default.
+
+Fingerprints are computed over semantic execution content and intentionally ignore volatile fields such as execution id, execution timestamp, generated timestamp, store fingerprint, and local store metadata. The same semantic execution with a different id or timestamp produces the same fingerprint; changed outputs, blockers, status, redaction, context refs, or step sets produce deterministic difference codes.
+
+Replay is explicit through `SandboxReplayService`. A caller must provide the current context and plan or accept a structured blocker such as `missing_context`, `missing_plan`, or `missing_execution`. Replay runs the read-only sandbox again, compares old and new fingerprints, and returns a `SandboxReplayResult`. It does not save replay output unless `save_replay=True` is explicitly requested.
+
+Audit events are appended for saves and for saved replay results. Audit payloads carry actor/source, execution id, fingerprint, playbook id/version, status, and replay linkage where relevant. Audit data is local, deterministic, and redacted; future production execution must define a separate audit contract before writes are allowed.
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no YouTube metrics production reader, no external writes, and no AI calls.
