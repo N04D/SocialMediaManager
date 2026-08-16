@@ -26,6 +26,13 @@ class ArtifactType(StrEnum):
     TRANSCRIPT_NORMALIZED = "transcript.normalized"
 
 
+class PublicationState(StrEnum):
+    OBSERVED = "observed"
+    PUBLISHED = "published"
+    UNAVAILABLE = "unavailable"
+    UNKNOWN = "unknown"
+
+
 class ContentStatus(StrEnum):
     DRAFT = "draft"
     READY = "ready"
@@ -147,6 +154,48 @@ class Artifact:
     created_at: str = ""
     provenance: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Publication:
+    publication_id: str
+    content_entity_id: str
+    content_revision_id: str
+    provider: str
+    install_id: str
+    external_ref: dict[str, Any]
+    published_at: str = ""
+    observed_at: str = ""
+    state: str = PublicationState.UNKNOWN.value
+    provenance: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class NormalizedMetricValue:
+    metric_key: str
+    value: int | str | bool
+    unit: str
+    value_type: str = "integer"
+    provider_source_field: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class MetricsSnapshot:
+    snapshot_id: str
+    publication_id: str
+    observed_at: str
+    provider: str
+    normalized_metrics: dict[str, dict[str, Any]]
+    raw_metrics_payload: dict[str, Any] = field(default_factory=dict)
+    provider_schema_version: str = ""
+    normalizer_id: str = ""
+    normalizer_version: str = ""
+    provenance: dict[str, Any] = field(default_factory=dict)
+    provider_reporting_window: dict[str, Any] = field(default_factory=dict)
+    raw_metrics_ref: str = ""
+    created_at: str = ""
 
 
 @dataclass

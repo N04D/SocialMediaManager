@@ -962,3 +962,50 @@ Transcript source provenance must distinguish official provider captions, provid
 Track selection is deterministic: serving, non-draft, preferred language, primary audio, standard/manual before ASR unless ASR is explicit, then deterministic tie checks. Ambiguous equivalent winners return `TRANSCRIPT_TRACK_AMBIGUOUS`.
 
 Production boundaries remain unchanged: one external event source (`youtube.video.published`), two production mutations (`calendar.event.create`, `website.article.publish`), and zero caption mutation endpoints.
+
+### Phase 61 Publication And Metrics Graph
+
+Phase 61 makes external publication and metric history first-class in the Phase 59/60 content graph.
+
+```text
+ContentEntity
+     |
+     +-- Revisions
+     |      |
+     |      +-- Transcript Artifact
+     |
+     +-- Publications
+             |
+             +-- MetricsSnapshots
+                    |
+                    +-- normalized
+                    +-- raw
+```
+
+Content describes what the work is. A publication describes where a manifestation of that work exists. Metrics describe observations about that publication at specific points in time.
+
+Metrics are attached to publications rather than directly to content entities because the same conceptual content can have different performance on different channels.
+
+Raw provider metrics are retained so normalization can evolve without requiring provider data to be fetched again.
+
+The generic model is:
+
+- `Publication`: `publication_id`, `content_entity_id`, `content_revision_id`, provider, install, external ref, published/observed times, state, provenance, metadata.
+- `MetricsSnapshot`: append-only publication observation with observed time, normalized metrics, safe raw provider payload/ref, provider/local schema version, normalizer id/version, reporting window, and provenance.
+- `ContentPerformanceQueryService`: read-only structure for later AI input, returning content identity, current revision, transcript artifact availability, publications, and normalized metric history. Raw metrics are omitted by default and require explicit snapshot access.
+
+Publication identity is stable across metadata changes:
+
+```text
+provider + install_id + external resource identity
+```
+
+For YouTube this means the same external video id reconciles to one publication, even when title or description changes produce new content revisions. Multiple publications for one content entity are supported, for example YouTube and Website manifestations with independent metric histories.
+
+The current YouTube implementation does not include a safe production metrics reader. The honest production status is:
+
+```text
+YOUTUBE_METRICS = BLOCKED_NO_SAFE_EXISTING_READER
+```
+
+Phase 61 includes only a deterministic local YouTube statistics normalizer for fixtures/re-normalization proof. It does not add a remote analytics capability, YouTube Studio scraping, browser automation, arbitrary provider query execution, mutations, new event sources, or AI calls.

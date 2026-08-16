@@ -1303,3 +1303,119 @@ production mutation count: 2
 production mutations: calendar.event.create, website.article.publish
 caption mutation endpoints used: 0
 ```
+
+## Phase 61 Publication & Metrics Provenance Graph
+
+Phase 61 connects actual content to external manifestations and historical performance observations without adding AI analysis, recommendations, classifications, causality, LinkedIn integration, YouTube mutations, analytics mutations, or another event source.
+
+```text
+ContentEntity
+     |
+     +-- Revisions
+     |      |
+     |      +-- Transcript Artifact
+     |
+     +-- Publications
+             |
+             +-- MetricsSnapshots
+                    |
+                    +-- normalized
+                    +-- raw
+```
+
+Content describes what the work is. A publication describes where a manifestation of that work exists. Metrics describe observations about that publication at specific points in time.
+
+Metrics are attached to publications rather than directly to content entities because the same conceptual content can have different performance on different channels.
+
+Raw provider metrics are retained so normalization can evolve without requiring provider data to be fetched again.
+
+### Existing Primitive Inspection
+
+| Existing concept | Current responsibility | Reusable? | Needs extension? | Potential migration risk |
+| --- | --- | --- | --- | --- |
+| `ContentItem` / `ContentRevision` in `src.core.content.repository` | Phase 59 entity identity and metadata revision lineage | Yes | Add publication relation outside the entity model | Reusing legacy `ContentItem` naming as entity can confuse newer docs; Phase 61 calls it ContentEntity semantically. |
+| `Artifact` / transcript repositories | Phase 60 raw/normalized transcript storage | Yes | Query service needs artifact refs only, not raw transcript bodies | Raw artifacts must not be dumped into every performance query. |
+| `PublishedPost` in `channel_models.py` | Legacy channel publication result from worker/browser flows | Conceptually | Not bound to Phase 59 external ContentEntity graph | Legacy IDs are channel/job oriented and not stable generic publication identity for YouTube resource ingestion. |
+| `PublicationAttribution` in `src.core.analytics.models` | Legacy attribution from published posts to content variants/plans | Partially | New `Publication` is first-class in content graph | Existing analytics services validate against `channel_store.get_published_post`, so they cannot represent YouTube resource publications discovered by Phase 59. |
+| `MetricObservation` | Per-metric normalized observation tied to legacy publication IDs | Partially | Phase 61 requires append-only snapshot grouping with raw provider payload retained | Migrating existing observations into snapshot groups later must avoid changing historical meaning. |
+| `PostMetricSnapshot` | LinkedIn/browser-era metric snapshot with raw JSON and deltas | Conceptually | Provider-specific and channel-store bound | Not suitable as generic core because it carries channel-specific fields and screenshot paths. |
+| Website analytics services | Website instrumentation/read models | No for Phase 61 core | Can later feed generic `MetricsSnapshot` via provider normalizer | Existing website metrics are not connected to Phase 59 YouTube ContentEntity graph. |
+| YouTube transport/read code | Official video metadata, uploads, captions read | Partially | No safe YouTube Analytics/Data metrics reader exists | Do not infer `youtube.metrics.read` from mappings; production status is `BLOCKED_NO_SAFE_EXISTING_READER`. |
+| Runtime capability mappings | Declares legacy analytics/read capabilities for LinkedIn/Website | Partially | No new production mutation or external source | Adding metrics read admission without real implementation would be false production capability. |
+
+### Publication Model
+
+`Publication` is provider-neutral and distinct from `ContentEntity`. Stable identity is:
+
+```text
+provider + install_id + external resource identity
+```
+
+For a YouTube video discovered through Phase 59, the existing canonical external ref such as `youtube:video:<id>` reconciles to one publication. Metadata title/description changes create content revisions but do not create another publication.
+
+Publication provenance retains provider, install, external ref, source content entity, source revision, source event/execution when present, observed time, and published time. It contains no secrets or OAuth data.
+
+### MetricsSnapshot Model
+
+`MetricsSnapshot` is append-only and belongs to a `Publication`, not directly to a content entity. It stores:
+
+- `observed_at`: when this system observed the metric state.
+- provider reporting window/time separately when available.
+- `normalized_metrics`: metric key, value, unit, value type, provider source field, normalizer metadata.
+- `raw_metrics_payload` or `raw_metrics_ref`: safe provider payload used for normalization.
+- provider/local schema version.
+- normalizer id/version.
+- reconstructable provenance.
+
+Exact retry of the same logical observation deduplicates by publication, observed time/provider observation identity, and collection execution. Same values at a later observation time are retained as a distinct snapshot because no-growth history is meaningful later.
+
+### Provider Normalizer Boundary
+
+Provider-specific normalization remains outside the generic core. Phase 61 adds a deterministic local YouTube statistics normalizer for tests and future adapter work:
+
+```text
+Provider Raw Metrics
+        |
+        v
+Provider Normalizer
+        |
+        v
+MetricsSnapshot.normalized_metrics
+```
+
+Generic content publication/metrics code contains no provider-specific branch. The YouTube metrics normalizer is not a production remote reader.
+
+### YouTube Metrics Admission
+
+Actual current YouTube code has official API support for video metadata, uploads, upload discovery, and captions. There is no narrow, safe, resource-scoped YouTube metrics reader currently implemented for production. Therefore:
+
+```text
+YOUTUBE_METRICS = BLOCKED_NO_SAFE_EXISTING_READER
+```
+
+No YouTube Studio scraping, browser automation, arbitrary analytics query, fake remote analytics, or YouTube mutation is introduced in Phase 61.
+
+### Read-Only Performance Query
+
+`ContentPerformanceQueryService` returns a deterministic AI-readiness structure:
+
+```text
+content identity
+current metadata revision
+transcript availability and artifact ref
+publication identities
+metric history
+provenance refs
+```
+
+It returns normalized metrics by default. Raw provider payload is available only through an explicit snapshot method for debugging/re-normalization.
+
+Production boundaries remain unchanged:
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+AI calls: 0
+```
