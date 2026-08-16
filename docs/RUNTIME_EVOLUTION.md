@@ -1855,6 +1855,117 @@ YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
 AI calls: 0
 ```
 
+## Phase 67 Evaluation Harness For Sandbox Runs
+
+Phase 67 introduces a read-only `SandboxEvaluationHarness` over Phase 66 sandbox execution records and comparison results. It is structural and deterministic. It does not use AI, LLM judges, browser automation, scraping, network, production execution, raw payload lookup, external writes, event source registration, or mutation capabilities.
+
+```text
+SandboxExecutionRecord
+        |
+        v
+SandboxExecutionStore
+        |
+        v
+Replay / Compare
+        |
+        v
+SandboxEvaluationHarness
+        |
+        v
+SandboxEvaluationResult
+        |
+        v
+Future promotion gates
+```
+
+### Evaluation Model
+
+`SandboxEvaluationResult` contains:
+
+```text
+evaluation_id
+execution_id
+subject_fingerprint
+status
+checks
+warnings
+failures
+policy_version
+evaluated_at
+provenance
+redaction
+schema_version
+```
+
+`SandboxEvaluationCheck` contains:
+
+```text
+check_id
+status
+severity
+reason_code
+subject_ref
+details
+```
+
+Statuses are `passed`, `warning`, and `failed`. Severities are `info`, `warning`, and `error`.
+
+### Built-In Checks
+
+The default harness verifies:
+
+- `sandbox == true`
+- `read_only == true`
+- all step `mutation_used` flags are false unless policy allows mutation
+- all step `raw_access_used` flags are false unless policy allows raw access
+- redaction says secrets, provider headers, raw metrics, and raw transcript are absent by default
+- status is one of the sandbox execution states
+- fingerprint is present and shaped as a stable SHA-256 hex digest
+- step ordering is deterministic
+- forbidden raw/credential strings are absent
+- production executor, AI, and interactive collection markers are absent
+
+Safety violations fail the evaluation.
+
+### Policy Evaluation
+
+`EvaluationPolicy` controls:
+
+```text
+allow_blocked
+require_all_steps_completed
+allow_warnings
+allow_raw_metrics
+allow_raw_transcript
+allow_mutations
+required_step_kinds
+forbidden_step_kinds
+allowed_difference_codes
+forbidden_difference_codes
+```
+
+The default policy forbids mutations and raw access, allows warnings, and rejects blocked executions unless explicitly configured. Required and forbidden step kinds are checked structurally against recorded step evaluator ids. Blockers such as `unsupported_step_kind`, `capability_not_available`, `raw_access_not_allowed`, and `mutation_not_allowed` are surfaced deterministically as warnings when the policy otherwise permits the blocked execution.
+
+### Regression Evaluation
+
+The harness can evaluate an existing compare result or `SandboxReplayResult`. It does not start replay automatically. Matched comparisons pass. Differences become warnings by default, allowed difference codes remain warnings, and forbidden difference codes such as `redaction_changed` fail.
+
+No semantic or natural-language judgment is performed. There is no causal analysis, recommendation, classification, LLM scoring, or output quality assessment.
+
+### Redaction And Boundaries
+
+Evaluation results contain no raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth material, API keys, refresh tokens, or secret canaries. Phase 67 does not persist evaluations; future promotion gates may add durable evaluation storage under a separate contract.
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+LLM evaluation: 0
+```
+
 ## Phase 62 Read-Only Content Performance Context API
 
 Phase 62 adds a deterministic, provider-neutral, read-only context layer over the Phase 61 content/publication/metrics graph. It is intended as a future input boundary for agents, AI, and playbooks, but it does not call AI and does not generate recommendations, classifications, summaries, causality claims, mutations, event sources, scraping, browser automation, or production YouTube metrics reads.

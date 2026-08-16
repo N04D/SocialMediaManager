@@ -1219,3 +1219,33 @@ Replay is explicit through `SandboxReplayService`. A caller must provide the cur
 Audit events are appended for saves and for saved replay results. Audit payloads carry actor/source, execution id, fingerprint, playbook id/version, status, and replay linkage where relevant. Audit data is local, deterministic, and redacted; future production execution must define a separate audit contract before writes are allowed.
 
 Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no YouTube metrics production reader, no external writes, and no AI calls.
+
+### Phase 67 Sandbox Evaluation Harness
+
+Phase 67 adds a provider-neutral `SandboxEvaluationHarness` for structural evaluation of stored or loose sandbox execution records. It turns a `SandboxExecutionRecord` or replay/compare result into a deterministic `SandboxEvaluationResult` with checks, warnings, failures, policy version, provenance, and redaction state. It does not execute playbooks, start replay by default, invoke production execution, call AI or LLM evaluators, use network, scrape, automate browsers, fetch raw payloads, write external systems, add event sources, or admit YouTube metrics.
+
+```text
+SandboxExecutionStore
+        |
+        v
+Replay / Compare
+        |
+        v
+SandboxEvaluationHarness
+        |
+        v
+EvaluationResult
+        |
+        v
+Future Promotion Gates
+```
+
+Evaluation is deterministic and structural. Built-in checks verify sandbox/read-only flags, allowed execution status, fingerprint presence, schema, deterministic step ordering, mutation/raw usage, redaction flags, forbidden data absence, and absence markers for production executor, AI, and interactive collection paths. Violating safety invariants fails the evaluation.
+
+`EvaluationPolicy` controls whether blocked executions are allowed, whether all steps must complete, whether warnings are allowed, whether raw or mutation use is permitted, required/forbidden step kinds, and allowed/forbidden replay difference codes. Defaults forbid raw access and mutations, allow warnings, and reject blocked executions unless explicitly configured.
+
+Regression evaluation accepts an already produced comparison or `SandboxReplayResult`; it does not trigger replay itself. Matched comparisons pass. Difference codes can be treated as warnings, allowed warnings, or failures according to policy; redaction changes fail by default.
+
+Evaluation results contain no secrets, provider headers, Authorization/Bearer values, raw metrics payloads, or raw transcript bodies. Evaluations are not durable in Phase 67; a future promotion gate may choose to persist them under a separate contract.
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no YouTube metrics production reader, no external writes, no AI calls, and no LLM evaluation.
