@@ -119,6 +119,13 @@ from .playbook_registry import (
     PlaybookValidationResult,
     RawAccessPolicy,
 )
+from .playbook_planner import (
+    PLAYBOOK_PLAN_SCHEMA_VERSION,
+    PLAYBOOK_PLANNER_VERSION,
+    PlaybookPlan,
+    PlaybookPlanner,
+    StepPlan,
+)
 from .policy import (
     ApprovalRecord,
     ApprovalStatus,
@@ -232,6 +239,10 @@ __all__ = [
     "PlaybookContextContract",
     "PlaybookExecutor",
     "PlaybookInputContract",
+    "PlaybookPlan",
+    "PLAYBOOK_PLAN_SCHEMA_VERSION",
+    "PLAYBOOK_PLANNER_VERSION",
+    "PlaybookPlanner",
     "PlaybookNode",
     "PlaybookNodeKind",
     "PlaybookRegistry",
@@ -252,6 +263,7 @@ __all__ = [
     "RuntimeValidationError",
     "RawAccessPolicy",
     "SqliteMutationJournal",
+    "StepPlan",
     "build_compensation_id",
     "build_compensation_idempotency_key",
     "capability_permission_requirements",

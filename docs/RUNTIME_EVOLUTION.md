@@ -1532,6 +1532,102 @@ YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
 AI calls: 0
 ```
 
+## Phase 64 Playbook Planning & Dry-Run Resolution
+
+Phase 64 inserts a read-only planning layer between the Phase 63 registry and any future execution layer. It can explain what would be required to run a selected playbook against a `ContentPerformanceContext`, but it never runs the playbook.
+
+```text
+ContentPerformanceContext
+        |
+        v
+PlaybookRegistry
+        |
+        v
+PlaybookPlanner
+        |
+        v
+DryRunPlan
+        |
+        v
+Future Execution Layer
+```
+
+### Plan Contract
+
+`PlaybookPlanner` returns `PlaybookPlan`:
+
+```text
+plan_id
+playbook_id
+playbook_version
+selection_result
+context_ref
+context_schema_version
+step_plans
+required_capabilities
+blocked_reasons
+raw_access_required
+mutation_required
+executable
+dry_run
+executed
+provenance
+generated_at
+schema_version
+```
+
+Every Phase 64 plan has:
+
+```text
+dry_run: true
+executed: false
+```
+
+`StepPlan` records include step id, name, kind, required inputs, required capabilities, side-effect allowance, raw access requirement, mutation requirement, status, blockers, and provenance. Side effects are false by default, and Phase 64 does not perform any step action.
+
+### Selection Modes
+
+The planner supports:
+
+- explicit `playbook_id + version`
+- explicit `playbook_id` with deterministic policy version resolution
+- registry `select_for_context(context, intent, policy)`
+
+Disabled and invalid playbooks are not executable. Deprecated playbooks require explicit policy. Raw or mutation playbooks require explicit policy. Highest compatible version is selected only through the planner/registry policy.
+
+### Blocker Resolution
+
+The planner checks context requirements from Phase 63 against Phase 62 facts. Missing requirements produce non-executable plans with structured blockers, not exceptions:
+
+```text
+transcript_required
+publication_required
+metrics_required
+context_schema_mismatch
+capability_not_available
+mutation_not_allowed
+raw_access_not_allowed
+```
+
+Capability checks only inspect declared availability. They do not admit, register, activate, or invoke capabilities. Mutation requirements are visible in plan metadata, but ordinary policy blocks them. Even if policy allows mutations, the plan only says the dry-run is theoretically executable under that policy; it still executes nothing.
+
+Raw access requirements are recorded but not performed. Raw metrics lookup remains outside the planner and is not called during Phase 64. Secrets are always forbidden.
+
+### Provenance And Safety
+
+Plan provenance records planner version, playbook definition source/version, selection policy, context schema version, context identity/ref, validation results, and generated time. It contains no secrets, provider headers, raw provider payloads, or transcript body.
+
+Phase 64 adds no AI, no autonomous execution, no `PlaybookExecutor` invocation, no scraping, no browser automation, no YouTube metrics production reader, no event source, and no production mutation.
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+```
+
 ## Phase 62 Read-Only Content Performance Context API
 
 Phase 62 adds a deterministic, provider-neutral, read-only context layer over the Phase 61 content/publication/metrics graph. It is intended as a future input boundary for agents, AI, and playbooks, but it does not call AI and does not generate recommendations, classifications, summaries, causality claims, mutations, event sources, scraping, browser automation, or production YouTube metrics reads.

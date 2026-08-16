@@ -1104,3 +1104,44 @@ Selection is deterministic:
 - tie-breakers use scope, playbook id, and version ordering.
 
 The registry output and selection provenance contain no secrets, raw provider payloads, provider headers, OAuth material, or raw transcript bodies. AI-ready context may feed a later layer, but Phase 63 remains definition-management only.
+
+### Phase 64 Playbook Planning And Dry-Run Resolution
+
+Phase 64 adds a read-only planning layer between registry selection and any future execution layer. It accepts a `ContentPerformanceContext`, a versioned playbook definition or selection policy, and returns a dry-run `PlaybookPlan`. It does not invoke `PlaybookExecutor`, execute steps, call AI, activate capabilities, fetch raw metrics, mutate production state, add event sources, scrape, or automate browsers.
+
+```text
+ContentPerformanceContext
+        |
+        v
+PlaybookRegistry
+        |
+        v
+PlaybookPlanner
+        |
+        v
+DryRunPlan
+        |
+        v
+Future Execution Layer
+```
+
+Every Phase 64 plan is explicitly dry-run:
+
+```text
+dry_run: true
+executed: false
+```
+
+`PlaybookPlanner` supports three selection modes:
+
+- `plan_explicit(context, playbook_id, version=...)`
+- `plan_explicit(context, playbook_id)` using deterministic policy version resolution
+- `plan_for_context(context, intent=..., policy=...)` using registry selection
+
+The plan contains playbook id/version, context ref, context schema version, required capabilities, step plans, raw/mutation requirements, blockers, executability, provenance, generated time, and schema version. `StepPlan` records include step id, name, kind, required inputs, required capabilities, side-effect allowance, raw access requirement, mutation requirement, status, blockers, and provenance.
+
+Planning checks context requirements, capability availability, mutation policy, and raw-access policy. Normal unsuitability returns a non-executable plan with structured blockers such as `transcript_required`, `publication_required`, `metrics_required`, `context_schema_mismatch`, `capability_not_available`, `mutation_not_allowed`, and `raw_access_not_allowed`; it does not raise for these ordinary planning outcomes.
+
+Capability checks are read-only and activate nothing. Mutation or raw-access playbooks can be described as theoretically executable only under an explicit selection policy, and even then Phase 64 still performs no execution and no raw lookup. Secrets remain forbidden in all plans and provenance.
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no YouTube metrics production reader, no new mutation capability, no new event source, and no AI calls.
