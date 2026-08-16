@@ -1145,3 +1145,48 @@ Planning checks context requirements, capability availability, mutation policy, 
 Capability checks are read-only and activate nothing. Mutation or raw-access playbooks can be described as theoretically executable only under an explicit selection policy, and even then Phase 64 still performs no execution and no raw lookup. Secrets remain forbidden in all plans and provenance.
 
 Production boundaries remain unchanged: two production mutations, one production external event source, no YouTube metrics production reader, no new mutation capability, no new event source, and no AI calls.
+
+### Phase 65 Read-Only Playbook Execution Sandbox
+
+Phase 65 adds a sandbox execution layer for plans that are already executable in dry-run form. The sandbox evaluates only deterministic, local, read-only steps and produces a `SandboxExecutionRecord`. It does not invoke the production `PlaybookExecutor`, write externally, use network, read secrets, call AI, scrape, automate browsers, fetch raw metrics, or admit YouTube metrics.
+
+```text
+ContentPerformanceContext
+        |
+        v
+PlaybookRegistry
+        |
+        v
+PlaybookPlanner
+        |
+        v
+ReadOnlyPlaybookSandbox
+        |
+        v
+SandboxExecutionRecord
+        |
+        v
+Future Production Execution Layer
+```
+
+Sandbox execution records are always:
+
+```text
+sandbox: true
+read_only: true
+```
+
+Supported Phase 65 step kinds are:
+
+- `inspect_context`
+- `list_publications`
+- `list_metric_history`
+- `summarize_available_fields`
+- `check_transcript_available`
+- `check_metrics_available`
+
+Unknown step kinds block fail-closed with `unsupported_step_kind`. Non-executable plans return a blocked sandbox record without executing steps. Missing read capabilities block with `capability_not_available`. Raw-required steps block by default with `raw_access_not_allowed`. Mutation-required steps block in the sandbox even when planning policy allowed mutation hypothetically.
+
+Every step result records `mutation_used: false`, `raw_access_used: false`, and `side_effects: false` by default. Redaction flags remain false for raw metrics, raw transcript, secrets, provider headers, and mutations. Raw access remains opt-in and is not implemented as an execution path in Phase 65.
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no YouTube metrics production reader, and no AI calls.

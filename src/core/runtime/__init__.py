@@ -126,6 +126,15 @@ from .playbook_planner import (
     PlaybookPlanner,
     StepPlan,
 )
+from .playbook_sandbox import (
+    READ_ONLY_SANDBOX_VERSION,
+    SANDBOX_EXECUTION_SCHEMA_VERSION,
+    SUPPORTED_SANDBOX_STEP_KINDS,
+    ReadOnlyPlaybookSandbox,
+    SandboxExecutionRecord,
+    SandboxRedactionState,
+    StepExecutionResult,
+)
 from .policy import (
     ApprovalRecord,
     ApprovalStatus,
@@ -262,8 +271,15 @@ __all__ = [
     "RuntimePolicyEngine",
     "RuntimeValidationError",
     "RawAccessPolicy",
+    "ReadOnlyPlaybookSandbox",
+    "READ_ONLY_SANDBOX_VERSION",
     "SqliteMutationJournal",
+    "SANDBOX_EXECUTION_SCHEMA_VERSION",
+    "SUPPORTED_SANDBOX_STEP_KINDS",
+    "SandboxExecutionRecord",
+    "SandboxRedactionState",
     "StepPlan",
+    "StepExecutionResult",
     "build_compensation_id",
     "build_compensation_idempotency_key",
     "capability_permission_requirements",

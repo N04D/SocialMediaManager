@@ -1532,6 +1532,127 @@ YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
 AI calls: 0
 ```
 
+## Phase 65 Read-Only Playbook Execution Sandbox
+
+Phase 65 introduces a sandbox executor that can evaluate only safe, deterministic, side-effect-free steps from an executable dry-run `PlaybookPlan`. It is not the production execution path and does not invoke `PlaybookExecutor`.
+
+```text
+ContentPerformanceContext
+        |
+        v
+PlaybookRegistry
+        |
+        v
+PlaybookPlanner
+        |
+        v
+ReadOnlyPlaybookSandbox
+        |
+        v
+SandboxExecutionRecord
+        |
+        v
+Future Production Execution Layer
+```
+
+### Execution Contract
+
+`ReadOnlyPlaybookSandbox.execute(plan, context, policy=None)` returns:
+
+```text
+SandboxExecutionRecord(
+    execution_id,
+    plan_id,
+    playbook_id,
+    playbook_version,
+    dry_run_source_plan,
+    sandbox: true,
+    read_only: true,
+    executed_at,
+    step_results,
+    status,
+    blocked_reasons,
+    provenance,
+    redaction,
+    schema_version,
+)
+```
+
+`StepExecutionResult` records:
+
+```text
+step_id
+status
+output_ref_or_value
+blocked_reasons
+capability_used
+raw_access_used
+mutation_used
+side_effects
+provenance
+```
+
+Statuses include `completed`, `blocked`, `skipped`, and `failed_safe`.
+
+### Supported Read-Only Steps
+
+Phase 65 supports only local evaluators:
+
+- `inspect_context`
+- `list_publications`
+- `list_metric_history`
+- `summarize_available_fields`
+- `check_transcript_available`
+- `check_metrics_available`
+
+These evaluators read only the already supplied safe context and plan metadata. They do not fetch raw snapshots, provider payloads, transcript bodies, secrets, network resources, browser data, or external systems.
+
+Unknown step kinds fail closed:
+
+```text
+status: blocked
+reason: unsupported_step_kind
+```
+
+### Blockers And Safety
+
+Non-executable plans produce a blocked sandbox record and no step execution. Missing step capabilities block with `capability_not_available`. Raw-required steps block by default with `raw_access_not_allowed`. Mutation-required steps block in the sandbox even when planning policy allowed mutation hypothetically.
+
+Every sandbox result has:
+
+```text
+mutation_used: false
+raw_access_used: false by default
+side_effects: false
+```
+
+Execution redaction defaults:
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+mutations_used: false
+```
+
+### Determinism
+
+The same plan, context, and policy produce equivalent step results except for `execution_id` and `executed_at`. Publications, metrics, step results, and blockers are sorted deterministically.
+
+### Production Boundaries
+
+Phase 65 adds no AI, no autonomous production execution, no `PlaybookExecutor` production path, no scraping, no browser automation, no YouTube metrics production reader, no network, no event source, and no production mutation.
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+```
+
 ## Phase 64 Playbook Planning & Dry-Run Resolution
 
 Phase 64 inserts a read-only planning layer between the Phase 63 registry and any future execution layer. It can explain what would be required to run a selected playbook against a `ContentPerformanceContext`, but it never runs the playbook.
