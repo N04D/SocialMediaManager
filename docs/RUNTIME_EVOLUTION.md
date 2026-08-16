@@ -1419,3 +1419,94 @@ new mutation capabilities: 0
 new external event sources: 0
 AI calls: 0
 ```
+
+## Phase 62 Read-Only Content Performance Context API
+
+Phase 62 adds a deterministic, provider-neutral, read-only context layer over the Phase 61 content/publication/metrics graph. It is intended as a future input boundary for agents, AI, and playbooks, but it does not call AI and does not generate recommendations, classifications, summaries, causality claims, mutations, event sources, scraping, browser automation, or production YouTube metrics reads.
+
+```text
+ContentEntity
+     |
+     v
+Content Performance Context API
+     |
+     +-- current ContentRevision identity
+     +-- Transcript Artifact refs
+     +-- Publications
+     |      |
+     |      +-- MetricsSnapshot history
+     |
+     +-- explicit raw snapshot lookup
+```
+
+### Context Contract
+
+`ContentPerformanceContextService.get_context(content_entity_id)` returns a single safe object:
+
+```text
+ContentPerformanceContext(
+    content_entity,
+    current_revision,
+    transcript_state,
+    publications,
+    metric_history inside each publication,
+    provenance,
+    redaction,
+    freshness,
+    generated_at,
+    schema_version,
+)
+```
+
+The ordinary context includes transcript availability and normalized transcript artifact refs, but not raw transcript body, full normalized transcript text, or raw provider caption payload. Transcript state carries availability, completeness level, normalized artifact id/ref, language, source type, generation method, parser id/version, and provenance refs.
+
+Publication state includes publication id, provider, install id, canonical external ref, linked content entity/revision ids, published/observed times, state, safe metadata, and provenance refs. It contains no OAuth material, headers, tokens, or provider-specific core branches.
+
+Metrics history includes snapshot id, publication id, observed time, provider reporting window, normalized metric values, normalizer id/version, provider/local schema version, and provenance refs. Raw provider metrics are omitted by default.
+
+### Raw Lookup Boundary
+
+`ContentPerformanceContextService.get_raw_metrics_snapshot(snapshot_id)` is the explicit raw metrics lookup. This method returns the stored safe raw payload for debugging or future re-normalization, along with redaction flags that state raw metrics were intentionally included. Ordinary context queries never include raw metrics payloads.
+
+### Freshness And Determinism
+
+The context distinguishes:
+
+- no metrics (`metrics_present: false`)
+- metrics present with latest observation timestamp
+- same metric values observed at later times as separate snapshot entries
+- changed metrics as appended history
+- multiple publications for the same content entity
+
+It does not compute growth, velocity, ranking, recommendations, or causal explanations. Publications, metric snapshots, metric keys, and provenance refs are sorted deterministically. The same repository state produces the same context except for the explicit `generated_at` timestamp when a live clock is used.
+
+### Redaction Contract
+
+Default context redaction is explicit:
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+```
+
+Credential canaries are tested to stay out of ordinary context responses. Raw provider metrics, normalized metrics, publication state, query output, and provenance refs must not persist OAuth tokens, API keys, Authorization headers, refresh tokens, or secret values.
+
+### Production Boundaries
+
+YouTube metrics remains honestly blocked:
+
+```text
+YOUTUBE_METRICS = BLOCKED_NO_SAFE_EXISTING_READER
+```
+
+Production boundaries remain:
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+AI calls: 0
+```

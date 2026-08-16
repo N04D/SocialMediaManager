@@ -63,6 +63,15 @@ from .models import (
     PublicationTarget,
     PublicationTargetStatus,
 )
+from .performance_context import (
+    CONTENT_PERFORMANCE_CONTEXT_SCHEMA_VERSION,
+    ContentPerformanceContext,
+    ContentPerformanceContextService,
+    MetricsSnapshotContext,
+    PublicationContext,
+    RedactionState,
+    TranscriptContextState,
+)
 
 __all__ = [
     "CHANNEL_CONTENT_VARIANT_CONTRACT_VERSION",
@@ -117,12 +126,19 @@ __all__ = [
     "ContentStatus",
     "ContentType",
     "ContentValidationError",
+    "CONTENT_PERFORMANCE_CONTEXT_SCHEMA_VERSION",
+    "ContentPerformanceContext",
+    "ContentPerformanceContextService",
     "MetricsSnapshot",
+    "MetricsSnapshotContext",
     "NormalizedMetricValue",
     "Publication",
+    "PublicationContext",
     "PublicationPlan",
     "PublicationPlanStatus",
     "PublicationState",
     "PublicationTarget",
     "PublicationTargetStatus",
+    "RedactionState",
+    "TranscriptContextState",
 ]

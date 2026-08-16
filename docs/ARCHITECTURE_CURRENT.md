@@ -1009,3 +1009,51 @@ YOUTUBE_METRICS = BLOCKED_NO_SAFE_EXISTING_READER
 ```
 
 Phase 61 includes only a deterministic local YouTube statistics normalizer for fixtures/re-normalization proof. It does not add a remote analytics capability, YouTube Studio scraping, browser automation, arbitrary provider query execution, mutations, new event sources, or AI calls.
+
+### Phase 62 Read-Only Content Performance Context
+
+Phase 62 exposes the Phase 61 graph through an explicit read-only context contract for future agents, playbooks, and AI preparation. The API prepares deterministic facts; it does not call AI, rank content, classify topics, make causal claims, or mutate production state.
+
+```text
+ContentEntity
+     |
+     v
+Content Performance Context API
+     |
+     +-- current ContentRevision identity
+     +-- transcript availability and artifact refs
+     +-- Publications
+     |      |
+     |      +-- MetricsSnapshot history
+     |
+     +-- explicit raw metrics snapshot lookup
+```
+
+`ContentPerformanceContextService.get_context(content_entity_id)` returns:
+
+- content identity and external ref
+- current revision identity and provenance ref
+- transcript state: availability, completeness level, normalized artifact id/ref, language, source type, generation method, parser id/version, and provenance ref
+- publication state: publication id, provider, install, canonical external ref, linked content/revision ids, published/observed times, state, safe metadata, and provenance ref
+- normalized metrics history with observation time, provider reporting window, normalizer id/version, provider/local schema version, and provenance refs
+- freshness facts such as whether metrics exist, latest observation time, snapshot count, and publication count
+- explicit redaction state
+
+Raw payloads are opt-in. Ordinary context responses do not include raw provider metrics, raw transcript bodies, full normalized transcript text, provider headers, OAuth material, or secret values. `get_raw_metrics_snapshot(snapshot_id)` is the explicit raw metrics access boundary for debugging and future re-normalization.
+
+The redaction contract is:
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+```
+
+Provider normalizers remain outside generic core. YouTube metrics remains production-blocked:
+
+```text
+YOUTUBE_METRICS = BLOCKED_NO_SAFE_EXISTING_READER
+```
+
+Production boundaries remain unchanged: two production mutations (`calendar.event.create`, `website.article.publish`), one production external event source (`youtube-data-api-uploads`), no new YouTube metrics production reader, no scraping, no browser automation, and no AI calls.
