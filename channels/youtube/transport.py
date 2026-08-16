@@ -12,6 +12,7 @@ from .errors import YouTubeChannelError
 
 UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/youtube/v3/videos"
 VIDEO_ENDPOINT = "https://www.googleapis.com/youtube/v3/videos"
+CAPTIONS_ENDPOINT = "https://www.googleapis.com/youtube/v3/captions"
 TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 
 
@@ -37,6 +38,12 @@ class YouTubeTransport:
         raise NotImplementedError
 
     def get_video(self, *, video_id: str, access_token: str) -> YouTubeResponse:
+        raise NotImplementedError
+
+    def list_captions(self, *, video_id: str, access_token: str) -> YouTubeResponse:
+        raise NotImplementedError
+
+    def download_caption(self, *, caption_id: str, access_token: str, tfmt: str = "vtt") -> bytes:
         raise NotImplementedError
 
     def exchange_code(self, *, code: str, client_id: str, client_secret: str, redirect_uri: str) -> YouTubeResponse:
@@ -100,6 +107,33 @@ class HttpYouTubeTransport(YouTubeTransport):
         except (TimeoutError, OSError) as exc:
             raise YouTubeChannelError("youtube.network_error", "YouTube API request failed.") from exc
 
+    def _request_bytes(
+        self,
+        url: str,
+        *,
+        method: str,
+        access_token: str = "",
+        max_bytes: int = 2_000_000,
+    ) -> bytes:
+        headers = {"Accept": "*/*", "User-Agent": "SocialMediaManager YouTube/0.1.0"}
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+        request = urllib.request.Request(url, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                raw = response.read(max_bytes + 1)
+                if len(raw) > max_bytes:
+                    raise YouTubeChannelError("youtube.response_too_large", "YouTube API response exceeded limit.")
+                return raw
+        except urllib.error.HTTPError as exc:
+            raise YouTubeChannelError(
+                _http_error_code(exc.code),
+                "YouTube API request failed.",
+                {"http_status": exc.code},
+            ) from exc
+        except (TimeoutError, OSError) as exc:
+            raise YouTubeChannelError("youtube.network_error", "YouTube API request failed.") from exc
+
     def create_upload_session(
         self, *, access_token: str, metadata: dict[str, Any], total_bytes: int
     ) -> YouTubeResponse:
@@ -144,6 +178,14 @@ class HttpYouTubeTransport(YouTubeTransport):
     def get_video(self, *, video_id: str, access_token: str) -> YouTubeResponse:
         query = urllib.parse.urlencode({"part": "status,processingDetails,snippet", "id": video_id})
         return self._request(f"{VIDEO_ENDPOINT}?{query}", method="GET", access_token=access_token)
+
+    def list_captions(self, *, video_id: str, access_token: str) -> YouTubeResponse:
+        query = urllib.parse.urlencode({"part": "id,snippet", "videoId": video_id})
+        return self._request(f"{CAPTIONS_ENDPOINT}?{query}", method="GET", access_token=access_token)
+
+    def download_caption(self, *, caption_id: str, access_token: str, tfmt: str = "vtt") -> bytes:
+        query = urllib.parse.urlencode({"id": caption_id, "tfmt": tfmt})
+        return self._request_bytes(f"{CAPTIONS_ENDPOINT}/{caption_id}?{query}", method="GET", access_token=access_token)
 
     def exchange_code(self, *, code: str, client_id: str, client_secret: str, redirect_uri: str) -> YouTubeResponse:
         body = urllib.parse.urlencode(
@@ -234,6 +276,8 @@ class FakeYouTubeTransport(YouTubeTransport):
         ]
         self.playlist_items: dict[str, list[dict[str, Any]]] = {}
         self.videos_by_id: dict[str, dict[str, Any]] = {}
+        self.captions_by_video_id: dict[str, list[dict[str, Any]]] = {}
+        self.caption_downloads: dict[str, bytes] = {}
         self.error_override: Exception | None = None
 
     def create_upload_session(
@@ -297,6 +341,20 @@ class FakeYouTubeTransport(YouTubeTransport):
             },
             {},
         )
+
+    def list_captions(self, *, video_id: str, access_token: str) -> YouTubeResponse:
+        self.requests.append({"method": "GET", "endpoint": "captions.list", "video_id": video_id})
+        if self.error_override:
+            raise self.error_override
+        return YouTubeResponse(200, {"items": list(self.captions_by_video_id.get(video_id, []))}, {})
+
+    def download_caption(self, *, caption_id: str, access_token: str, tfmt: str = "vtt") -> bytes:
+        self.requests.append({"method": "GET", "endpoint": "captions.download", "caption_id": caption_id, "tfmt": tfmt})
+        if self.error_override:
+            raise self.error_override
+        if caption_id not in self.caption_downloads:
+            raise YouTubeChannelError("youtube.caption_not_found", "Caption track was not found.")
+        return self.caption_downloads[caption_id]
 
     def exchange_code(self, **kwargs) -> YouTubeResponse:
         self.requests.append({"method": "POST", "endpoint": "oauth.token"})

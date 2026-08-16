@@ -24,6 +24,10 @@ from youtube_runtime_handlers import (
     YOUTUBE_VIDEO_METADATA_READ_INPUT_SCHEMA,
     YOUTUBE_VIDEO_METADATA_READ_OUTPUT_SCHEMA,
 )
+from youtube_transcript_read_handler import (
+    YOUTUBE_OFFICIAL_CAPTIONS_COMPONENT_ID,
+    YOUTUBE_TRANSCRIPT_READ_CAPABILITY,
+)
 
 RUNTIME_SDK_VERSION = "runtime-contracts-0.1"
 
@@ -52,10 +56,44 @@ def phase41_component_manifests() -> tuple[ComponentManifest, ...]:
             sdk_version=RUNTIME_SDK_VERSION,
             capabilities=(
                 CapabilityDescriptor("youtube.video.read", "0.1.0", CapabilityMode.READ.value),
-                CapabilityDescriptor("youtube.transcript.read", "0.1.0", CapabilityMode.READ.value),
                 CapabilityDescriptor("youtube.transcript.import", "0.1.0", CapabilityMode.WRITE.value),
             ),
             metadata={"legacy_plugin_id": "source.youtube", "transport": "local_import"},
+        ),
+        ComponentManifest(
+            component_id=YOUTUBE_OFFICIAL_CAPTIONS_COMPONENT_ID,
+            provider="youtube",
+            version="0.1.0",
+            sdk_version=RUNTIME_SDK_VERSION,
+            capabilities=(
+                CapabilityDescriptor(
+                    YOUTUBE_TRANSCRIPT_READ_CAPABILITY,
+                    "0.1.0",
+                    CapabilityMode.READ.value,
+                    description="Read one available transcript representation through official YouTube captions.list and captions.download.",
+                    policy={
+                        "required_secret_refs": ["youtube-access-token-ref"],
+                        "required_oauth_scopes": [
+                            "https://www.googleapis.com/auth/youtube.readonly",
+                            "https://www.googleapis.com/auth/youtube.upload",
+                        ],
+                        "read_only_endpoints": ["captions.list", "captions.download"],
+                    },
+                ),
+            ),
+            required_secrets=("youtube-access-token-ref",),
+            network_policy=YOUTUBE_NETWORK_POLICY,
+            permissions={
+                "network": YOUTUBE_NETWORK_POLICY,
+                "secrets": {"required": True},
+                "filesystem": {"mode": "none"},
+                "subprocess": {"allowed": False},
+            },
+            metadata={
+                "activation_status": "NOT_CONFIGURED",
+                "legacy_plugin_id": "channel.youtube",
+                "transport": "youtube_api_official_captions",
+            },
         ),
         ComponentManifest(
             component_id="youtube-upload-channel",
@@ -219,7 +257,7 @@ def phase41_sample_installs() -> tuple[Install, ...]:
                 "youtube.short.publish": ComponentBinding("youtube-upload-channel"),
                 "youtube.publication.status.read": ComponentBinding("youtube-upload-channel"),
                 "youtube.video.read": ComponentBinding("youtube-source-import"),
-                "youtube.transcript.read": ComponentBinding("youtube-source-import"),
+                "youtube.transcript.read": ComponentBinding(YOUTUBE_OFFICIAL_CAPTIONS_COMPONENT_ID),
                 "youtube.transcript.import": ComponentBinding("youtube-source-import"),
             },
             config={

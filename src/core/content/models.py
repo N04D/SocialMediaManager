@@ -16,8 +16,14 @@ class ContentType(StrEnum):
 
 class ContentCompleteness(StrEnum):
     METADATA_ONLY = "metadata_only"
+    TRANSCRIPT_AVAILABLE = "transcript_available"
     PARTIAL = "partial"
     COMPLETE = "complete"
+
+
+class ArtifactType(StrEnum):
+    TRANSCRIPT_RAW = "transcript.raw"
+    TRANSCRIPT_NORMALIZED = "transcript.normalized"
 
 
 class ContentStatus(StrEnum):
@@ -125,6 +131,22 @@ class ContentRevision:
     created_at: str = ""
     created_by: str = ""
     change_reason: str = ""
+
+
+@dataclass
+class Artifact:
+    artifact_id: str
+    content_entity_id: str
+    revision_id: str
+    artifact_type: str
+    media_type: str
+    source: str
+    language: str
+    content_hash: str
+    storage_ref: str
+    created_at: str = ""
+    provenance: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

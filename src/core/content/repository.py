@@ -40,6 +40,8 @@ class ContentRepository(Protocol):
 
     def list_revisions(self, item_id: str) -> tuple[ContentRevision, ...]: ...
 
+    def save_content_item(self, item: ContentItem) -> ContentItem: ...
+
 
 @dataclass
 class InMemoryContentRepository:
@@ -171,6 +173,14 @@ class InMemoryContentRepository:
 
     def get_content_item(self, item_id: str) -> ContentItem | None:
         return self.items.get(item_id)
+
+    def save_content_item(self, item: ContentItem) -> ContentItem:
+        _assert_no_secret_values(item.metadata, code="content_repository.secret_value")
+        _assert_no_secret_values(item.source_provenance, code="content_repository.secret_value")
+        self.items[item.id] = item
+        if item.primary_source_ref:
+            self.external_ref_index[item.primary_source_ref] = item.id
+        return item
 
     def get_by_external_ref(self, canonical_ref: str) -> ContentItem | None:
         item_id = self.external_ref_index.get(canonical_ref)
@@ -432,6 +442,12 @@ class SqliteContentRepository:
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
+
+    def save_content_item(self, item: ContentItem) -> ContentItem:
+        _assert_no_secret_values(item.metadata, code="content_repository.secret_value")
+        _assert_no_secret_values(item.source_provenance, code="content_repository.secret_value")
+        self._save_item(item)
+        return item
 
     def get_by_external_ref(self, canonical_ref: str) -> ContentItem | None:
         with self._connect() as conn:

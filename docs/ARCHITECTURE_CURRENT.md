@@ -933,3 +933,32 @@ Key guarantees:
 - Core content models (`ResourceRef`, `ExternalResourceSnapshot`, `ContentRepository`) maintain 100% provider neutrality without hardcoded provider branches.
 - Production mutation count remains strictly 2 (`calendar.event.create`, `website.article.publish`).
 
+### Phase 60 Transcript Artifacts
+
+Phase 60 adds the first concrete content artifact layer for YouTube transcripts without adding AI, analytics, article generation, LinkedIn behavior, or YouTube mutations.
+
+```text
+YouTube Video ContentEntity
+       |
+       +---- Metadata Revisions
+       |
+       +---- Raw Transcript Artifact
+       |          |
+       |          v
+       |     Normalization
+       |          |
+       +---- Normalized Transcript Artifact
+                  |
+                  v
+        TRANSCRIPT_AVAILABLE
+```
+
+`Artifact` is provider-neutral and binds to the same Phase 59 `ContentItem`/entity identity plus the observed revision lineage. `transcript.raw` stores exact VTT/import bytes with content hash, provider/import source, language, track identity, retrieval time, and safe provenance. `transcript.normalized` stores deterministic JSON with integer millisecond segments, plain text projection, parser id/version, source artifact id, normalized content hash, and generation method.
+
+Metadata, transcript and audiovisual content are different completeness levels. A transcript provides a strong textual representation of spoken/captioned content, but does not necessarily represent all visual information in a video. Successful normalized transcript ingestion sets `TRANSCRIPT_AVAILABLE`; it never sets `complete`/full audiovisual content.
+
+Transcript source provenance must distinguish official provider captions, provider-generated ASR and user-supplied transcripts. The official implementation of `youtube.transcript.read` is `youtube-official-captions`, using only YouTube Data API `captions.list` and `captions.download` with OAuth. Production activation is honest: when the scope/token contract is not configured, the source is `NOT_CONFIGURED`/`TRANSCRIPT_AUTH_REQUIRED`. There is no fallback to unofficial APIs, scraping, browser automation, audio download, Whisper/ASR, or LLM processing.
+
+Track selection is deterministic: serving, non-draft, preferred language, primary audio, standard/manual before ASR unless ASR is explicit, then deterministic tie checks. Ambiguous equivalent winners return `TRANSCRIPT_TRACK_AMBIGUOUS`.
+
+Production boundaries remain unchanged: one external event source (`youtube.video.published`), two production mutations (`calendar.event.create`, `website.article.publish`), and zero caption mutation endpoints.

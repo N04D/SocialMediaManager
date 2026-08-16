@@ -1212,4 +1212,94 @@ Phase 50 keeps the Phase 49 SQLite journal as the production-safe mutation and c
 - Phase 48 requires approval for the first production mutation even when install/deployment policy allows writes. `MutationIntent`, `MutationReceipt`, journal records, approval records, ledger metadata, and trace output contain no raw credentials or secret-shaped fields. Duplicate approval, retry, resume, duplicate trigger delivery, and failure-after-apply paths are covered by idempotency tests for the selected local calendar mutation.
 - Phase 50 proves private compensation for the selected local calendar create mutation. Arbitrary deletion is not exposed; wrong-resource and changed-resource compensation are blocked; compensation receipts, journal records, and traces contain no raw credentials.
 - Phase 59 introduces `youtube.video.read` capability, `ResourceRef`, `ExternalResourceSnapshot`, and `ContentRepository` upsert with entity identity, content revisioning, external refs, and source provenance. The capability is strictly read-only, enforces secret canary isolation, and asserts explicit `METADATA_ONLY` completeness without transcript or AI claims. Production mutations remain strictly capped at 2 (`calendar.event.create`, `website.article.publish`).
+- Phase 60 adds provider-neutral transcript artifacts. Official remote retrieval is limited to YouTube Data API `captions.list` plus `captions.download`; supplied transcripts use the same raw/normalized artifact pipeline. No unofficial transcript API, scraping, browser automation, ASR, LLM, summary, article generation, analytics linkage, or caption mutation is introduced.
 
+## Phase 60 Transcript Artifact Ingestion
+
+Phase 60 separates the conceptual work from concrete representations:
+
+```text
+YouTube Video ContentEntity
+       |
+       +---- Metadata Revisions
+       |
+       +---- Raw Transcript Artifact
+       |          |
+       |          v
+       |     Normalization
+       |          |
+       +---- Normalized Transcript Artifact
+                  |
+                  v
+        TRANSCRIPT_AVAILABLE
+```
+
+Metadata, transcript and audiovisual content are different completeness levels.
+
+A transcript provides a strong textual representation of spoken/captioned content, but does not necessarily represent all visual information in a video.
+
+Transcript source provenance must distinguish official provider captions, provider-generated ASR and user-supplied transcripts.
+
+### Existing Primitive Inspection
+
+| Existing primitive | Reusable? | Gap | Migration strategy |
+| --- | --- | --- | --- |
+| `YouTubeSourcePlugin.import_source` supplied transcript path | Partially | Creates legacy `ContentItem` text and timeline metadata, not Phase 59 `ContentEntity` artifacts | Keep legacy behavior; route supplied transcript ingestion through `TranscriptArtifactIngestor.ingest_supplied_transcript(...)` for Phase 60 entity/revision artifacts. |
+| `YouTubeSourcePlugin.parse_timestamped_transcript` | No for Phase 60 canonical normalization | Uses floats and line-oriented supplied text, not exact raw VTT bytes or deterministic parser version | New `src.core.content.transcripts.parse_vtt` preserves integer millisecond timings and parser metadata. |
+| Phase 41 `youtube.transcript.read` mapping | Partially | Was mapped to local import/source plugin and explicitly not configured for remote retrieval | Add `youtube-official-captions` component providing read-only `youtube.transcript.read`; activation remains `NOT_CONFIGURED` unless OAuth scope contract is configured. |
+| Legacy transcript models (`TimelineSegment`) | Partially | Float seconds are acceptable for older clip tools but create nondeterminism for artifact identity | New `TranscriptSegment(start_ms,end_ms,text)` stores normalized artifact content; older models can derive later. |
+| `ContentItem` / `ContentRevision` from Phase 59 | Yes | Needed artifact binding and completeness convergence | `Artifact` stores `content_entity_id` and `revision_id`; completeness changes only after normalized artifact exists. |
+| Existing local JSON/SQLite storage style | Yes | No generic transcript artifact store existed | Add `LocalArtifactStorage`, `InMemoryArtifactRepository`, and `SqliteArtifactRepository`. Storage refs are portable relative refs. |
+| Hashing helpers | Yes in pattern | No content-addressed transcript identity | Raw bytes hash and canonical normalized JSON hash drive idempotency/versioning. |
+| Provenance guards | Yes | Transcript provenance needed track/language/parser fields | Artifact provenance is checked with existing secret-value canary guard and excludes headers/tokens. |
+| YouTube transport | Yes | Had videos/channel/playlist reads, not captions | Add official `list_captions` and `download_caption` read methods only. |
+| OAuth/secret handling | Partially | Existing sample install has secret refs but production caption scope is not proven | Admission requires configured scope contract; absent scope returns `OFFICIAL_TRANSCRIPT_SOURCE_NOT_CONFIGURED` / runtime `TRANSCRIPT_AUTH_REQUIRED`. |
+
+### Artifact Contract
+
+The generic `Artifact` model records `artifact_id`, `content_entity_id`, `revision_id`, `artifact_type`, `media_type`, `source`, `language`, `content_hash`, `storage_ref`, `created_at`, `provenance`, and `metadata`.
+
+Phase 60 defines two transcript artifact types:
+
+- `transcript.raw`: exact provider/import representation such as downloaded VTT bytes.
+- `transcript.normalized`: deterministic JSON containing `language`, `segments`, `plain_text`, `parser_id`, `parser_version`, and `source_artifact_id`.
+
+Raw and normalized artifacts are never overwritten. Same video, same track, same content deduplicates; updated content or replacement track creates new artifacts while preserving history. Multiple languages remain separate variants.
+
+### Official YouTube Caption Flow
+
+`youtube.transcript.read` is implemented by `youtube-official-captions` as a read-only capability. It performs at most one `captions.list(videoId=...)` call and one `captions.download(id=..., tfmt=vtt)` call per requested operation. It does not expose `captions.insert`, `captions.update`, or `captions.delete`.
+
+Track selection is deterministic:
+
+1. require a caption track id;
+2. require `status == serving` when status is present;
+3. require `isDraft == false`;
+4. require preferred language exact match when configured;
+5. prefer primary audio track where known;
+6. prefer standard/manual captions over `ASR` unless `allow_asr` is explicit;
+7. use language and track id only as deterministic tie-break fields after semantic ranking;
+8. return `TRANSCRIPT_TRACK_AMBIGUOUS` when multiple tracks share the same semantic winning rank.
+
+Provider `trackKind = ASR` is preserved. Normalized artifact metadata records `generation_method = provider_asr`; standard provider captions record `provider_caption`; supplied transcripts record `user_supplied`.
+
+### Error And Auth Model
+
+Structured transcript errors include `TRANSCRIPT_NOT_AVAILABLE`, `TRANSCRIPT_AUTH_REQUIRED`, `TRANSCRIPT_AUTH_FORBIDDEN`, `TRANSCRIPT_TRACK_AMBIGUOUS`, `TRANSCRIPT_DOWNLOAD_FAILED`, `TRANSCRIPT_PARSE_FAILED`, `TRANSCRIPT_EMPTY`, `ARTIFACT_TOO_LARGE`, and `CONTENT_ENTITY_NOT_FOUND` for callers that require pre-existing entity binding.
+
+OAuth is secret-ref only. Playbooks, deployments, events, artifacts, provenance, logs, and traces must not contain tokens, headers, or raw OAuth metadata. If the OAuth scope contract cannot prove YouTube caption read access, official caption retrieval is conservatively not configured. There is no hidden fallback to unofficial transcript APIs, HTML scraping, player endpoint reverse engineering, browser scraping, audio download, Whisper, or local ASR.
+
+### Idempotency And Recovery
+
+Persistence order is retrieve, validate, persist raw, normalize, persist normalized, link provenance, then mark `TRANSCRIPT_AVAILABLE`.
+
+If a process crashes after raw persistence, restart can reuse the raw artifact and normalize it. If it crashes after normalized persistence but before completeness update, reconciliation uses the normalized artifact to restore `TRANSCRIPT_AVAILABLE`. Completeness is never set to `FULL_CONTENT`/`complete` by transcript ingestion.
+
+Production boundaries remain unchanged:
+
+```text
+production external source count: 1
+production mutation count: 2
+production mutations: calendar.event.create, website.article.publish
+caption mutation endpoints used: 0
+```

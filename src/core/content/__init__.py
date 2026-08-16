@@ -39,11 +39,14 @@ from .contracts import (
 )
 from .errors import ContentConflictError, ContentError, ContentNotFoundError, ContentValidationError
 from .models import (
+    Artifact,
+    ArtifactType,
     ChannelContentRequirements,
     ChannelContentVariant,
     ChannelContentVariantStatus,
     ChannelContentVariantType,
     ContentAuditEvent,
+    ContentCompleteness,
     ContentIntegrityIssue,
     ContentItem,
     ContentRequirementResult,
@@ -59,6 +62,8 @@ from .models import (
 
 __all__ = [
     "CHANNEL_CONTENT_VARIANT_CONTRACT_VERSION",
+    "Artifact",
+    "ArtifactType",
     "AssetContract",
     "Campaign",
     "CanonicalRepresentation",
@@ -96,6 +101,7 @@ __all__ = [
     "ChannelContentVariantStatus",
     "ChannelContentVariantType",
     "ContentAuditEvent",
+    "ContentCompleteness",
     "ContentConflictError",
     "ContentError",
     "ContentIntegrityIssue",
