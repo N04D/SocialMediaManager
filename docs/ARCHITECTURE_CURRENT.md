@@ -1057,3 +1057,50 @@ YOUTUBE_METRICS = BLOCKED_NO_SAFE_EXISTING_READER
 ```
 
 Production boundaries remain unchanged: two production mutations (`calendar.event.create`, `website.article.publish`), one production external event source (`youtube-data-api-uploads`), no new YouTube metrics production reader, no scraping, no browser automation, and no AI calls.
+
+### Phase 63 Playbook Registry And Safe Context Binding
+
+Phase 63 introduces a provider-neutral playbook registry above the read-only content performance context. It stores, validates, and selects playbook definitions; it does not execute playbooks, invoke `PlaybookExecutor`, call AI, mutate production state, scrape, automate browsers, or admit YouTube metrics.
+
+```text
+ContentPerformanceContext
+        |
+        v
+Playbook Registry
+        |
+        v
+Playbook Selection
+        |
+        v
+Future Execution Layer
+```
+
+Playbook registry records are versioned first-class definitions:
+
+- `playbook_id` + `version` is the stable key; name-only overwrites are not allowed.
+- `status` is one of `draft`, `active`, `deprecated`, `disabled`, or `invalid`.
+- `scope`, input contract, context contract, capability requirements, mutation policy, raw access policy, steps, provenance, and timestamps are stored with the definition.
+- Multiple versions and multiple playbooks for the same content domain can exist side by side.
+
+Context binding is explicit. A playbook can require `content-performance-context.v1`, transcript availability, publications, and/or metric history. Raw metrics and raw transcript requirements default to false. Ordinary selection excludes raw-access playbooks unless the selection policy explicitly allows that access; even then, secrets remain forbidden.
+
+Mutation access is default forbidden:
+
+```text
+mutation_policy.allowed: false
+mutation_policy.allowed_capabilities: []
+```
+
+Definitions can declare capability requirements such as `content.performance.context.read`, but Phase 63 does not activate capabilities. Missing capabilities validate as unavailable/invalid or are rejected during selection. Production mutation count remains strictly 2, and production external source count remains strictly 1.
+
+Selection is deterministic:
+
+- disabled and invalid definitions are excluded.
+- deprecated definitions require explicit policy.
+- context schema and required context facts must match.
+- required read capabilities must be available.
+- mutation and raw-access requirements require explicit policy.
+- highest compatible version is selected only because the selection policy says so.
+- tie-breakers use scope, playbook id, and version ordering.
+
+The registry output and selection provenance contain no secrets, raw provider payloads, provider headers, OAuth material, or raw transcript bodies. AI-ready context may feed a later layer, but Phase 63 remains definition-management only.

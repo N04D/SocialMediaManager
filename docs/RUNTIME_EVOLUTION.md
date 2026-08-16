@@ -1420,6 +1420,118 @@ new external event sources: 0
 AI calls: 0
 ```
 
+## Phase 63 Playbook Registry, Versioning & Safe Context Binding
+
+Phase 63 adds a provider-neutral playbook registry that describes, validates, and selects playbooks against the Phase 62 content performance context. It does not execute playbooks, call AI, create recommendations, mutate production state, add event sources, scrape, automate browsers, or admit a YouTube metrics production reader.
+
+```text
+ContentPerformanceContext
+        |
+        v
+Playbook Registry
+        |
+        v
+Playbook Selection
+        |
+        v
+Future Execution Layer
+```
+
+### Registry Record
+
+The registry stores `PlaybookDefinitionRecord` keyed by:
+
+```text
+playbook_id + version
+```
+
+This prevents name-only overwrites and allows:
+
+- multiple playbooks for the same content domain with different intent
+- the same `playbook_id` with multiple versions
+- active and deprecated versions side by side
+- disabled and invalid definitions retained for audit while excluded from normal selection
+
+The record contains:
+
+```text
+playbook_id
+version
+name
+description
+status
+scope
+input_contract
+context_contract
+capability_requirements
+mutation_policy
+raw_access_policy
+steps
+provenance
+created_at
+updated_at
+```
+
+Status values are `draft`, `active`, `deprecated`, `disabled`, and `invalid`.
+
+### Context Binding
+
+Playbooks bind to Phase 62 context through `PlaybookContextContract`:
+
+```text
+schema_version: content-performance-context.v1
+requires_transcript: true/false
+requires_publications: true/false
+requires_metrics_history: true/false
+raw_metrics_required: false by default
+raw_transcript_required: false by default
+```
+
+Default context binding uses the safe context object only. It does not include raw metrics payloads, raw transcript bodies, provider payloads, provider headers, OAuth material, or secrets. Raw access playbooks must be explicitly marked and ordinary selection rejects them unless the caller supplies a policy allowing raw metrics or raw transcript access. Secret access is always forbidden.
+
+### Input And Capability Contracts
+
+The input contract describes allowed or required logical inputs such as content entity id, external ref, provider, install id, time window, target channel, and intent label. It does not accept free secrets, OAuth tokens, provider headers, or raw payloads as default inputs.
+
+Capability requirements are declarative only:
+
+```text
+read:
+  - content.performance.context.read
+optional: []
+mutations: []
+```
+
+Phase 63 does not activate capabilities. Missing capabilities validate as unavailable or are rejected during selection. A mutation-requiring definition is invalid unless its definition explicitly allows that mutation, and even then normal selection rejects it unless the selection policy allows mutations.
+
+### Selection Semantics
+
+`PlaybookRegistry.select_for_context(...)` is deterministic:
+
+- disabled and invalid definitions are excluded
+- deprecated definitions are excluded unless explicitly allowed
+- context schema must match
+- required transcript/publication/metric facts must exist
+- required capabilities must be available
+- raw and mutation access must be explicitly allowed by selection policy
+- highest compatible version is selected only when the policy says to select highest version
+- tie-breakers sort by scope, playbook id, and version
+
+The registry records provenance such as definition source, version, validation result, selected-by policy, context schema version, and capability validation result. It does not persist secrets or raw provider payloads.
+
+### Production Boundaries
+
+Phase 63 leaves production boundaries unchanged:
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+```
+
 ## Phase 62 Read-Only Content Performance Context API
 
 Phase 62 adds a deterministic, provider-neutral, read-only context layer over the Phase 61 content/publication/metrics graph. It is intended as a future input boundary for agents, AI, and playbooks, but it does not call AI and does not generate recommendations, classifications, summaries, causality claims, mutations, event sources, scraping, browser automation, or production YouTube metrics reads.
