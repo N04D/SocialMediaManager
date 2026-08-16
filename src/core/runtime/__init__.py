@@ -152,6 +152,15 @@ from .sandbox_evaluation import (
     SandboxEvaluationRedaction,
     SandboxEvaluationResult,
 )
+from .promotion_gate import (
+    PROMOTION_DECISION_SCHEMA_VERSION,
+    PROMOTION_GATE_VERSION,
+    PromotionDecision,
+    PromotionGate,
+    PromotionPolicy,
+    PromotionReason,
+    PromotionRedaction,
+)
 from .policy import (
     ApprovalRecord,
     ApprovalStatus,
@@ -280,6 +289,13 @@ __all__ = [
     "PlaybookValidationError",
     "PolicyDecision",
     "PolicyReasonCode",
+    "PROMOTION_DECISION_SCHEMA_VERSION",
+    "PROMOTION_GATE_VERSION",
+    "PromotionDecision",
+    "PromotionGate",
+    "PromotionPolicy",
+    "PromotionReason",
+    "PromotionRedaction",
     "RequirementBinding",
     "ReadbackPolicy",
     "RecoveryPolicy",

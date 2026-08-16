@@ -1249,3 +1249,37 @@ Regression evaluation accepts an already produced comparison or `SandboxReplayRe
 Evaluation results contain no secrets, provider headers, Authorization/Bearer values, raw metrics payloads, or raw transcript bodies. Evaluations are not durable in Phase 67; a future promotion gate may choose to persist them under a separate contract.
 
 Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no YouTube metrics production reader, no external writes, no AI calls, and no LLM evaluation.
+
+### Phase 68 Promotion Gate For Sandbox Evaluations
+
+Phase 68 adds an explicit `PromotionGate` above sandbox evaluations. The gate converts a `SandboxEvaluationResult`, optional `SandboxExecutionRecord`, and optional plan metadata into a deterministic `PromotionDecision`. It decides and explains whether a sandbox run is `eligible`, `blocked`, or `needs_review`; it does not execute, replay, evaluate, request approval, call AI, open raw payloads, write external systems, add event sources, automate browsers, scrape, or admit YouTube metrics.
+
+```text
+SandboxEvaluationResult
+        |
+        v
+PromotionGate
+        |
+        v
+PromotionDecision
+        |
+        v
+Future Review / Approval / Agent Consumption Layer
+```
+
+`PromotionDecision` records the subject execution id, evaluation id, status, reasons, required reviews, policy id/version, safe next-action labels, blocked capabilities, provenance, redaction flags, decision timestamp, and schema version.
+
+Default `PromotionPolicy` requires a passed evaluation, forbids warnings from becoming eligible, forbids raw access and mutations, rejects blocked executions, and does not require replay match unless explicitly configured. Warnings route to `needs_review` when policy permits warnings but requires manual review. Failures, forbidden reason codes, unsafe redaction, mutation/raw usage, production-executor markers, AI markers, interactive collection markers, and non-sandbox/non-read-only executions block promotion.
+
+Safe next actions are labels only:
+
+- `allow_manual_review`
+- `allow_read_only_agent_consumption`
+- `allow_sandbox_replay`
+- `allow_prepare_approval_request`
+
+No production execution affordance is emitted. Unsafe labels such as publish, send, mutate, production execution, or AI calls remain absent.
+
+Promotion decisions contain no secrets, provider headers, Authorization/Bearer values, raw metrics payloads, or raw transcript bodies. Phase 68 does not persist decisions and does not implement an approval UI.
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no production execution, no approval UI, no YouTube metrics production reader, no external writes, no AI calls, and no LLM evaluation.

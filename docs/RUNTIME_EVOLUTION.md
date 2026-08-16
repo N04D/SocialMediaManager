@@ -1966,6 +1966,118 @@ AI calls: 0
 LLM evaluation: 0
 ```
 
+## Phase 68 Promotion Gate For Sandbox Evaluations
+
+Phase 68 introduces a provider-neutral promotion gate above Phase 67 evaluations. It makes deterministic promotion decisions for sandbox runs, but it does not execute, replay, re-evaluate, request approvals, open raw payloads, call AI, use LLM judging, scrape, automate browsers, write external systems, add event sources, or admit YouTube metrics.
+
+```text
+SandboxEvaluationResult
+        |
+        v
+PromotionGate
+        |
+        v
+PromotionDecision
+        |
+        v
+Future review / approval / agent consumption layer
+```
+
+### Promotion Model
+
+`PromotionDecision` contains:
+
+```text
+decision_id
+subject_execution_id
+subject_evaluation_id
+status
+reasons
+required_reviews
+policy_id
+policy_version
+eligible_next_actions
+blocked_capabilities
+provenance
+redaction
+decided_at
+schema_version
+```
+
+Statuses are:
+
+```text
+eligible
+blocked
+needs_review
+```
+
+`PromotionReason` contains:
+
+```text
+reason_code
+severity
+subject_ref
+details
+```
+
+Severities are `info`, `warning`, and `error`.
+
+### Promotion Policy
+
+`PromotionPolicy` controls:
+
+```text
+require_evaluation_passed
+allow_warnings
+require_replay_match
+allow_blocked_execution
+allow_raw_access
+allow_mutations
+require_manual_review_for_warnings
+required_checks
+forbidden_reason_codes
+```
+
+The default policy requires a passed evaluation, blocks warnings from becoming eligible, forbids raw access and mutations, rejects blocked executions, and does not require replay match unless configured.
+
+### Decision Rules
+
+Eligible requires a passed evaluation, no error-severity checks, no forbidden reason codes, sandbox/read-only execution where provided, no mutation or raw access by default, safe redaction flags, and no production-executor, AI, or interactive collection markers.
+
+Needs review is used for warnings when policy routes warnings to review, replay mismatches that remain warning-level, missing optional required checks that policy allows to review, and deprecated playbook usage.
+
+Blocked is used for failed evaluations, forbidden reason codes, mutation/raw use without policy allowance, secret/header/raw leakage, production executor markers, AI or interactive collection markers, missing required replay match, blocked executions under default policy, and non-sandbox/non-read-only execution records.
+
+### Safe Next Actions
+
+Promotion decisions expose only safe labels:
+
+```text
+allow_manual_review
+allow_read_only_agent_consumption
+allow_sandbox_replay
+allow_prepare_approval_request
+```
+
+No production execution, publishing, mutation, sending, or AI-call label is emitted.
+
+### Redaction And Boundaries
+
+Promotion decisions contain no raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth material, API keys, refresh tokens, or secret canaries. Phase 68 does not persist decisions and does not create an approval UI.
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+production execution: 0
+approval UI: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+LLM evaluation: 0
+```
+
 ## Phase 62 Read-Only Content Performance Context API
 
 Phase 62 adds a deterministic, provider-neutral, read-only context layer over the Phase 61 content/publication/metrics graph. It is intended as a future input boundary for agents, AI, and playbooks, but it does not call AI and does not generate recommendations, classifications, summaries, causality claims, mutations, event sources, scraping, browser automation, or production YouTube metrics reads.
