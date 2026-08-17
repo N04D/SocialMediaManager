@@ -1801,6 +1801,167 @@ AI calls: 0
 LLM evaluation: 0
 ```
 
+## Phase 77 Execution Readiness Report
+
+Phase 77 introduces a read-only `ExecutionReadinessReporter`. The reporter consumes supplied governance objects and produces an `ExecutionReadinessReport` for inspection before a future executor interface. It reports readiness and consistency only; it does not execute, mutate approval/claim/attempt state, replay, evaluate, promote, open raw payloads, call AI, scrape, automate browsers, write external systems, add event sources, or admit YouTube metrics.
+
+```text
+ApprovalRequest
+PromotionDecision
+ExecutionEligibilityDecision
+ExecutionPreparationRecord
+ExecutionClaim
+ExecutionAttemptRecord
+        |
+        v
+ExecutionReadinessReport
+        |
+        v
+Future Executor Interface
+```
+
+### Reporter API
+
+```text
+ExecutionReadinessReporter.build(
+    approval_request=None,
+    promotion_decision=None,
+    eligibility_decision=None,
+    preparation_record=None,
+    claim=None,
+    attempt=None,
+    policy=None,
+)
+
+ExecutionReadinessReporter.summarize(report)
+```
+
+There is no report store in Phase 77. The report is generated from caller-supplied objects and remains read-only.
+
+### Report Contract
+
+`ExecutionReadinessReport` includes:
+
+```text
+report_id
+status
+subject_scope
+approval_summary
+promotion_summary
+eligibility_summary
+preparation_summary
+claim_summary
+attempt_summary
+consistency_checks
+blockers
+warnings
+safe_next_actions
+provenance
+redaction
+generated_at
+schema_version
+```
+
+Statuses:
+
+```text
+ready
+blocked
+needs_review
+informational
+```
+
+Default policy requires:
+
+```text
+approval approved
+promotion eligible
+eligibility eligible
+preparation ready
+safe redaction
+matching scope and identity
+no production/AI/browser/network markers
+```
+
+Active claim is optional by default and summarized. Active attempt is allowed only as a warning by default; callers may route warnings to `needs_review` with policy. Historical no-op/simulation attempts can be informational when readiness requirements are disabled.
+
+### Consistency Checks
+
+Checks cover:
+
+```text
+approval id
+promotion decision id
+eligibility decision id
+plan id
+playbook id/version
+requested action kind
+preparation id
+claim id
+idempotency key
+attempt mode/status
+redaction across all supplied objects
+production/AI/browser/network markers
+```
+
+Mismatches become blockers. Optional missing claim/attempt metadata is represented as warning/info according to policy rather than causing side effects.
+
+### Safe Next Actions
+
+The only report next actions are local inspection/control labels:
+
+```text
+inspect_readiness
+request_manual_review
+replay_sandbox
+open_non_production_attempt
+release_claim
+expire_claim
+cancel_preparation
+```
+
+The report never emits:
+
+```text
+execute_production
+publish
+mutate
+send
+call_ai
+```
+
+### Redaction And Boundaries
+
+Reports contain no raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth material, API keys, refresh tokens, secret canaries, full provider payloads, or full step output.
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+approval_state_mutated: false
+execution_started: false
+production_mutation_used: false
+external_write_used: false
+ai_call_used: false
+```
+
+Production boundaries remain:
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+production execution: 0
+playbook side effects: 0
+external approval provider: 0
+approval UI: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+LLM evaluation: 0
+```
+
 ## Phase 74 Prepared Execution Store And Idempotency
 
 Phase 74 makes execution preparation durable and idempotent without introducing execution. It adds a local `ExecutionPreparationStore` around Phase 73 `ExecutionPreparationRecord` objects.

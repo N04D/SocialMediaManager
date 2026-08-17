@@ -1596,6 +1596,57 @@ Audit events include `attempt_opened`, `attempt_blocked`, `attempt_completed_noo
 
 Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no production execution, no playbook side effects, no external approval provider, no approval UI, no YouTube metrics production reader, no external writes beyond local attempt/claim/preparation stores, no AI calls, and no LLM evaluation.
 
+### Phase 77 Execution Readiness Report
+
+Phase 77 adds a provider-neutral `ExecutionReadinessReporter` over the full local governance chain. The reporter produces a read-only `ExecutionReadinessReport` that summarizes approval, promotion, eligibility, preparation, claim, and non-production attempt state. It checks identity/scope/fingerprint consistency and reports blockers or warnings. It does not execute playbooks, mutate claims, open or close attempts, mutate approvals, replay sandbox runs, re-run evaluation/promotion, open raw payloads, call AI, scrape, automate browsers, perform network calls, add event sources, or write external systems.
+
+```text
+ApprovalRequest
+PromotionDecision
+ExecutionEligibilityDecision
+ExecutionPreparationRecord
+ExecutionClaim
+ExecutionAttemptRecord
+        |
+        v
+ExecutionReadinessReporter
+        |
+        v
+ExecutionReadinessReport
+        |
+        v
+Future Executor Interface
+```
+
+Report statuses are:
+
+```text
+ready
+blocked
+needs_review
+informational
+```
+
+The default policy requires an approved approval, eligible promotion, eligible execution eligibility decision, ready preparation, safe redaction, and passing consistency checks. Active claims are optional by default but summarized; active attempts produce a warning by default. Historical no-op attempts can be reported as informational when readiness requirements are disabled by policy.
+
+Consistency checks cover approval ids, promotion decision ids, eligibility/preparation scope, plan id, playbook id/version, requested action kind, preparation id, claim id, idempotency key, attempt mode/status, production-status markers, and redaction across all supplied objects.
+
+Safe next actions are limited to local read/control labels:
+
+```text
+inspect_readiness
+request_manual_review
+replay_sandbox
+open_non_production_attempt
+release_claim
+expire_claim
+cancel_preparation
+```
+
+The report never emits production execution, publish, mutate, send, or AI-call actions. Report redaction remains explicit and false for raw metrics, raw transcripts, secrets, provider headers, approval mutation, execution start, production mutation, external writes, and AI calls.
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no production execution, no playbook side effects, no external approval provider, no approval UI, no YouTube metrics production reader, no external writes, no AI calls, and no LLM evaluation.
+
 ### Phase 72 Execution Eligibility Gate
 
 Phase 72 adds a provider-neutral `ExecutionEligibilityGate` above local approvals and promotion decisions. The gate decides whether a future execution preparation layer may treat a sandbox run as eligible. It does not execute playbooks, start production execution, mutate approvals, perform mutations, call external approval providers, create an approval UI, call AI, open raw payloads, write external systems, add event sources, scrape, automate browsers, or admit YouTube metrics.
