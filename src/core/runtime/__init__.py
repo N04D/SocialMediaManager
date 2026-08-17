@@ -174,6 +174,15 @@ from .manual_review_packet import (
     ReviewPacketPolicy,
     ReviewReason,
 )
+from .approval_request_draft import (
+    APPROVAL_REQUEST_DRAFT_BUILDER_VERSION,
+    APPROVAL_REQUEST_DRAFT_SCHEMA_VERSION,
+    ApprovalRequestDraft,
+    ApprovalRequestDraftBuilder,
+    ApprovalRequestDraftPolicy,
+    ApprovalRequestReason,
+    ApprovalRequestRedaction,
+)
 from .policy import (
     ApprovalRecord,
     ApprovalStatus,
@@ -311,6 +320,13 @@ __all__ = [
     "PromotionRedaction",
     "MANUAL_REVIEW_PACKET_BUILDER_VERSION",
     "MANUAL_REVIEW_PACKET_SCHEMA_VERSION",
+    "APPROVAL_REQUEST_DRAFT_BUILDER_VERSION",
+    "APPROVAL_REQUEST_DRAFT_SCHEMA_VERSION",
+    "ApprovalRequestDraft",
+    "ApprovalRequestDraftBuilder",
+    "ApprovalRequestDraftPolicy",
+    "ApprovalRequestReason",
+    "ApprovalRequestRedaction",
     "ManualReviewPacket",
     "ManualReviewPacketBuilder",
     "ReviewPacketPolicy",

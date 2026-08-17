@@ -1420,6 +1420,147 @@ new external event sources: 0
 AI calls: 0
 ```
 
+## Phase 70 Approval Request Contract
+
+Phase 70 adds a read-only approval request draft boundary. It converts an existing `ManualReviewPacket` into an `ApprovalRequestDraft` and stops there.
+
+```text
+ManualReviewPacket
+        |
+        v
+ApprovalRequestDraft
+        |
+        v
+Future Approval State / UI / Operator Decision
+```
+
+The builder is intentionally narrow:
+
+```text
+ApprovalRequestDraftBuilder.build(packet, requested_action, policy=None)
+ApprovalRequestDraftBuilder.available_actions(packet, policy=None)
+ApprovalRequestDraftBuilder.summarize(draft)
+```
+
+It does not request approval from any system, mutate approval state, write an approval store, start execution, start replay, run evaluation, run promotion, fetch raw payloads, call AI, add a user interface, add an event source, or add a production mutation.
+
+### Draft Contract
+
+`ApprovalRequestDraft` records:
+
+```text
+draft_id
+packet_id
+subject_execution_id
+subject_decision_id
+requested_action
+requested_action_kind
+reviewer_role
+scope
+status
+reason_codes
+safety_summary
+required_reviews
+expires_at
+provenance
+redaction
+created_at
+schema_version
+```
+
+Statuses are:
+
+```text
+draft
+not_requestable
+blocked
+```
+
+Requested action kinds are limited to:
+
+```text
+manual_review
+read_only_agent_consumption
+sandbox_replay
+prepare_approval_request
+```
+
+No production execution, publish, mutate, send, or AI action kind is emitted.
+
+### Requested Action Mapping
+
+Safe packet next actions map deterministically:
+
+```text
+allow_manual_review                 -> manual_review
+allow_read_only_agent_consumption   -> read_only_agent_consumption
+allow_sandbox_replay                -> sandbox_replay
+allow_prepare_approval_request      -> prepare_approval_request
+```
+
+If a requested action is not present in the packet, the draft is `not_requestable` with `action_not_allowed_by_packet`. Unsafe input labels are omitted and recorded as `unsafe_action_omitted`.
+
+### Draft Policy
+
+Default `ApprovalRequestDraftPolicy`:
+
+```text
+require_ready_for_review: true
+allow_informational: false
+allow_blocked: false
+default_reviewer_role: human_reviewer
+default_expiration_hours: None
+require_safe_redaction: true
+```
+
+Only a `ready_for_review` packet creates a requestable draft by default. Informational packets require explicit policy. Blocked or unsafe-redaction packets fail closed.
+
+Scope is exact and contains packet id, execution id, decision id, playbook id/version where available, and requested action kind. There is no wildcard approval scope.
+
+Expiration is data only. When policy configures `default_expiration_hours`, `expires_at` is calculated deterministically from `created_at`; no timer, scheduled job, or automation is started.
+
+### Safety Summary And Redaction
+
+Safety summary contains only safe facts:
+
+```text
+packet status
+redaction flags
+decision status
+evaluation status
+execution sandbox/read_only flags
+plan executable flag
+safe next action source
+```
+
+Approval request drafts contain no raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth material, API keys, refresh tokens, secret canaries, full provider payloads, or full step output.
+
+Redaction flags are explicit:
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+approval_state_mutated: false
+```
+
+### Boundaries
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+approval execution: 0
+approval state mutation: 0
+approval UI: 0
+production execution: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+LLM summarization: 0
+```
+
 ## Phase 63 Playbook Registry, Versioning & Safe Context Binding
 
 Phase 63 adds a provider-neutral playbook registry that describes, validates, and selects playbooks against the Phase 62 content performance context. It does not execute playbooks, call AI, create recommendations, mutate production state, add event sources, scrape, automate browsers, or admit a YouTube metrics production reader.

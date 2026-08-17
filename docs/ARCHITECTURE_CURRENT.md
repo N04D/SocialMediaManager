@@ -1313,3 +1313,42 @@ Full step output is omitted by default. Packets never include raw metrics payloa
 Phase 69 does not persist packets. The approval workflow remains a separate future layer.
 
 Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no production execution, no approval UI, no approval action, no YouTube metrics production reader, no external writes, no AI calls, and no LLM summarization.
+
+### Phase 70 Approval Request Draft Contract
+
+Phase 70 adds a provider-neutral `ApprovalRequestDraftBuilder` above `ManualReviewPacket`. The builder creates a safe read-only approval request draft from an already supplied review packet. It does not request approval from any external system, mutate approval state, create an approval UI, execute, replay, evaluate, re-decide promotion, call AI, use LLM summarization, open raw payloads, write external systems, add event sources, scrape, automate browsers, or admit YouTube metrics.
+
+```text
+ManualReviewPacket
+        |
+        v
+ApprovalRequestDraft
+        |
+        v
+Future Approval State / UI / Operator Decision
+```
+
+`ApprovalRequestDraft` records draft id, packet id, subject execution id, subject decision id, requested action label, requested action kind, reviewer role, exact subject scope, draft status, reason codes, safety summary, required reviews, optional expiration, provenance, redaction flags, created time, and schema version.
+
+Draft statuses are:
+
+- `draft` when the packet is requestable under policy.
+- `not_requestable` when the packet/action/policy combination is safe but cannot request approval.
+- `blocked` when unsafe redaction or blocked packet state prevents requestability.
+
+Safe packet next actions map to requestable action kinds:
+
+- `allow_manual_review` -> `manual_review`
+- `allow_read_only_agent_consumption` -> `read_only_agent_consumption`
+- `allow_sandbox_replay` -> `sandbox_replay`
+- `allow_prepare_approval_request` -> `prepare_approval_request`
+
+Production action kinds such as production execution, publishing, mutation, sending, or AI calls are never emitted. Unsafe input actions are omitted and recorded as `unsafe_action_omitted`.
+
+Default `ApprovalRequestDraftPolicy` only allows `ready_for_review` packets to become requestable drafts, requires safe redaction, defaults reviewer role to `human_reviewer`, permits only safe action kinds, and leaves expiration unset unless configured. Informational or blocked packets require explicit policy to become requestable, and blocked/unsafe redaction remains fail-closed.
+
+Draft safety summaries include packet status, redaction flags, decision status, evaluation status, execution sandbox/read-only flags when present, plan executability when present, and the safe next-action source. They do not include raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth-like tokens, secrets, full provider payloads, or full step output.
+
+Phase 70 does not persist drafts and does not implement an approval lifecycle. Approval state, approval UI, operator decisions, and production execution remain separate future layers.
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no approval state mutation, no approval UI, no production execution, no YouTube metrics production reader, no external writes, no AI calls, and no LLM summarization.
