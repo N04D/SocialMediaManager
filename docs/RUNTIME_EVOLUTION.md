@@ -1678,6 +1678,129 @@ AI calls: 0
 LLM evaluation: 0
 ```
 
+## Phase 76 Non-Production Execution Attempt Ledger
+
+Phase 76 introduces a local `ExecutionAttemptLedger`. The ledger records non-production attempts against an active `ExecutionClaim` and its `ExecutionPreparationRecord`. It is a bookkeeping and audit boundary for future executors, not execution itself.
+
+```text
+ExecutionClaim
+ExecutionPreparationRecord
+        |
+        v
+ExecutionAttemptRecord
+        |
+        +-- opened
+        +-- blocked
+        +-- completed_noop
+        +-- failed_safe
+        +-- cancelled
+        |
+        v
+Future Production Executor
+```
+
+The only supported modes are:
+
+```text
+non_production
+no_op
+simulation
+```
+
+The attempt ledger does not start a production executor, execute playbook side effects, mutate approval state, open raw payloads, call AI, scrape, automate browsers, write external systems, add event sources, or admit YouTube metrics.
+
+### Attempt API
+
+```text
+ExecutionAttemptLedger.open_attempt(claim, preparation, mode="no_op", actor=None, now=None)
+ExecutionAttemptLedger.get(attempt_id)
+ExecutionAttemptLedger.list(status=None, preparation_id=None, claim_id=None)
+ExecutionAttemptLedger.complete_noop(attempt_id, result=None)
+ExecutionAttemptLedger.fail_safe(attempt_id, reason)
+ExecutionAttemptLedger.cancel(attempt_id, reason=None)
+ExecutionAttemptLedger.audit_events(attempt_id=None)
+```
+
+Opening is allowed only when the claim is `claimed`, the claim lease has not expired, the preparation is `ready`, claim/preparation ids match, idempotency keys match, the requested action kind is safe, redaction is safe, and the mode is one of the non-production modes.
+
+Duplicate active attempts for the same claim, preparation, and mode are prevented. A duplicate returns a blocked result with `active_attempt_exists` and an existing active attempt reference. Terminal attempts are retained as history, so later non-production attempts can be opened after a prior attempt reaches `completed_noop`, `failed_safe`, or `cancelled`.
+
+### Attempt Transitions
+
+Valid transitions:
+
+```text
+opened -> completed_noop
+opened -> failed_safe
+opened -> cancelled
+blocked terminal
+```
+
+Terminal states are:
+
+```text
+completed_noop
+failed_safe
+cancelled
+blocked
+```
+
+Invalid terminal transitions append `invalid_transition_attempted` and do not mutate the attempt status.
+
+`complete_noop` persists only a safe result summary:
+
+```text
+completed: true
+side_effects: false
+production_mutation_used: false
+external_write_used: false
+ai_call_used: false
+raw_access_used: false
+```
+
+### Audit And Redaction
+
+Audit event types:
+
+```text
+attempt_opened
+attempt_blocked
+attempt_completed_noop
+attempt_failed_safe
+attempt_cancelled
+duplicate_attempt_detected
+invalid_transition_attempted
+```
+
+Attempt records and audit events contain no raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth material, API keys, refresh tokens, secret canaries, full provider payloads, or full step output.
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+approval_state_mutated: false
+production_mutation_used: false
+external_write_used: false
+ai_call_used: false
+```
+
+Production boundaries remain:
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+production execution: 0
+playbook side effects: 0
+external approval provider: 0
+approval UI: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+LLM evaluation: 0
+```
+
 ## Phase 74 Prepared Execution Store And Idempotency
 
 Phase 74 makes execution preparation durable and idempotent without introducing execution. It adds a local `ExecutionPreparationStore` around Phase 73 `ExecutionPreparationRecord` objects.

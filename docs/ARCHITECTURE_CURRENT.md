@@ -1538,6 +1538,64 @@ production_mutation_used: false
 
 Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no external approval provider, no approval UI, no production execution, no playbook execution, no YouTube metrics production reader, no external writes beyond local claim/preparation stores, no AI calls, and no LLM evaluation.
 
+### Phase 76 Non-Production Execution Attempt Ledger
+
+Phase 76 adds a provider-neutral `ExecutionAttemptLedger` after claims. The ledger records that a future worker attempted to begin a non-production attempt for a claimed preparation record. It is not production execution and does not invoke a playbook executor, run real playbook side effects, mutate approvals, open raw payloads, call AI, scrape, automate browsers, perform network calls, add event sources, or write external systems beyond the local attempt ledger.
+
+```text
+ExecutionClaim
+ExecutionPreparationRecord
+        |
+        v
+ExecutionAttemptLedger
+        |
+        +-- ExecutionAttemptRecord
+        +-- complete_noop
+        +-- fail_safe
+        +-- cancel
+        +-- audit events
+        |
+        v
+Future Production Executor
+```
+
+Attempt modes are limited to:
+
+```text
+non_production
+no_op
+simulation
+```
+
+Attempt statuses are limited to:
+
+```text
+opened
+blocked
+completed_noop
+failed_safe
+cancelled
+```
+
+There is intentionally no production-completed, production-failed, published, mutated, executing, or executed status in Phase 76. Production execution remains a separate future layer.
+
+Opening an attempt requires an active `claimed` claim, an unexpired lease, a `ready` preparation record, matching preparation/idempotency identity, a safe requested action kind, safe redaction, and a non-production mode. Duplicate active attempts for the same claim, preparation, and mode are blocked and return the existing active attempt reference. Terminal attempts remain historical.
+
+`complete_noop` records only a safe no-op result summary:
+
+```text
+completed: true
+side_effects: false
+production_mutation_used: false
+external_write_used: false
+ai_call_used: false
+raw_access_used: false
+```
+
+Audit events include `attempt_opened`, `attempt_blocked`, `attempt_completed_noop`, `attempt_failed_safe`, `attempt_cancelled`, `duplicate_attempt_detected`, and `invalid_transition_attempted`. Attempt records and events exclude secrets, provider headers, Authorization/Bearer values, OAuth-like tokens, raw metrics payloads, raw transcript bodies, and full provider payloads.
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no production execution, no playbook side effects, no external approval provider, no approval UI, no YouTube metrics production reader, no external writes beyond local attempt/claim/preparation stores, no AI calls, and no LLM evaluation.
+
 ### Phase 72 Execution Eligibility Gate
 
 Phase 72 adds a provider-neutral `ExecutionEligibilityGate` above local approvals and promotion decisions. The gate decides whether a future execution preparation layer may treat a sandbox run as eligible. It does not execute playbooks, start production execution, mutate approvals, perform mutations, call external approval providers, create an approval UI, call AI, open raw payloads, write external systems, add event sources, scrape, automate browsers, or admit YouTube metrics.
