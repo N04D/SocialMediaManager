@@ -1557,6 +1557,131 @@ AI calls: 0
 LLM evaluation: 0
 ```
 
+## Phase 74 Prepared Execution Store And Idempotency
+
+Phase 74 makes execution preparation durable and idempotent without introducing execution. It adds a local `ExecutionPreparationStore` around Phase 73 `ExecutionPreparationRecord` objects.
+
+```text
+ExecutionPreparationRecord
+        |
+        v
+ExecutionPreparationStore
+        |
+        +-- idempotency
+        +-- duplicate prevention
+        +-- audit trail
+        +-- preparation lifecycle
+        |
+        v
+Future Execution Claim Layer
+```
+
+The store only persists local preparation state. It does not execute, reserve work for execution, mutate approvals, open raw payloads, call AI, scrape, automate browsers, write external systems, add event sources, or admit a YouTube metrics production reader.
+
+### Store API
+
+```text
+ExecutionPreparationStore.save(record)
+ExecutionPreparationStore.get(preparation_id)
+ExecutionPreparationStore.get_by_idempotency_key(key)
+ExecutionPreparationStore.list(status=None, playbook_id=None, approval_id=None)
+ExecutionPreparationStore.audit_events(preparation_id=None)
+ExecutionPreparationStore.mark_cancelled(preparation_id, actor=None, reason=None)
+ExecutionPreparationStore.mark_stale(preparation_id, actor=None, reason=None)
+ExecutionPreparationStore.idempotency_key(record)
+```
+
+There is no `claim`, `execute`, `executing`, or `executed` API in Phase 74.
+
+### Idempotency
+
+The idempotency key is computed from stable semantic inputs:
+
+```text
+approval_id
+promotion_decision_id
+eligibility_decision_id
+plan_id
+plan_fingerprint
+playbook_id
+playbook_version
+requested_action_kind
+subject_scope
+required_capabilities
+forbidden_side_effects
+```
+
+It ignores `preparation_id`, `created_at`, `updated_at`, audit event ids, local paths, and nondeterministic ordering. Saving the same semantic preparation twice returns the original persisted record and records `duplicate_detected`; the active preparation count remains one.
+
+Changed plan fingerprint, action, scope, or required capabilities produces a different key.
+
+### Lifecycle
+
+Store statuses are:
+
+```text
+ready
+blocked
+needs_review
+cancelled
+stale
+```
+
+Valid transitions:
+
+```text
+ready -> cancelled
+ready -> stale
+needs_review -> cancelled
+needs_review -> stale
+blocked -> stale
+```
+
+`cancelled` and `stale` are terminal. Invalid transitions append `invalid_transition_attempted` and do not mutate current status.
+
+### Audit Trail
+
+Audit event types:
+
+```text
+saved
+duplicate_detected
+cancelled
+stale
+invalid_transition_attempted
+```
+
+Audit events carry event id, preparation id, idempotency key, event type, actor, reason, timestamp, provenance, redaction flags, and sequence. Actors and reasons are redacted if they contain credential or raw-payload markers.
+
+### Redaction And Boundaries
+
+Persisted records and audit events contain no raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth material, API keys, refresh tokens, secret canaries, full provider payloads, or full step output.
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+approval_state_mutated: false
+execution_started: false
+production_mutation_used: false
+```
+
+Production boundaries remain:
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+production execution: 0
+approval UI: 0
+external approval provider: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+LLM evaluation: 0
+```
+
 ## Phase 70 Approval Request Contract
 
 Phase 70 adds a read-only approval request draft boundary. It converts an existing `ManualReviewPacket` into an `ApprovalRequestDraft` and stops there.
