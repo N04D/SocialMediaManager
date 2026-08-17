@@ -194,6 +194,15 @@ from .approval_state_machine import (
     ApprovalStore,
     ApprovalTransitionResult,
 )
+from .execution_eligibility_gate import (
+    EXECUTION_ELIGIBILITY_GATE_VERSION,
+    EXECUTION_ELIGIBILITY_SCHEMA_VERSION,
+    ExecutionEligibilityDecision,
+    ExecutionEligibilityGate,
+    ExecutionEligibilityPolicy,
+    ExecutionEligibilityReason,
+    ExecutionEligibilityRedaction,
+)
 from .policy import (
     ApprovalRecord,
     ApprovalStatus,
@@ -335,6 +344,8 @@ __all__ = [
     "APPROVAL_REQUEST_DRAFT_SCHEMA_VERSION",
     "APPROVAL_REQUEST_SCHEMA_VERSION",
     "APPROVAL_STATE_MACHINE_VERSION",
+    "EXECUTION_ELIGIBILITY_GATE_VERSION",
+    "EXECUTION_ELIGIBILITY_SCHEMA_VERSION",
     "ApprovalRequestDraft",
     "ApprovalRequestDraftBuilder",
     "ApprovalRequestDraftPolicy",
@@ -347,6 +358,11 @@ __all__ = [
     "ApprovalRequest",
     "ApprovalStore",
     "ApprovalTransitionResult",
+    "ExecutionEligibilityDecision",
+    "ExecutionEligibilityGate",
+    "ExecutionEligibilityPolicy",
+    "ExecutionEligibilityReason",
+    "ExecutionEligibilityRedaction",
     "ManualReviewPacket",
     "ManualReviewPacketBuilder",
     "ReviewPacketPolicy",

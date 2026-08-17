@@ -1719,6 +1719,173 @@ AI calls: 0
 LLM evaluation: 0
 ```
 
+## Phase 72 Execution Eligibility Gate
+
+Phase 72 adds a read-only execution eligibility boundary. It combines promotion state, local approval state, plan metadata, and sandbox execution metadata into a deterministic `ExecutionEligibilityDecision`.
+
+```text
+PromotionDecision
+ApprovalRequest
+PlaybookPlan metadata
+SandboxExecutionRecord metadata
+        |
+        v
+ExecutionEligibilityGate
+        |
+        v
+ExecutionEligibilityDecision
+        |
+        v
+Future Execution Preparation Layer
+```
+
+The gate API is:
+
+```text
+ExecutionEligibilityGate.decide(
+    promotion_decision,
+    approval_request,
+    plan=None,
+    execution_record=None,
+    policy=None,
+)
+ExecutionEligibilityGate.explain(decision)
+ExecutionEligibilityGate.is_eligible(decision)
+```
+
+The gate only decides and explains. It does not execute playbooks, start sandbox runs, replay stored runs, run evaluation, run promotion, mutate approval state, fetch raw payloads, call external systems, call AI, add event sources, or add production mutations.
+
+### Decision Contract
+
+`ExecutionEligibilityDecision` records:
+
+```text
+decision_id
+status
+subject_execution_id
+subject_plan_id
+subject_promotion_decision_id
+subject_approval_id
+requested_action_kind
+reasons
+blocked_capabilities
+matched_scope
+provenance
+redaction
+decided_at
+schema_version
+```
+
+Statuses:
+
+```text
+eligible
+blocked
+needs_review
+```
+
+### Default Policy
+
+Default `ExecutionEligibilityPolicy` requires:
+
+```text
+promotion.status == eligible
+approval.status == approved
+scope match
+requested action kind match
+sandbox execution metadata
+read_only execution metadata
+raw access forbidden
+mutations forbidden
+needs_review not eligible
+```
+
+Allowed safe action kinds are:
+
+```text
+manual_review
+read_only_agent_consumption
+sandbox_replay
+prepare_approval_request
+```
+
+Unsafe action kinds are blocked:
+
+```text
+production_execute
+publish
+mutate
+send
+call_ai
+```
+
+### Scope And Action Matching
+
+Approval scope is matched against promotion, plan, and sandbox metadata:
+
+```text
+decision_id
+execution_id
+playbook_id
+playbook_version
+requested_action_kind
+```
+
+Approved approval alone is insufficient. Eligible promotion alone is insufficient. Both must match the same sandbox execution and playbook metadata where those refs are available.
+
+### Blocked And Needs Review
+
+Blocked cases include:
+
+```text
+missing approval
+missing promotion
+approval pending/rejected/cancelled/expired/blocked
+promotion blocked
+promotion needs_review by default
+scope mismatch
+action mismatch
+unsafe action kind
+raw access used
+mutation used
+unsafe redaction
+execution not sandbox/read_only
+forbidden execution markers
+```
+
+`needs_review` is only produced when policy explicitly allows needs-review promotion or similarly reviewable uncertainty. It is still not execution.
+
+### Redaction And Boundaries
+
+Eligibility decisions contain no raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth material, API keys, refresh tokens, secret canaries, full provider payloads, or full step output.
+
+Redaction flags are:
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+approval_state_mutated: false
+execution_started: false
+production_mutation_used: false
+```
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+approval mutation: 0
+external approval provider: 0
+approval UI: 0
+production execution: 0
+playbook execution: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+LLM evaluation: 0
+```
+
 ## Phase 63 Playbook Registry, Versioning & Safe Context Binding
 
 Phase 63 adds a provider-neutral playbook registry that describes, validates, and selects playbooks against the Phase 62 content performance context. It does not execute playbooks, call AI, create recommendations, mutate production state, add event sources, scrape, automate browsers, or admit a YouTube metrics production reader.

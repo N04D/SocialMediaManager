@@ -1404,3 +1404,63 @@ production_mutation_used: false
 Approving an approval request records local state only. It does not execute anything. Execution requires a separate future gate/layer.
 
 Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no external approval provider, no approval UI, no production execution, no playbook execution, no YouTube metrics production reader, no external writes, no AI calls, and no LLM evaluation.
+
+### Phase 72 Execution Eligibility Gate
+
+Phase 72 adds a provider-neutral `ExecutionEligibilityGate` above local approvals and promotion decisions. The gate decides whether a future execution preparation layer may treat a sandbox run as eligible. It does not execute playbooks, start production execution, mutate approvals, perform mutations, call external approval providers, create an approval UI, call AI, open raw payloads, write external systems, add event sources, scrape, automate browsers, or admit YouTube metrics.
+
+```text
+PromotionDecision
+ApprovalRequest
+PlaybookPlan metadata
+SandboxExecutionRecord metadata
+        |
+        v
+ExecutionEligibilityGate
+        |
+        v
+ExecutionEligibilityDecision
+        |
+        v
+Future Execution Preparation Layer
+```
+
+Eligibility is stricter than either approval or promotion alone. A local approved approval is insufficient by itself. An eligible promotion decision is insufficient by itself. The gate requires the approval, promotion decision, plan metadata, and sandbox execution metadata to agree on scope and requested action.
+
+Default policy requires:
+
+- promotion decision status `eligible`
+- approval request status `approved`
+- safe requested action kind
+- matching decision/execution/playbook scope where present
+- sandbox execution metadata
+- read-only execution metadata
+- no mutation use
+- no raw access
+- safe redaction
+
+Decision statuses are:
+
+- `eligible`
+- `blocked`
+- `needs_review`
+
+`needs_review` is only produced when policy explicitly allows needs-review promotion or partially unprovable optional metadata. Unsafe action kinds such as production execution, publishing, mutation, sending, or AI calls are blocked.
+
+The decision records subject execution id, plan id, promotion decision id, approval id, requested action kind, reasons, blocked capabilities, matched scope, provenance refs, redaction flags, decision time, and schema version. Raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth-like tokens, secrets, full provider payloads, and full step output are never included.
+
+Eligibility redaction is explicit:
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+approval_state_mutated: false
+execution_started: false
+production_mutation_used: false
+```
+
+Production execution remains a separate future layer with its own contract.
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no external approval provider, no approval UI, no production execution, no playbook execution, no YouTube metrics production reader, no external writes, no AI calls, and no LLM evaluation.
