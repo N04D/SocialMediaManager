@@ -1557,6 +1557,127 @@ AI calls: 0
 LLM evaluation: 0
 ```
 
+## Phase 75 Execution Claim Contract
+
+Phase 75 introduces a local execution claim contract. It reserves ready preparation records for future workers without starting execution.
+
+```text
+ExecutionPreparationStore.ready
+        |
+        v
+ExecutionClaim
+        |
+        +-- claimed
+        +-- rejected
+        +-- released
+        +-- expired
+        |
+        v
+Future Executor Worker
+```
+
+The claim layer is lease/reservation only. It does not execute playbooks, start production execution, mutate approval state, open raw payloads, call AI, scrape, automate browsers, write external systems, add event sources, or admit YouTube metrics.
+
+### Claim API
+
+```text
+ExecutionClaimStore.claim(preparation_id, claimant_id, policy=None, now=None)
+ExecutionClaimStore.get(claim_id)
+ExecutionClaimStore.get_active_for_preparation(preparation_id, now=None)
+ExecutionClaimStore.release(claim_id, claimant_id=None, reason=None, now=None)
+ExecutionClaimStore.expire(claim_id, now=None)
+ExecutionClaimStore.list(status=None, preparation_id=None, claimant_id=None)
+ExecutionClaimStore.audit_events(preparation_id=None, claim_id=None)
+```
+
+There is no execution API and no claim API that starts work.
+
+### Claim Policy
+
+Default `ExecutionClaimPolicy`:
+
+```text
+lease_seconds: 900
+allow_reclaim_expired: true
+require_ready_status: true
+allowed_claimant_kinds: []
+```
+
+A claim is allowed only when the preparation exists, the preparation is `ready`, redaction is safe, claimant id is valid and non-empty, the lease is finite, and no active claim exists. An active claim blocks duplicate workers. Released and expired claims are terminal for that claim and may be reclaimed by a new claim when policy allows it.
+
+Cancelled, stale, blocked, and needs-review preparations are not claimable by default.
+
+### Claim Lifecycle
+
+Claim statuses are:
+
+```text
+claimed
+rejected
+released
+expired
+```
+
+`released`, `expired`, and `rejected` are terminal. Repeated release/expire attempts append `invalid_transition_attempted` and do not change claim status.
+
+Expiration is explicit. There is no background scheduler and no autonomous lease cleanup.
+
+Phase 75 deliberately does not introduce:
+
+```text
+executing
+executed
+succeeded
+failed_production
+completed_production
+```
+
+Those belong to a later execution lifecycle.
+
+### Audit Trail
+
+Audit event types:
+
+```text
+claim_created
+claim_rejected
+duplicate_claim_rejected
+claim_released
+claim_expired
+invalid_transition_attempted
+```
+
+Audit events carry event id, claim id, preparation id, claimant id, event type, reason, timestamp, provenance, redaction flags, and sequence. Claimant ids and reasons are redacted if they contain credential or raw-payload markers.
+
+### Redaction And Boundaries
+
+Claim records and audit events contain no raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth material, API keys, refresh tokens, secret canaries, full provider payloads, or full step output.
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+approval_state_mutated: false
+execution_started: false
+production_mutation_used: false
+```
+
+Production boundaries remain:
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+production execution: 0
+approval UI: 0
+external approval provider: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+LLM evaluation: 0
+```
+
 ## Phase 74 Prepared Execution Store And Idempotency
 
 Phase 74 makes execution preparation durable and idempotent without introducing execution. It adds a local `ExecutionPreparationStore` around Phase 73 `ExecutionPreparationRecord` objects.

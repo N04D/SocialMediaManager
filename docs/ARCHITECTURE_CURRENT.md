@@ -1474,6 +1474,70 @@ production_mutation_used: false
 
 Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no external approval provider, no approval UI, no production execution, no playbook execution, no YouTube metrics production reader, no external writes beyond local preparation store persistence, no AI calls, and no LLM evaluation.
 
+### Phase 75 Execution Claim Contract
+
+Phase 75 adds a provider-neutral `ExecutionClaimStore` above ready preparation records. A claim is a local lease/reservation for a future worker. It is not execution and does not invoke a playbook executor, production executor, sandbox, approval state mutation, raw lookup, AI, external approval provider, browser automation, scraping, network call, or external write beyond the local claim store.
+
+```text
+ExecutionPreparationStore.ready
+        |
+        v
+ExecutionClaimStore
+        |
+        +-- ExecutionClaim
+        +-- active claim lookup
+        +-- release
+        +-- explicit expiration
+        +-- audit events
+        |
+        v
+Future Executor Worker
+```
+
+Claim statuses are:
+
+```text
+claimed
+rejected
+released
+expired
+```
+
+There is intentionally no `executing`, `executed`, production success, production failure, or completion status in Phase 75. Those states belong to a future execution lifecycle.
+
+Default claim policy requires a finite lease, a valid non-empty claimant id, a `ready` preparation record, safe preparation redaction, and no active claim for the same preparation. Active claims block duplicate workers. Released and expired claims may be reclaimed by default; policy can disallow reclaim.
+
+Claim rejection reason codes include `preparation_not_found`, `preparation_not_ready`, `already_claimed`, `claim_expired`, `claim_released`, `invalid_claimant`, `unsafe_redaction`, and unsupported/invalid lifecycle reasons.
+
+Expiration is explicit. There is no background scheduler. A claim expires only when `expire()` is called with a timestamp at or after the lease expiration.
+
+Audit events include:
+
+```text
+claim_created
+claim_rejected
+duplicate_claim_rejected
+claim_released
+claim_expired
+invalid_transition_attempted
+```
+
+Audit payloads contain event id, claim id, preparation id, claimant id, event type, reason, timestamp, provenance, redaction flags, and sequence. They do not contain secrets, provider headers, Authorization/Bearer values, OAuth-like tokens, raw metrics payloads, raw transcript bodies, full provider payloads, or full step output.
+
+Claim redaction remains explicit:
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+approval_state_mutated: false
+execution_started: false
+production_mutation_used: false
+```
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no external approval provider, no approval UI, no production execution, no playbook execution, no YouTube metrics production reader, no external writes beyond local claim/preparation stores, no AI calls, and no LLM evaluation.
+
 ### Phase 72 Execution Eligibility Gate
 
 Phase 72 adds a provider-neutral `ExecutionEligibilityGate` above local approvals and promotion decisions. The gate decides whether a future execution preparation layer may treat a sandbox run as eligible. It does not execute playbooks, start production execution, mutate approvals, perform mutations, call external approval providers, create an approval UI, call AI, open raw payloads, write external systems, add event sources, scrape, automate browsers, or admit YouTube metrics.
