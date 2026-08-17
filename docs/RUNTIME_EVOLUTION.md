@@ -1561,6 +1561,164 @@ AI calls: 0
 LLM summarization: 0
 ```
 
+## Phase 71 Approval State Machine
+
+Phase 71 adds a local, provider-neutral approval state machine. It converts `ApprovalRequestDraft` into local approval state and audit events, then stops.
+
+```text
+ApprovalRequestDraft
+        |
+        v
+ApprovalRequest
+        |
+        +-- pending
+        +-- approved
+        +-- rejected
+        +-- expired
+        +-- cancelled
+        +-- blocked
+        |
+        v
+Future Execution Gate
+```
+
+The store API is:
+
+```text
+ApprovalStore.create_from_draft(draft, actor=None)
+ApprovalStore.get(approval_id)
+ApprovalStore.list(status=None, reviewer_role=None, requested_action_kind=None)
+ApprovalStore.approve(approval_id, reviewer_id, reason=None)
+ApprovalStore.reject(approval_id, reviewer_id, reason=None)
+ApprovalStore.cancel(approval_id, actor=None, reason=None)
+ApprovalStore.expire(approval_id, now=None)
+ApprovalStore.audit_events(approval_id=None)
+```
+
+This is local state only. It does not execute playbooks, start production execution, perform mutations, call external approval providers, build approval UI, call AI, fetch raw payloads, write external systems, add event sources, or admit YouTube metrics.
+
+### Request Contract
+
+`ApprovalRequest` records:
+
+```text
+approval_id
+draft_id
+packet_id
+requested_action
+requested_action_kind
+reviewer_role
+scope
+status
+reason_codes
+safety_summary
+required_reviews
+decision
+decided_by
+decided_at
+expires_at
+audit_events
+provenance
+redaction
+created_at
+updated_at
+schema_version
+```
+
+Request statuses are:
+
+```text
+pending
+approved
+rejected
+expired
+cancelled
+blocked
+```
+
+Only a `draft` approval request draft with a safe requested action kind becomes `pending`. `not_requestable`, `blocked`, or unsafe action drafts become `blocked` approval requests with structured reason codes.
+
+### Transitions
+
+Valid transitions:
+
+```text
+pending -> approved
+pending -> rejected
+pending -> cancelled
+pending -> expired
+```
+
+Terminal states:
+
+```text
+approved
+rejected
+cancelled
+expired
+blocked
+```
+
+Invalid transitions return a structured `ApprovalTransitionResult` with `changed: false`; status and decision remain unchanged. A safe `invalid_transition_attempted` audit event is appended for auditability.
+
+Approved does not execute anything. It is only local approval state. A future execution gate must consume this state under its own contract before any execution can happen.
+
+### Expiration
+
+Expiration is explicit:
+
+```text
+ApprovalStore.expire(approval_id, now=None)
+```
+
+No background scheduler, timer, automation, or job is created. If `expires_at` is absent or `now < expires_at`, the request remains pending. Terminal approvals cannot expire.
+
+### Audit Trail
+
+Audit events include:
+
+```text
+created
+approved
+rejected
+cancelled
+expired
+invalid_transition_attempted
+```
+
+Each event records event id, approval id, event type, actor/reviewer where provided, reason code, timestamp, provenance, and redaction flags. Actor and reason inputs are defensively redacted before persistence.
+
+### Redaction And Boundaries
+
+Approval requests and audit events contain no raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth material, API keys, refresh tokens, secret canaries, full provider payloads, or full step output.
+
+Redaction flags are:
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+approval_state_mutated: true
+execution_started: false
+production_mutation_used: false
+```
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+approval state mutation: local only
+external approval provider: 0
+approval UI: 0
+production execution: 0
+playbook execution: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+LLM evaluation: 0
+```
+
 ## Phase 63 Playbook Registry, Versioning & Safe Context Binding
 
 Phase 63 adds a provider-neutral playbook registry that describes, validates, and selects playbooks against the Phase 62 content performance context. It does not execute playbooks, call AI, create recommendations, mutate production state, add event sources, scrape, automate browsers, or admit a YouTube metrics production reader.

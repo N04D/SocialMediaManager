@@ -1352,3 +1352,55 @@ Draft safety summaries include packet status, redaction flags, decision status, 
 Phase 70 does not persist drafts and does not implement an approval lifecycle. Approval state, approval UI, operator decisions, and production execution remain separate future layers.
 
 Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no approval state mutation, no approval UI, no production execution, no YouTube metrics production reader, no external writes, no AI calls, and no LLM summarization.
+
+### Phase 71 Local Approval State Machine
+
+Phase 71 adds a provider-neutral local approval state machine above approval request drafts. It records approval state and audit events only. It does not execute playbooks, start production execution, perform mutations, call external approval providers, create an approval UI, call AI, open raw payloads, write external systems, add event sources, scrape, automate browsers, or admit YouTube metrics.
+
+```text
+ApprovalRequestDraft
+        |
+        v
+ApprovalRequest
+        |
+        +-- pending
+        +-- approved
+        +-- rejected
+        +-- expired
+        +-- cancelled
+        +-- blocked
+        |
+        v
+Future Execution Gate
+```
+
+`ApprovalStore.create_from_draft()` converts a requestable `ApprovalRequestDraft` into a pending `ApprovalRequest`. Non-requestable, blocked, or unsafe drafts become blocked approval requests with structured reason codes. Production action kinds remain impossible.
+
+Valid transitions are:
+
+- `pending` -> `approved`
+- `pending` -> `rejected`
+- `pending` -> `cancelled`
+- `pending` -> `expired`
+
+`approved`, `rejected`, `cancelled`, `expired`, and `blocked` are terminal. Invalid transition attempts do not change status or decision; they only append a redacted `invalid_transition_attempted` audit event.
+
+Expiration is explicit. No scheduler or automation exists in Phase 71. A pending approval expires only when `expire()` is called with a time at or after `expires_at`. Terminal approvals cannot expire.
+
+Audit events record creation, approval, rejection, cancellation, expiration, and invalid transition attempts. Audit payloads include event id, approval id, event type, actor where provided, reason code, timestamp, provenance, and redaction flags. They do not include secrets, provider headers, Authorization/Bearer values, OAuth-like tokens, raw metrics payloads, raw transcript bodies, full provider payloads, or full step output.
+
+Approval redaction is explicit:
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+approval_state_mutated: true
+execution_started: false
+production_mutation_used: false
+```
+
+Approving an approval request records local state only. It does not execute anything. Execution requires a separate future gate/layer.
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no external approval provider, no approval UI, no production execution, no playbook execution, no YouTube metrics production reader, no external writes, no AI calls, and no LLM evaluation.
