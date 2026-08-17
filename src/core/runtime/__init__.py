@@ -194,6 +194,18 @@ from .approval_state_machine import (
     ApprovalStore,
     ApprovalTransitionResult,
 )
+from .controlled_executor import (
+    CONTROLLED_EXECUTOR_INPUT_SCHEMA_VERSION,
+    CONTROLLED_EXECUTOR_INTERFACE_VERSION,
+    CONTROLLED_EXECUTOR_RESULT_SCHEMA_VERSION,
+    ControlledExecutor,
+    ControlledExecutorInput,
+    ControlledExecutorInputBuilder,
+    ControlledExecutorPolicy,
+    ControlledExecutorReason,
+    ControlledExecutorRedaction,
+    ControlledExecutorResult,
+)
 from .execution_eligibility_gate import (
     EXECUTION_ELIGIBILITY_GATE_VERSION,
     EXECUTION_ELIGIBILITY_SCHEMA_VERSION,

@@ -1962,6 +1962,151 @@ AI calls: 0
 LLM evaluation: 0
 ```
 
+## Phase 78 Controlled Executor Interface Contract
+
+Phase 78 introduces the controlled executor interface contract. It defines how a future executor may receive a ready governance chain without implementing production execution.
+
+```text
+ExecutionReadinessReport
+ExecutionPreparationRecord
+ExecutionClaim
+        |
+        v
+ControlledExecutorInput
+        |
+        v
+ControlledExecutorResult
+        |
+        v
+Future Production Executor Implementation
+```
+
+The interface validates inputs, checks readiness/preparation/claim metadata, enforces forbidden side effects, structurally checks capability names, and returns `validated`, `simulated`, `blocked`, `not_implemented`, or `failed_safe` results. It does not execute production work, mutate approvals, mutate claims, mutate attempts, open raw payloads, call AI, scrape, automate browsers, publish, send, call providers, or write external systems.
+
+### Input Builder
+
+```text
+ControlledExecutorInputBuilder.build(readiness_report, preparation_record, claim, policy=None, mode=None)
+```
+
+`ControlledExecutorInput` contains:
+
+```text
+input_id
+readiness_report_id
+preparation_id
+claim_id
+playbook_id
+playbook_version
+requested_action_kind
+mode
+allowed_side_effects
+forbidden_side_effects
+required_capabilities
+subject_scope
+provenance
+redaction
+created_at
+schema_version
+```
+
+Allowed modes:
+
+```text
+validate_only
+no_op
+simulation
+```
+
+There is no production mode. `production` and unknown modes block as `unsupported_mode`.
+
+### Executor Interface
+
+```text
+ControlledExecutor.validate_input(input)
+ControlledExecutor.run(input)
+ControlledExecutor.execute(input)
+```
+
+`execute` is an alias for the controlled no-side-effect contract. It does not call a production executor.
+
+Mode behavior:
+
+```text
+validate_only -> validated or blocked
+no_op -> simulated safe no-op summary or blocked
+simulation -> deterministic local simulation summary or blocked
+```
+
+### Side-Effect Contract
+
+Inputs and results keep:
+
+```text
+allowed_side_effects: []
+side_effects_used: []
+```
+
+Forbidden side effects include:
+
+```text
+production_mutation
+external_write
+publish
+send
+ai_call
+browser_automation
+scraping
+raw_metrics_default
+raw_transcript_default
+approval_state_mutation
+claim_mutation
+```
+
+If any side effect is requested or recorded, the result blocks or fails safe.
+
+### Capability Checks
+
+Capabilities are checked structurally only. Read-only capabilities may appear in `capabilities_checked`; no external call is made. Production mutation capabilities block with:
+
+```text
+production_capability_not_supported
+```
+
+No capability admission or fake activation is performed.
+
+### Redaction And Boundaries
+
+Controlled executor inputs/results contain no raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth material, API keys, refresh tokens, secret canaries, full provider payloads, or full step output.
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+execution_started: false
+simulation_only: true
+production_mutation_used: false
+external_write_used: false
+ai_call_used: false
+```
+
+Production boundaries remain:
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+production execution: 0
+real playbook side effects: 0
+external approval provider: 0
+approval UI: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+LLM evaluation: 0
+```
+
 ## Phase 74 Prepared Execution Store And Idempotency
 
 Phase 74 makes execution preparation durable and idempotent without introducing execution. It adds a local `ExecutionPreparationStore` around Phase 73 `ExecutionPreparationRecord` objects.

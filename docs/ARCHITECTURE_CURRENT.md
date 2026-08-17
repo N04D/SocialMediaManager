@@ -1647,6 +1647,74 @@ The report never emits production execution, publish, mutate, send, or AI-call a
 
 Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no production execution, no playbook side effects, no external approval provider, no approval UI, no YouTube metrics production reader, no external writes, no AI calls, and no LLM evaluation.
 
+### Phase 78 Controlled Executor Interface Contract
+
+Phase 78 adds a provider-neutral controlled executor interface contract. It defines `ControlledExecutorInput`, `ControlledExecutorResult`, `ControlledExecutorInputBuilder`, and `ControlledExecutor`. This is an interface boundary for a future executor, not a production executor implementation.
+
+```text
+ExecutionReadinessReport
+ExecutionPreparationRecord
+ExecutionClaim
+        |
+        v
+ControlledExecutorInput
+        |
+        v
+ControlledExecutor
+        |
+        v
+ControlledExecutorResult
+        |
+        v
+Future Production Executor Implementation
+```
+
+Allowed modes are limited to:
+
+```text
+validate_only
+no_op
+simulation
+```
+
+There is no production mode in Phase 78. Unknown or production modes are blocked with `unsupported_mode`.
+
+Result statuses are:
+
+```text
+validated
+simulated
+blocked
+not_implemented
+failed_safe
+```
+
+There is no production-completed, published, sent, or mutated status. `validate_only` performs structural checks only. `no_op` returns a safe no-op summary. `simulation` returns deterministic local simulation metadata. None of these modes calls providers, mutates approvals, mutates claims, mutates attempts, opens raw payloads, calls AI, scrapes, automates browsers, publishes, sends, or writes external systems.
+
+Inputs explicitly carry:
+
+```text
+allowed_side_effects: []
+forbidden_side_effects:
+  production_mutation
+  external_write
+  publish
+  send
+  ai_call
+  browser_automation
+  scraping
+  raw_metrics_default
+  raw_transcript_default
+  approval_state_mutation
+  claim_mutation
+```
+
+Required capabilities are checked structurally only. Read-only capabilities can be listed as checked. Production mutation capabilities such as `website.article.publish` and `calendar.event.create` block with `production_capability_not_supported`; no capability is admitted or invoked.
+
+Future production execution must start from a ready report, ready preparation, active claim, safe requested action kind, safe redaction, and this controlled input/result contract. That future implementation remains a separate phase.
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no production execution, no real playbook side effects, no external approval provider, no approval UI, no YouTube metrics production reader, no external writes, no AI calls, and no LLM evaluation.
+
 ### Phase 72 Execution Eligibility Gate
 
 Phase 72 adds a provider-neutral `ExecutionEligibilityGate` above local approvals and promotion decisions. The gate decides whether a future execution preparation layer may treat a sandbox run as eligible. It does not execute playbooks, start production execution, mutate approvals, perform mutations, call external approval providers, create an approval UI, call AI, open raw payloads, write external systems, add event sources, scrape, automate browsers, or admit YouTube metrics.
