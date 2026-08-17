@@ -1420,6 +1420,143 @@ new external event sources: 0
 AI calls: 0
 ```
 
+## Phase 73 Execution Preparation Contract
+
+Phase 73 adds a read-only execution preparation boundary. It combines an existing `ExecutionEligibilityDecision`, `ApprovalRequest`, `PromotionDecision`, and `PlaybookPlan` into a deterministic `ExecutionPreparationRecord`.
+
+```text
+ExecutionEligibilityDecision
+ApprovalRequest
+PromotionDecision
+PlaybookPlan
+        |
+        v
+ExecutionPreparationBuilder
+        |
+        v
+ExecutionPreparationRecord
+        |
+        v
+Future Executor
+```
+
+The preparation builder only inspects supplied objects. It does not start execution, invoke sandbox/replay/evaluation/promotion, mutate approval state, open raw payloads, call AI, scrape, automate browsers, write external systems, add event sources, or admit a YouTube metrics production reader.
+
+### Builder API
+
+```text
+ExecutionPreparationBuilder.prepare(
+    eligibility_decision,
+    approval_request,
+    promotion_decision,
+    plan,
+    policy=None,
+)
+ExecutionPreparationBuilder.fingerprint_plan(plan)
+ExecutionPreparationBuilder.summarize(record)
+```
+
+No preparation store is added in Phase 73. Durable preparation storage remains a future concern.
+
+### Preparation Record
+
+`ExecutionPreparationRecord` records:
+
+```text
+preparation_id
+status
+eligibility_decision_id
+approval_id
+promotion_decision_id
+plan_id
+playbook_id
+playbook_version
+requested_action_kind
+subject_scope
+plan_fingerprint
+required_capabilities
+forbidden_side_effects
+readiness_reasons
+blocked_reasons
+provenance
+redaction
+created_at
+schema_version
+```
+
+Statuses are `ready`, `blocked`, and `needs_review`.
+
+Default `ExecutionPreparationPolicy` requires eligibility, approved approval, eligible promotion, executable plan, a stable plan fingerprint, safe action kind, no raw access requirement, no mutation requirement, and safe redaction. `needs_review` is only produced when policy explicitly allows needs-review inputs.
+
+Ready means the future executor may be prepared from this record later. It does not mean execution has started. Approved approval alone is insufficient. Eligible promotion alone is insufficient. The preparation binds all relevant ids and scope facts together before any future execution layer can consume it.
+
+### Plan Fingerprint
+
+The plan fingerprint is deterministic over stable plan fields:
+
+```text
+plan id
+playbook id/version
+context ref/schema
+step ids/kinds/status
+required capabilities
+blocked reasons
+raw access requirement
+mutation requirement
+```
+
+It ignores generated timestamps, local paths, and nondeterministic ordering. The same stable plan yields the same fingerprint; changed capabilities, steps, blockers, or raw/mutation requirements change the fingerprint.
+
+### Required Capabilities
+
+Preparation copies required capabilities from the plan but does not activate or admit them. If the plan is blocked or records unavailable capabilities, preparation is blocked with structured reason codes such as `plan_blocked`, `plan_not_executable`, or `capability_not_available` where present in the plan metadata.
+
+### Forbidden Side Effects
+
+Every preparation explicitly records future executor constraints:
+
+```text
+production_mutation
+external_write
+ai_call
+browser_automation
+scraping
+raw_metrics_default
+raw_transcript_default
+approval_state_mutation
+```
+
+These are constraints for a later executor, not actions performed in Phase 73.
+
+### Redaction And Boundaries
+
+Preparation records contain no raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth material, API keys, refresh tokens, secret canaries, full provider payloads, or full step output.
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+approval_state_mutated: false
+execution_started: false
+production_mutation_used: false
+```
+
+Production boundaries remain:
+
+```text
+production external source count: 1
+production mutation count: 2
+new mutation capabilities: 0
+new external event sources: 0
+production execution: 0
+approval UI: 0
+external approval provider: 0
+YouTube metrics production reader: BLOCKED_NO_SAFE_EXISTING_READER
+AI calls: 0
+LLM evaluation: 0
+```
+
 ## Phase 70 Approval Request Contract
 
 Phase 70 adds a read-only approval request draft boundary. It converts an existing `ManualReviewPacket` into an `ApprovalRequestDraft` and stops there.

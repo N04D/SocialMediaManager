@@ -1464,3 +1464,62 @@ production_mutation_used: false
 Production execution remains a separate future layer with its own contract.
 
 Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no external approval provider, no approval UI, no production execution, no playbook execution, no YouTube metrics production reader, no external writes, no AI calls, and no LLM evaluation.
+
+### Phase 73 Execution Preparation Contract
+
+Phase 73 adds a provider-neutral `ExecutionPreparationBuilder` above the execution eligibility gate. The builder creates an `ExecutionPreparationRecord` for a future executor and stops there. It does not execute playbooks, run sandbox/replay/evaluation/promotion again, mutate approvals, open raw payloads, write external systems, call AI, scrape, automate browsers, add event sources, or admit YouTube metrics.
+
+```text
+ExecutionEligibilityDecision
+ApprovalRequest
+PromotionDecision
+PlaybookPlan
+        |
+        v
+ExecutionPreparationBuilder
+        |
+        v
+ExecutionPreparationRecord
+        |
+        v
+Future Executor
+```
+
+Preparation is not execution. A future executor must start from an approved preparation record, but Phase 73 creates only the local contract object. An approved approval alone is insufficient. An eligible execution gate alone is insufficient. The preparation requires eligibility, approval, promotion, and plan metadata to agree on requested action, playbook id/version, scope, and safety boundaries.
+
+Default policy requires eligibility status `eligible`, approval status `approved`, promotion status `eligible`, an executable plan, a stable plan fingerprint, a safe requested action kind, no raw access requirement, no mutation requirement, and safe redaction.
+
+Preparation statuses are `ready`, `blocked`, and `needs_review`. `needs_review` is only produced when policy explicitly allows needs-review inputs or review routing. Unsafe action kinds such as production execution, publishing, mutation, sending, or AI calls are blocked.
+
+The preparation record contains preparation id, eligibility decision id, approval id, promotion decision id, plan id, playbook id/version, requested action kind, subject scope, plan fingerprint, required capabilities, forbidden side effects, readiness reasons, blocked reasons, provenance refs, redaction flags, creation time, and schema version. Raw metrics payloads, raw transcript bodies, provider headers, Authorization/Bearer values, OAuth-like tokens, secrets, full provider payloads, and full step output are never included.
+
+The plan fingerprint is deterministic over stable plan fields: plan id, playbook id/version, context ref/schema, step ids/kinds/status, required capabilities, blockers, and raw/mutation requirements. It ignores generated timestamps and other volatile fields. This binds the preparation to the exact dry-run plan that was reviewed without treating local clock noise as meaningful.
+
+Future executor constraints are explicit forbidden side effects:
+
+```text
+production_mutation
+external_write
+ai_call
+browser_automation
+scraping
+raw_metrics_default
+raw_transcript_default
+approval_state_mutation
+```
+
+Phase 73 does not add an `ExecutionPreparationStore`. Durable preparation storage remains a future layer unless a later phase needs it.
+
+Preparation redaction is explicit:
+
+```text
+raw_metrics_included: false
+raw_transcript_included: false
+secrets_included: false
+provider_headers_included: false
+approval_state_mutated: false
+execution_started: false
+production_mutation_used: false
+```
+
+Production boundaries remain unchanged: two production mutations, one production external event source, no new event source, no new production mutation, no external approval provider, no approval UI, no production execution, no playbook execution, no YouTube metrics production reader, no external writes, no AI calls, and no LLM evaluation.

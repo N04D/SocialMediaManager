@@ -203,6 +203,15 @@ from .execution_eligibility_gate import (
     ExecutionEligibilityReason,
     ExecutionEligibilityRedaction,
 )
+from .execution_preparation import (
+    EXECUTION_PREPARATION_BUILDER_VERSION,
+    EXECUTION_PREPARATION_SCHEMA_VERSION,
+    ExecutionPreparationBuilder,
+    ExecutionPreparationPolicy,
+    ExecutionPreparationReason,
+    ExecutionPreparationRecord,
+    ExecutionPreparationRedaction,
+)
 from .policy import (
     ApprovalRecord,
     ApprovalStatus,
@@ -346,6 +355,8 @@ __all__ = [
     "APPROVAL_STATE_MACHINE_VERSION",
     "EXECUTION_ELIGIBILITY_GATE_VERSION",
     "EXECUTION_ELIGIBILITY_SCHEMA_VERSION",
+    "EXECUTION_PREPARATION_BUILDER_VERSION",
+    "EXECUTION_PREPARATION_SCHEMA_VERSION",
     "ApprovalRequestDraft",
     "ApprovalRequestDraftBuilder",
     "ApprovalRequestDraftPolicy",
@@ -363,6 +374,11 @@ __all__ = [
     "ExecutionEligibilityPolicy",
     "ExecutionEligibilityReason",
     "ExecutionEligibilityRedaction",
+    "ExecutionPreparationBuilder",
+    "ExecutionPreparationPolicy",
+    "ExecutionPreparationReason",
+    "ExecutionPreparationRecord",
+    "ExecutionPreparationRedaction",
     "ManualReviewPacket",
     "ManualReviewPacketBuilder",
     "ReviewPacketPolicy",
